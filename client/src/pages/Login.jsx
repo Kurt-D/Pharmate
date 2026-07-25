@@ -1,15 +1,17 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext.jsx';
 
 const ROLE_ROUTES = {
-  patient: '/patient',
+  patient:    '/patient/onboarding',
   pharmacist: '/pharmacist',
-  admin: '/admin',
-  caregiver: '/caregiver',
+  admin:      '/admin',
+  caregiver:  '/caregiver',
 };
 
 export default function Login() {
   const navigate = useNavigate();
+  const { login } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -33,8 +35,7 @@ export default function Login() {
         return;
       }
 
-      localStorage.setItem('pm_token', data.accessToken);
-      localStorage.setItem('pm_user', JSON.stringify(data.user));
+      login(data.user, data.accessToken, data.refreshToken);
       navigate(ROLE_ROUTES[data.user.role] ?? '/login', { replace: true });
     } catch {
       setError('Cannot reach the server. Please try again.');
@@ -58,9 +59,7 @@ export default function Login() {
 
           <form onSubmit={handleSubmit}>
             <div className="mb-3">
-              <label htmlFor="email" className="form-label">
-                Email address
-              </label>
+              <label htmlFor="email" className="form-label">Email address</label>
               <input
                 id="email"
                 type="email"
@@ -73,9 +72,7 @@ export default function Login() {
             </div>
 
             <div className="mb-4">
-              <label htmlFor="password" className="form-label">
-                Password
-              </label>
+              <label htmlFor="password" className="form-label">Password</label>
               <input
                 id="password"
                 type="password"
@@ -87,14 +84,10 @@ export default function Login() {
               />
             </div>
 
-            <button
-              type="submit"
-              className="btn btn-primary w-100"
-              disabled={loading}
-            >
-              {loading ? (
+            <button type="submit" className="btn btn-primary w-100" disabled={loading}>
+              {loading && (
                 <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true" />
-              ) : null}
+              )}
               {loading ? 'Signing in…' : 'Sign in'}
             </button>
           </form>

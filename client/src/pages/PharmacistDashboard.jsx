@@ -1,11 +1,12 @@
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext.jsx';
 
 export default function PharmacistDashboard() {
   const navigate = useNavigate();
+  const { logout } = useAuth();
 
-  function logout() {
-    localStorage.removeItem('pm_token');
-    localStorage.removeItem('pm_user');
+  async function handleLogout() {
+    await logout();
     navigate('/login', { replace: true });
   }
 
@@ -19,7 +20,7 @@ export default function PharmacistDashboard() {
           <li><a href="#" className="nav-link text-white-50">Inquiries</a></li>
           <li><a href="#" className="nav-link text-white-50">Patients</a></li>
         </ul>
-        <button className="btn btn-outline-secondary btn-sm mt-auto" onClick={logout}>
+        <button className="btn btn-outline-secondary btn-sm mt-auto" onClick={handleLogout}>
           Sign out
         </button>
       </nav>
@@ -27,7 +28,7 @@ export default function PharmacistDashboard() {
       <main className="pm-content">
         <h5 className="mb-4">Pharmacist Dashboard</h5>
         <div className="alert alert-info">
-          Sprint 1 shell — prescription validation queue arrives in Sprint 5.
+          Prescription validation queue arrives in Sprint 5.
         </div>
       </main>
     </div>
