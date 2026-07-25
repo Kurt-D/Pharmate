@@ -23,5 +23,15 @@ Thumbs.db
 # Uploaded prescription images (app-private)
 server/uploads/
 
+# Firebase service account key (never commit)
+server/firebase-service-account.json
+
+# Android release keystore (never commit)
+client/pharmate-release.keystore
+
 # Internal planning doc (not for the repo)
 PharMate_Development_Plan.md
+
+# Capacitor generated
+client/android/
+client/.capacitor/

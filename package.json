@@ -1,0 +1,20 @@
+{
+  "name": "pharmate",
+  "private": true,
+  "version": "1.0.0",
+  "description": "PharMate monorepo — client + server",
+  "scripts": {
+    "dev:client": "npm --prefix client run dev",
+    "dev:server": "npm --prefix server run dev",
+    "build:client": "npm --prefix client run build",
+    "lint": "npm --prefix client run lint && npm --prefix server run lint",
+    "format": "prettier --write \"**/*.{js,jsx,cjs,json,sql,md}\" --ignore-path .prettierignore",
+    "format:check": "prettier --check \"**/*.{js,jsx,cjs,json,sql,md}\" --ignore-path .prettierignore",
+    "test": "npm --prefix server test",
+    "migrate": "npm --prefix server run migrate",
+    "seed:dev": "npm --prefix server run seed:dev"
+  },
+  "devDependencies": {
+    "prettier": "^3.5.3"
+  }
+}
