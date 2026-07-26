@@ -44,10 +44,9 @@ router.post('/link', async (req, res) => {
       'INSERT INTO caregiver_patients (id, caregiver_id, patient_id) VALUES (?, ?, ?)',
       [uuidv4(), req.user.sub, invite.patient_id]
     );
-    await conn.execute(
-      'UPDATE invite_codes SET used = 1, used_at = NOW(3) WHERE id = ?',
-      [invite.id]
-    );
+    await conn.execute('UPDATE invite_codes SET used = 1, used_at = NOW(3) WHERE id = ?', [
+      invite.id,
+    ]);
     await conn.commit();
   } catch (err) {
     await conn.rollback();

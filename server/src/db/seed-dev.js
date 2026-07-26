@@ -25,28 +25,30 @@ async function seed() {
   const hash = await bcrypt.hash(DEV_PASSWORD, 12);
 
   // ── Users ────────────────────────────────────────────────────────────────
-  const patientUserId    = uuidv4();
+  const patientUserId = uuidv4();
   const pharmacistUserId = uuidv4();
-  const caregiverUserId  = uuidv4();
-  const adminUserId      = uuidv4();
-  const branchId         = uuidv4();
-  const drugAId          = uuidv4();
-  const drugBId          = uuidv4();
+  const caregiverUserId = uuidv4();
+  const adminUserId = uuidv4();
+  const branchId = uuidv4();
+  const drugAId = uuidv4();
+  const drugBId = uuidv4();
 
   const users = [
-    [patientUserId,    'patient@dev.pharmate',    hash, 'patient'],
+    [patientUserId, 'patient@dev.pharmate', hash, 'patient'],
     [pharmacistUserId, 'pharmacist@dev.pharmate', hash, 'pharmacist'],
-    [caregiverUserId,  'caregiver@dev.pharmate',  hash, 'caregiver'],
-    [adminUserId,      'admin@dev.pharmate',       hash, 'admin'],
+    [caregiverUserId, 'caregiver@dev.pharmate', hash, 'caregiver'],
+    [adminUserId, 'admin@dev.pharmate', hash, 'admin'],
   ];
 
   for (const [id, email, pw, role] of users) {
     const [existing] = await conn.execute('SELECT id FROM users WHERE email = ?', [email]);
     if (existing.length === 0) {
-      await conn.execute(
-        'INSERT INTO users (id, email, password_hash, role) VALUES (?, ?, ?, ?)',
-        [id, email, pw, role]
-      );
+      await conn.execute('INSERT INTO users (id, email, password_hash, role) VALUES (?, ?, ?, ?)', [
+        id,
+        email,
+        pw,
+        role,
+      ]);
     }
   }
 
@@ -69,13 +71,12 @@ async function seed() {
        VALUES (?, 'PM-DEV001', 'DEV_PLAINTEXT_Juan_dela_Cruz', 'DEV_PLAINTEXT_Hypertension')`,
       [patientUserId]
     );
-    await conn.execute(
-      'INSERT INTO patient_anchors (patient_id) VALUES (?)',
-      [patientUserId]
-    );
+    await conn.execute('INSERT INTO patient_anchors (patient_id) VALUES (?)', [patientUserId]);
   }
 
-  const [existingPharm] = await conn.execute('SELECT id FROM pharmacists WHERE id = ?', [pharmacistUserId]);
+  const [existingPharm] = await conn.execute('SELECT id FROM pharmacists WHERE id = ?', [
+    pharmacistUserId,
+  ]);
   if (existingPharm.length === 0) {
     await conn.execute(
       'INSERT INTO pharmacists (id, full_name, license_number, branch_id) VALUES (?, ?, ?, ?)',
@@ -83,12 +84,14 @@ async function seed() {
     );
   }
 
-  const [existingCg] = await conn.execute('SELECT id FROM caregivers WHERE id = ?', [caregiverUserId]);
+  const [existingCg] = await conn.execute('SELECT id FROM caregivers WHERE id = ?', [
+    caregiverUserId,
+  ]);
   if (existingCg.length === 0) {
-    await conn.execute(
-      'INSERT INTO caregivers (id, full_name) VALUES (?, ?)',
-      [caregiverUserId, 'Dev Caregiver']
-    );
+    await conn.execute('INSERT INTO caregivers (id, full_name) VALUES (?, ?)', [
+      caregiverUserId,
+      'Dev Caregiver',
+    ]);
   }
 
   const [existingAdmin] = await conn.execute('SELECT id FROM admins WHERE id = ?', [adminUserId]);

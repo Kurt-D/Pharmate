@@ -3,10 +3,10 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 
 const ROLE_ROUTES = {
-  patient:    '/patient/onboarding',
+  patient: '/patient/onboarding',
   pharmacist: '/pharmacist',
-  admin:      '/admin',
-  caregiver:  '/caregiver',
+  admin: '/admin',
+  caregiver: '/caregiver',
 };
 
 export default function Login() {
@@ -59,7 +59,9 @@ export default function Login() {
 
           <form onSubmit={handleSubmit}>
             <div className="mb-3">
-              <label htmlFor="email" className="form-label">Email address</label>
+              <label htmlFor="email" className="form-label">
+                Email address
+              </label>
               <input
                 id="email"
                 type="email"
@@ -72,7 +74,9 @@ export default function Login() {
             </div>
 
             <div className="mb-4">
-              <label htmlFor="password" className="form-label">Password</label>
+              <label htmlFor="password" className="form-label">
+                Password
+              </label>
               <input
                 id="password"
                 type="password"
@@ -86,7 +90,11 @@ export default function Login() {
 
             <button type="submit" className="btn btn-primary w-100" disabled={loading}>
               {loading && (
-                <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true" />
+                <span
+                  className="spinner-border spinner-border-sm me-2"
+                  role="status"
+                  aria-hidden="true"
+                />
               )}
               {loading ? 'Signing in…' : 'Sign in'}
             </button>

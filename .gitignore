@@ -29,8 +29,12 @@ server/firebase-service-account.json
 # Android release keystore (never commit)
 client/pharmate-release.keystore
 
-# Internal planning doc (not for the repo)
+# Internal planning / manuscript companion docs (not for the repo).
+# The derived, reproducible seed data (seeds/*.json) IS committed; these raw
+# source inputs stay local like the development plan.
 PharMate_Development_Plan.md
+PharMate_Schedule_Engine_Design.md
+Drug Reference.xlsx
 
 # Capacitor generated
 client/android/

@@ -4,3 +4,10 @@ build/
 android/
 .capacitor/
 *.lock
+package-lock.json
+
+# Prettier has no SQL parser; migrations are hand-formatted SQL.
+*.sql
+
+# Generated seed data (faithful dump of the curation workbook)
+seeds/*_raw.json

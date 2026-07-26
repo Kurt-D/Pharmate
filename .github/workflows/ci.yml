@@ -52,6 +52,15 @@ jobs:
           AES_KEY: 0000000000000000000000000000000000000000000000000000000000000000
         run: npm --prefix server run migrate
 
+      - name: Seed formulary (provisional — R1 fallback until pharmacist signs)
+        env:
+          DB_HOST: 127.0.0.1
+          DB_PORT: 3306
+          DB_NAME: pharmate_test
+          DB_USER: pharmate
+          DB_PASS: pharmate
+        run: npm --prefix server run seed:formulary -- --allow-unverified
+
       - name: Jest unit tests
         env:
           DB_HOST: 127.0.0.1
@@ -67,12 +76,11 @@ jobs:
       - name: ESLint (server)
         run: npm --prefix server run lint
 
-      - name: PII plaintext grep (staff responses must not contain PII)
-        run: |
-          # Fail if any staff-facing route handler file contains plaintext PII field names
-          # being returned directly (e.g. full_name without going through the serializer).
-          # Full integration version of this check is wired in Sprint 2.
-          echo "PII grep check placeholder — full check added in Sprint 2"
+      # PII containment (Sprint 2 exit gate) is enforced by the Jest integration
+      # test in src/__tests__/auth.test.js ("PII containment — staff responses
+      # must not expose plaintext PII"), which registers a patient with known
+      # plaintext PII and asserts it never appears in any staff-facing response.
+      # That test runs in the Jest step above, so no separate grep step is needed.
 
   client-lint:
     name: Client lint
