@@ -22,18 +22,16 @@ export function serializePatient(row, viewerRole, viewerUserId) {
   const safe = {
     id: row.id,
     patient_code: row.patient_code,
-    fcm_token: undefined,       // never expose FCM token outside patient's own view
+    fcm_token: undefined, // never expose FCM token outside patient's own view
     created_at: row.created_at,
   };
 
   if (isOwnRecord) {
     // Patient sees their own decrypted PII
-    safe.full_name      = row.full_name_enc      ? decrypt(row.full_name_enc)      : null;
-    safe.contact_num    = row.contact_num_enc     ? decrypt(row.contact_num_enc)    : null;
-    safe.address        = row.address_enc         ? decrypt(row.address_enc)        : null;
-    safe.medical_condition = row.medical_condition_enc
-      ? decrypt(row.medical_condition_enc)
-      : null;
+    safe.full_name = row.full_name_enc ? decrypt(row.full_name_enc) : null;
+    safe.contact_num = row.contact_num_enc ? decrypt(row.contact_num_enc) : null;
+    safe.address = row.address_enc ? decrypt(row.address_enc) : null;
+    safe.medical_condition = row.medical_condition_enc ? decrypt(row.medical_condition_enc) : null;
   }
 
   // Guarantee: PII fields never leak into the output for non-patient viewers

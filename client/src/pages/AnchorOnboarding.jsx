@@ -2,19 +2,19 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 const DEFAULTS = {
-  wake_anchor:      '08:00',
-  sleep_anchor:     '22:00',
+  wake_anchor: '08:00',
+  sleep_anchor: '22:00',
   breakfast_anchor: '07:30',
-  lunch_anchor:     '12:00',
-  dinner_anchor:    '19:00',
+  lunch_anchor: '12:00',
+  dinner_anchor: '19:00',
 };
 
 const LABELS = {
-  wake_anchor:      'Wake time',
-  sleep_anchor:     'Sleep time',
+  wake_anchor: 'Wake time',
+  sleep_anchor: 'Sleep time',
   breakfast_anchor: 'Breakfast',
-  lunch_anchor:     'Lunch',
-  dinner_anchor:    'Dinner',
+  lunch_anchor: 'Lunch',
+  dinner_anchor: 'Dinner',
 };
 
 export default function AnchorOnboarding() {
@@ -77,8 +77,8 @@ export default function AnchorOnboarding() {
         <div className="card-body p-4">
           <h5 className="fw-bold mb-1">Set your daily schedule</h5>
           <p className="text-muted small mb-4">
-            These times help PharMate place your doses at the right hours.
-            You can change them any time in Settings.
+            These times help PharMate place your doses at the right hours. You can change them any
+            time in Settings.
           </p>
 
           {error && <div className="alert alert-danger py-2">{error}</div>}
@@ -101,7 +101,11 @@ export default function AnchorOnboarding() {
 
             <button type="submit" className="btn btn-primary w-100 mt-2" disabled={saving}>
               {saving ? (
-                <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true" />
+                <span
+                  className="spinner-border spinner-border-sm me-2"
+                  role="status"
+                  aria-hidden="true"
+                />
               ) : null}
               {saving ? 'Saving…' : 'Save and continue'}
             </button>

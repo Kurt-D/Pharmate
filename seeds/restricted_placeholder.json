@@ -1,0 +1,53 @@
+[
+  {
+    "generic_name": "codeine",
+    "category": "controlled",
+    "reason": "Opioid; DDB-regulated in the Philippines."
+  },
+  {
+    "generic_name": "tramadol",
+    "category": "controlled",
+    "reason": "Opioid analgesic; dangerous-drug regulated."
+  },
+  { "generic_name": "morphine", "category": "controlled", "reason": "Opioid; strictly regulated." },
+  {
+    "generic_name": "diazepam",
+    "category": "controlled",
+    "reason": "Benzodiazepine; DDB-regulated."
+  },
+  {
+    "generic_name": "alprazolam",
+    "category": "controlled",
+    "reason": "Benzodiazepine; DDB-regulated."
+  },
+  {
+    "generic_name": "lorazepam",
+    "category": "controlled",
+    "reason": "Benzodiazepine; DDB-regulated."
+  },
+  {
+    "generic_name": "midazolam",
+    "category": "controlled",
+    "reason": "Benzodiazepine; DDB-regulated."
+  },
+  {
+    "generic_name": "zolpidem",
+    "category": "controlled",
+    "reason": "Sedative-hypnotic; regulated."
+  },
+  {
+    "generic_name": "phenobarbital",
+    "category": "controlled",
+    "reason": "Barbiturate; DDB-regulated."
+  },
+  {
+    "generic_name": "methylphenidate",
+    "category": "controlled",
+    "reason": "Stimulant; DDB-regulated."
+  },
+  {
+    "generic_name": "pseudoephedrine",
+    "category": "regulated",
+    "reason": "Precursor; sale monitored/regulated."
+  }
+]

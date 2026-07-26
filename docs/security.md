@@ -3,6 +3,7 @@
 ## PII Encryption (D-H)
 
 Fields encrypted at rest with AES-256-GCM (app layer):
+
 - `patients.full_name_enc`
 - `patients.contact_num_enc`
 - `patients.address_enc`

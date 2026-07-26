@@ -12,27 +12,29 @@ import app from '../index.js';
 
 // Plaintext PII values we will register with — must never appear in any staff response
 const TEST_PII = {
-  full_name:         'Juan Dela Cruz Sprint2Test',
-  contact_num:       '09991234567',
-  address:           '123 Test Street, Pasig',
+  full_name: 'Juan Dela Cruz Sprint2Test',
+  contact_num: '09991234567',
+  address: '123 Test Street, Pasig',
   medical_condition: 'Hypertension Sprint2Test',
 };
 
-const PATIENT_EMAIL     = `patient.s2test.${Date.now()}@test.pharmate`;
-const PHARMACIST_EMAIL  = `pharm.s2test.${Date.now()}@test.pharmate`;
-const PASSWORD          = 'TestPass@123';
+const PATIENT_EMAIL = `patient.s2test.${Date.now()}@test.pharmate`;
+const PHARMACIST_EMAIL = `pharm.s2test.${Date.now()}@test.pharmate`;
+const PASSWORD = 'TestPass@123';
 
 let patientToken;
 let pharmacistToken;
 
 beforeAll(async () => {
   // Register and log in a patient
-  await request(app).post('/api/auth/register').send({
-    email: PATIENT_EMAIL,
-    password: PASSWORD,
-    role: 'patient',
-    ...TEST_PII,
-  });
+  await request(app)
+    .post('/api/auth/register')
+    .send({
+      email: PATIENT_EMAIL,
+      password: PASSWORD,
+      role: 'patient',
+      ...TEST_PII,
+    });
   const patRes = await request(app).post('/api/auth/login').send({
     email: PATIENT_EMAIL,
     password: PASSWORD,
@@ -140,9 +142,7 @@ describe('Auth — register and login', () => {
     });
     const { refreshToken } = loginRes.body;
 
-    const refreshRes = await request(app)
-      .post('/api/auth/refresh')
-      .send({ refreshToken });
+    const refreshRes = await request(app).post('/api/auth/refresh').send({ refreshToken });
     expect(refreshRes.status).toBe(200);
     expect(refreshRes.body).toHaveProperty('accessToken');
     expect(refreshRes.body).toHaveProperty('refreshToken');

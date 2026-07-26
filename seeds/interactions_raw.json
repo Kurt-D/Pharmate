@@ -1,0 +1,177 @@
+[
+  {
+    "drug_1": "paracetamol",
+    "drug_2": "ibuprofen",
+    "severity": "moderate",
+    "min_gap_hours": "1.0",
+    "note": "FLAGSHIP PAIR. Widely and consistently documented guidance is to stagger by roughly one hour when both are used; each drug must independently stay within its own max_daily_doses."
+  },
+  {
+    "drug_1": "ibuprofen",
+    "drug_2": "losartan",
+    "severity": "moderate",
+    "min_gap_hours": null,
+    "note": "Regular NSAID use can blunt the antihypertensive effect of ARBs and raise renal risk, especially alongside a diuretic (the 'triple whammy' combination). Recommend avoiding regular concurrent use."
+  },
+  {
+    "drug_1": "ibuprofen",
+    "drug_2": "telmisartan",
+    "severity": "moderate",
+    "min_gap_hours": null,
+    "note": "Regular NSAID use can blunt the antihypertensive effect of ARBs and raise renal risk, especially alongside a diuretic. Recommend avoiding regular concurrent use."
+  },
+  {
+    "drug_1": "ibuprofen",
+    "drug_2": "enalapril",
+    "severity": "moderate",
+    "min_gap_hours": null,
+    "note": "Regular NSAID use can blunt the antihypertensive effect of ARBs and raise renal risk, especially alongside a diuretic. Recommend avoiding regular concurrent use."
+  },
+  {
+    "drug_1": "ibuprofen",
+    "drug_2": "hydrochlorothiazide",
+    "severity": "moderate",
+    "min_gap_hours": null,
+    "note": "NSAID may blunt diuretic/antihypertensive effect; part of the 'triple whammy' risk when combined with an ACE inhibitor/ARB. Not a spacing fix — avoid regular concurrent use."
+  },
+  {
+    "drug_1": "ibuprofen",
+    "drug_2": "mefenamic acid",
+    "severity": "moderate-severe",
+    "min_gap_hours": null,
+    "note": "Both are NSAIDs — this is duplicate therapy (increased GI bleeding/renal risk), not something a timing gap resolves. Recommend the system flag this as 'avoid combination' rather than a spacing rule."
+  },
+  {
+    "drug_1": "cetirizine",
+    "drug_2": "diphenhydramine",
+    "severity": "mild",
+    "min_gap_hours": null,
+    "note": "Both are antihistamines; combining increases sedation without added benefit. Duplicate-therapy caution rather than a timing gap."
+  },
+  {
+    "drug_1": "amlodipine",
+    "drug_2": "losartan",
+    "severity": "none (checked)",
+    "min_gap_hours": "0.0",
+    "note": "No documented timing gap needed — commonly co-prescribed for hypertension."
+  },
+  {
+    "drug_1": "metformin (immediate-release)",
+    "drug_2": "gliclazide",
+    "severity": "none (checked)",
+    "min_gap_hours": "0.0",
+    "note": "No documented timing gap needed — commonly co-prescribed for type 2 diabetes."
+  },
+  {
+    "drug_1": "amoxicillin",
+    "drug_2": "paracetamol",
+    "severity": "none (checked)",
+    "min_gap_hours": "0.0",
+    "note": "No documented timing gap needed — commonly co-administered."
+  },
+  {
+    "drug_1": "ciprofloxacin",
+    "drug_2": "ibuprofen",
+    "severity": "moderate",
+    "min_gap_hours": null,
+    "note": "Fluoroquinolones combined with NSAIDs are commonly flagged for increased risk of CNS stimulation/seizure in susceptible patients."
+  },
+  {
+    "drug_1": "ciprofloxacin",
+    "drug_2": "mefenamic acid",
+    "severity": "moderate",
+    "min_gap_hours": null,
+    "note": "Fluoroquinolone antibiotics used together with NSAIDs may increase the risk of central nervous system stimulation, including seizures, particularly in susceptible patients. This is a monitoring and prescribing consideration."
+  },
+  {
+    "drug_1": "amoxicillin",
+    "drug_2": "co-amoxiclav (amoxicillin/clavulanate)",
+    "severity": "moderate",
+    "min_gap_hours": null,
+    "note": "Co-amoxiclav already contains amoxicillin — this is a duplicate-therapy flag (a patient should not be scheduled on both at once), not a timing gap."
+  },
+  {
+    "drug_1": "metoprolol succinate (extended-release)",
+    "drug_2": "gliclazide",
+    "severity": "mild-moderate",
+    "min_gap_hours": null,
+    "note": "Beta-blockers can mask the tachycardia/tremor warning signs of hypoglycemia in patients on sulfonylureas. Monitoring caution."
+  },
+  {
+    "drug_1": "metoprolol succinate (extended-release)",
+    "drug_2": "glimepiride",
+    "severity": "mild-moderate",
+    "min_gap_hours": null,
+    "note": "Beta-blockers may mask common warning signs of hypoglycemia, such as rapid heartbeat and tremor, in patients taking sulfonylureas. Patients should be advised to monitor blood glucose carefully."
+  },
+  {
+    "drug_1": "metoprolol succinate (extended-release)",
+    "drug_2": "insulin glargine (long-acting)",
+    "severity": "mild-moderate",
+    "min_gap_hours": null,
+    "note": "Beta-blockers can mask hypoglycemia warning signs in insulin-treated patients."
+  },
+  {
+    "drug_1": "atorvastatin",
+    "drug_2": "azithromycin",
+    "severity": "mild",
+    "min_gap_hours": null,
+    "note": "Macrolide antibiotics can raise statin levels and myopathy/rhabdomyolysis risk; azithromycin's effect on this pathway is generally considered weaker than clarithromycin/erythromycin."
+  },
+  {
+    "drug_1": "hydrochlorothiazide",
+    "drug_2": "gliclazide",
+    "severity": "mild",
+    "min_gap_hours": null,
+    "note": "Thiazide diuretics can modestly raise blood glucose, which is a monitoring consideration in patients on sulfonylureas."
+  },
+  {
+    "drug_1": "hydrochlorothiazide",
+    "drug_2": "glimepiride",
+    "severity": "mild",
+    "min_gap_hours": null,
+    "note": "Thiazide diuretics may modestly increase blood glucose levels, which can reduce glycemic control in patients taking sulfonylureas. This requires blood glucose monitoring."
+  },
+  {
+    "drug_1": "paracetamol",
+    "drug_2": "mefenamic acid",
+    "severity": "moderate",
+    "min_gap_hours": null,
+    "note": "Mefenamic acid is an NSAID like ibuprofen, so the same general staggering principle as the paracetamol + ibuprofen flagship pair likely applies."
+  },
+  {
+    "drug_1": "amlodipine",
+    "drug_2": "metformin (immediate-release)",
+    "severity": "none (checked)",
+    "min_gap_hours": "0.0",
+    "note": "No documented timing gap needed — routinely co-prescribed for patients with hypertension and diabetes."
+  },
+  {
+    "drug_1": "losartan",
+    "drug_2": "metformin (immediate-release)",
+    "severity": "none (checked)",
+    "min_gap_hours": "0.0",
+    "note": "No documented timing gap needed — routinely co-prescribed."
+  },
+  {
+    "drug_1": "telmisartan",
+    "drug_2": "gliclazide",
+    "severity": "none (checked)",
+    "min_gap_hours": "0.0",
+    "note": "No documented timing gap needed — routinely co-prescribed."
+  },
+  {
+    "drug_1": "cetirizine",
+    "drug_2": "paracetamol",
+    "severity": "none (checked)",
+    "min_gap_hours": "0.0",
+    "note": "No documented timing gap needed — commonly co-administered."
+  },
+  {
+    "drug_1": "loratadine",
+    "drug_2": "amoxicillin",
+    "severity": "none (checked)",
+    "min_gap_hours": "0.0",
+    "note": "No documented timing gap needed — commonly co-administered."
+  }
+]

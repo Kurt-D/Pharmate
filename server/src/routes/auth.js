@@ -10,17 +10,11 @@ import { requireAuth } from '../middleware/auth.js';
 
 const router = Router();
 
-const ACCESS_EXPIRES  = process.env.JWT_ACCESS_EXPIRES  || '15m';
-const REFRESH_DAYS    = Number(process.env.JWT_REFRESH_EXPIRES_DAYS) || 30;
+const ACCESS_EXPIRES = process.env.JWT_ACCESS_EXPIRES || '15m';
+const REFRESH_DAYS = Number(process.env.JWT_REFRESH_EXPIRES_DAYS) || 30;
 
 function signAccess(payload) {
   return jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: ACCESS_EXPIRES });
-}
-
-function signRefresh(payload) {
-  return jwt.sign(payload, process.env.JWT_REFRESH_SECRET, {
-    expiresIn: `${REFRESH_DAYS}d`,
-  });
 }
 
 function hashToken(raw) {
@@ -57,10 +51,12 @@ router.post('/register', async (req, res) => {
   try {
     await conn.beginTransaction();
 
-    await conn.execute(
-      'INSERT INTO users (id, email, password_hash, role) VALUES (?, ?, ?, ?)',
-      [userId, email, passwordHash, role]
-    );
+    await conn.execute('INSERT INTO users (id, email, password_hash, role) VALUES (?, ?, ?, ?)', [
+      userId,
+      email,
+      passwordHash,
+      role,
+    ]);
 
     if (role === 'patient') {
       const patientCode = await generatePatientCode();
@@ -71,28 +67,25 @@ router.post('/register', async (req, res) => {
         [
           userId,
           patientCode,
-          full_name         ? encrypt(full_name)          : null,
-          contact_num       ? encrypt(contact_num)        : null,
-          address           ? encrypt(address)            : null,
-          medical_condition ? encrypt(medical_condition)  : null,
+          full_name ? encrypt(full_name) : null,
+          contact_num ? encrypt(contact_num) : null,
+          address ? encrypt(address) : null,
+          medical_condition ? encrypt(medical_condition) : null,
         ]
       );
       // Insert default anchors (D-B)
       await conn.execute('INSERT INTO patient_anchors (patient_id) VALUES (?)', [userId]);
-
     } else if (role === 'pharmacist') {
       const { license_number, branch_id } = req.body;
       await conn.execute(
         'INSERT INTO pharmacists (id, full_name, license_number, branch_id) VALUES (?, ?, ?, ?)',
         [userId, full_name || '', license_number || null, branch_id || null]
       );
-
     } else if (role === 'caregiver') {
-      await conn.execute(
-        'INSERT INTO caregivers (id, full_name) VALUES (?, ?)',
-        [userId, full_name || '']
-      );
-
+      await conn.execute('INSERT INTO caregivers (id, full_name) VALUES (?, ?)', [
+        userId,
+        full_name || '',
+      ]);
     } else if (role === 'admin') {
       await conn.execute('INSERT INTO admins (id) VALUES (?)', [userId]);
     }
@@ -122,7 +115,8 @@ router.post('/login', async (req, res) => {
   const user = rows[0];
 
   // Constant-time-ish: always run bcrypt even on missing user to prevent timing attacks
-  const hashToCheck = user?.password_hash ?? '$2a$12$invalidhashpadding000000000000000000000000000000000000000';
+  const hashToCheck =
+    user?.password_hash ?? '$2a$12$invalidhashpadding000000000000000000000000000000000000000';
   const match = await bcrypt.compare(password, hashToCheck);
 
   if (!user || !match || !user.is_active) {
@@ -132,17 +126,13 @@ router.post('/login', async (req, res) => {
   // Fetch role-specific extras
   let extra = {};
   if (user.role === 'patient') {
-    const [pRows] = await pool.execute(
-      'SELECT patient_code FROM patients WHERE id = ?',
-      [user.id]
-    );
+    const [pRows] = await pool.execute('SELECT patient_code FROM patients WHERE id = ?', [user.id]);
     extra = { patientCode: pRows[0]?.patient_code ?? null };
   }
 
   const payload = { sub: user.id, role: user.role };
-  const accessToken  = signAccess(payload);
-  const rawRefresh   = randomBytes(40).toString('hex');
-  const refreshToken = signRefresh({ sub: user.id });
+  const accessToken = signAccess(payload);
+  const rawRefresh = randomBytes(40).toString('hex');
 
   await pool.execute(
     'INSERT INTO refresh_tokens (id, user_id, token_hash, expires_at) VALUES (?, ?, ?, ?)',
@@ -176,10 +166,9 @@ router.post('/refresh', async (req, res) => {
   }
 
   // Rotate: revoke old, issue new
-  await pool.execute(
-    'UPDATE refresh_tokens SET revoked = 1, revoked_at = NOW(3) WHERE id = ?',
-    [record.id]
-  );
+  await pool.execute('UPDATE refresh_tokens SET revoked = 1, revoked_at = NOW(3) WHERE id = ?', [
+    record.id,
+  ]);
   const newRaw = randomBytes(40).toString('hex');
   await pool.execute(
     'INSERT INTO refresh_tokens (id, user_id, token_hash, expires_at) VALUES (?, ?, ?, ?)',
