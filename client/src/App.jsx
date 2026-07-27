@@ -2,7 +2,10 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext.jsx';
 import Login from './pages/Login.jsx';
 import AnchorOnboarding from './pages/AnchorOnboarding.jsx';
-import PatientDashboard from './pages/PatientDashboard.jsx';
+import PatientLayout from './pages/patient/PatientLayout.jsx';
+import Medications from './pages/patient/Medications.jsx';
+import AddMedicine from './pages/patient/AddMedicine.jsx';
+import Placeholder from './pages/patient/Placeholder.jsx';
 import PharmacistDashboard from './pages/PharmacistDashboard.jsx';
 import AdminDashboard from './pages/AdminDashboard.jsx';
 import CaregiverDashboard from './pages/CaregiverDashboard.jsx';
@@ -25,13 +28,35 @@ export default function App() {
             }
           />
           <Route
-            path="/patient/*"
+            path="/patient"
             element={
               <ProtectedRoute role="patient">
-                <PatientDashboard />
+                <PatientLayout />
               </ProtectedRoute>
             }
-          />
+          >
+            <Route index element={<Navigate to="/patient/medications" replace />} />
+            <Route
+              path="home"
+              element={
+                <Placeholder title="Welcome, Patient!" note="Manage your health with ease." />
+              }
+            />
+            <Route path="medications" element={<Medications />} />
+            <Route path="medications/add" element={<AddMedicine />} />
+            <Route
+              path="ask"
+              element={<Placeholder title="Ask a Pharmacist" note="We're here to help." />}
+            />
+            <Route
+              path="orders"
+              element={<Placeholder title="Orders" note="Track your orders." />}
+            />
+            <Route
+              path="profile"
+              element={<Placeholder title="Profile" note="Edit your profile." />}
+            />
+          </Route>
           <Route
             path="/pharmacist/*"
             element={
