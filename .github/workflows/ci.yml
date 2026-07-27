@@ -71,6 +71,7 @@ jobs:
           JWT_SECRET: ci-secret-access
           JWT_REFRESH_SECRET: ci-secret-refresh
           AES_KEY: 0000000000000000000000000000000000000000000000000000000000000000
+          BCRYPT_COST: '4' # fast hashing in tests only; production stays at 12 (D-G)
         run: npm --prefix server test
 
       - name: ESLint (server)
@@ -97,6 +98,9 @@ jobs:
 
       - name: Install client deps
         run: npm --prefix client install
+
+      - name: Install root deps (for prettier)
+        run: npm install
 
       - name: Oxlint
         run: npm --prefix client run lint

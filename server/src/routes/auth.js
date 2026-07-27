@@ -12,6 +12,9 @@ const router = Router();
 
 const ACCESS_EXPIRES = process.env.JWT_ACCESS_EXPIRES || '15m';
 const REFRESH_DAYS = Number(process.env.JWT_REFRESH_EXPIRES_DAYS) || 30;
+// bcrypt cost is 12 in production (D-G). Overridable so CI/tests aren't dominated
+// by intentionally-slow hashing; production must leave BCRYPT_COST unset.
+const BCRYPT_COST = Number(process.env.BCRYPT_COST) || 12;
 
 function signAccess(payload) {
   return jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: ACCESS_EXPIRES });
@@ -44,7 +47,7 @@ router.post('/register', async (req, res) => {
     return res.status(409).json({ error: 'Email already registered' });
   }
 
-  const passwordHash = await bcrypt.hash(password, 12);
+  const passwordHash = await bcrypt.hash(password, BCRYPT_COST);
   const userId = uuidv4();
 
   const conn = await pool.getConnection();

@@ -39,10 +39,13 @@ app.use((err, _req, res, _next) => {
   res.status(status).json({ error: message });
 });
 
-createUploadsDir();
-
-app.listen(PORT, () => {
-  console.log(`PharMate server listening on http://localhost:${PORT}`);
-});
+// Don't bind a port under test — suites import `app` and supertest spins up its
+// own ephemeral server; listening here would double-bind the port (EADDRINUSE).
+if (process.env.NODE_ENV !== 'test') {
+  createUploadsDir();
+  app.listen(PORT, () => {
+    console.log(`PharMate server listening on http://localhost:${PORT}`);
+  });
+}
 
 export default app;
