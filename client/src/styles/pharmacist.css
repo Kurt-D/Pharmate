@@ -1,0 +1,116 @@
+/* PharMate pharmacist/admin web console — matches GUI draft (Figs 45–49). */
+
+.pw-shell {
+  display: flex;
+  min-height: 100vh;
+  background: #f4f6fb;
+}
+
+.pw-sidebar {
+  width: 240px;
+  flex-shrink: 0;
+  background: #fff;
+  border-right: 1px solid #eef1f6;
+  display: flex;
+  flex-direction: column;
+  padding: 1.25rem 1rem;
+}
+
+.pw-brand {
+  font-weight: 800;
+  font-size: 1.25rem;
+  color: #1f2937;
+  padding: 0.25rem 0.5rem 1.25rem;
+}
+.pw-brand span {
+  color: #22c55e;
+}
+
+.pw-menu-label {
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  color: #9ca3af;
+  padding: 0 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.pw-navlink {
+  display: block;
+  padding: 0.6rem 0.75rem;
+  border-radius: 0.6rem;
+  color: #4b5563;
+  text-decoration: none;
+  font-size: 0.92rem;
+  margin-bottom: 0.15rem;
+}
+.pw-navlink:hover {
+  background: #f3f4f6;
+  color: #1f2937;
+}
+.pw-navlink.active {
+  background: #2563eb;
+  color: #fff;
+  font-weight: 600;
+}
+
+.pw-logout {
+  margin-top: auto;
+  background: #2563eb;
+  color: #fff;
+  border: none;
+  border-radius: 0.6rem;
+  padding: 0.6rem;
+  font-weight: 600;
+}
+.pw-logout:hover {
+  background: #1d4ed8;
+}
+
+.pw-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.pw-header {
+  background: #fff;
+  border-bottom: 1px solid #eef1f6;
+  padding: 1rem 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.pw-header h1 {
+  font-size: 1.25rem;
+  font-weight: 700;
+  margin: 0;
+}
+.pw-header .pw-sub {
+  color: #6b7280;
+  font-size: 0.85rem;
+}
+
+.pw-content {
+  padding: 1.5rem;
+  overflow-y: auto;
+}
+
+.pw-card {
+  background: #fff;
+  border: 1px solid #eef1f6;
+  border-radius: 0.9rem;
+  box-shadow: 0 1px 3px rgba(16, 24, 40, 0.05);
+}
+
+.pw-code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-weight: 600;
+  color: #2563eb;
+}
+
+.pw-stat {
+  font-size: 1.6rem;
+  font-weight: 800;
+  color: #1f2937;
+}

@@ -6,7 +6,9 @@ import PatientLayout from './pages/patient/PatientLayout.jsx';
 import Medications from './pages/patient/Medications.jsx';
 import AddMedicine from './pages/patient/AddMedicine.jsx';
 import Placeholder from './pages/patient/Placeholder.jsx';
-import PharmacistDashboard from './pages/PharmacistDashboard.jsx';
+import PharmacistLayout from './pages/pharmacist/PharmacistLayout.jsx';
+import DrugCuration from './pages/pharmacist/DrugCuration.jsx';
+import PwPlaceholder from './pages/pharmacist/PwPlaceholder.jsx';
 import AdminDashboard from './pages/AdminDashboard.jsx';
 import CaregiverDashboard from './pages/CaregiverDashboard.jsx';
 import ProtectedRoute from './components/ProtectedRoute.jsx';
@@ -58,13 +60,29 @@ export default function App() {
             />
           </Route>
           <Route
-            path="/pharmacist/*"
+            path="/pharmacist"
             element={
               <ProtectedRoute role="pharmacist">
-                <PharmacistDashboard />
+                <PharmacistLayout />
               </ProtectedRoute>
             }
-          />
+          >
+            <Route index element={<Navigate to="/pharmacist/curation" replace />} />
+            <Route
+              path="dashboard"
+              element={<PwPlaceholder title="Dashboard" sprint="Sprint 7" />}
+            />
+            <Route path="curation" element={<DrugCuration />} />
+            <Route
+              path="validation"
+              element={<PwPlaceholder title="Prescription Verification" sprint="Sprint 5" />}
+            />
+            <Route
+              path="inquiries"
+              element={<PwPlaceholder title="Inquiries" sprint="Sprint 8" />}
+            />
+            <Route path="patients" element={<PwPlaceholder title="Patients" sprint="Sprint 7" />} />
+          </Route>
           <Route
             path="/admin/*"
             element={
