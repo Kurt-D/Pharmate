@@ -1,0 +1,151 @@
+/* PharMate patient mobile shell — matches GUI draft (Figs 28–39). */
+
+:root {
+  --pm-blue: #2563eb;
+  --pm-blue-dark: #1d4ed8;
+  --pm-green: #22c55e;
+  --pm-bg: #f4f6fb;
+  --pm-card: #ffffff;
+  --pm-ink: #1f2937;
+  --pm-muted: #6b7280;
+}
+
+.pm-phone {
+  min-height: 100vh;
+  max-width: 480px;
+  margin: 0 auto;
+  background: var(--pm-bg);
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+.pm-phone__scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1.25rem 1.25rem 6rem; /* leave room for bottom nav */
+}
+
+.pm-title {
+  color: var(--pm-blue);
+  font-weight: 800;
+  font-size: 1.6rem;
+  line-height: 1.1;
+  margin: 0;
+}
+.pm-subtitle {
+  color: var(--pm-muted);
+  font-size: 0.9rem;
+  margin: 0 0 1.25rem;
+}
+
+.pm-card {
+  background: var(--pm-card);
+  border-radius: 1rem;
+  box-shadow: 0 1px 3px rgba(16, 24, 40, 0.06);
+  border: 1px solid #eef1f6;
+}
+
+.pm-btn-primary {
+  background: var(--pm-blue);
+  border: none;
+  color: #fff;
+  border-radius: 0.75rem;
+  padding: 0.85rem 1rem;
+  font-weight: 600;
+  width: 100%;
+}
+.pm-btn-primary:hover {
+  background: var(--pm-blue-dark);
+}
+.pm-btn-primary:disabled {
+  opacity: 0.6;
+}
+
+.pm-link {
+  color: var(--pm-blue);
+  font-weight: 600;
+  text-decoration: none;
+  background: none;
+  border: none;
+  padding: 0;
+}
+
+.pm-med-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 0.75rem;
+  display: grid;
+  place-items: center;
+  font-size: 1.2rem;
+  flex-shrink: 0;
+}
+
+/* Bottom navigation */
+.pm-bottomnav {
+  position: sticky;
+  bottom: 0;
+  max-width: 480px;
+  margin: 0 auto;
+  width: 100%;
+  background: #fff;
+  border-top: 1px solid #eef1f6;
+  display: flex;
+  justify-content: space-around;
+  padding: 0.5rem 0 0.6rem;
+}
+.pm-bottomnav a {
+  text-decoration: none;
+  color: var(--pm-muted);
+  font-size: 0.7rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  flex: 1;
+}
+.pm-bottomnav a.active {
+  color: var(--pm-blue);
+  font-weight: 600;
+}
+.pm-bottomnav .pm-navicon {
+  font-size: 1.15rem;
+  line-height: 1;
+}
+
+/* Banners */
+.pm-banner {
+  border-radius: 0.9rem;
+  padding: 0.9rem 1rem;
+  font-size: 0.9rem;
+}
+.pm-banner--warn {
+  background: #fff7ed;
+  color: #9a3412;
+  border: 1px solid #fed7aa;
+}
+.pm-banner--info {
+  background: #eff6ff;
+  color: #1e40af;
+  border: 1px solid #bfdbfe;
+}
+.pm-banner--success {
+  background: #f0fdf4;
+  color: #166534;
+  border: 1px solid #bbf7d0;
+}
+
+.pm-pill {
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 0.15rem 0.55rem;
+  border-radius: 999px;
+}
+.pm-pill--pending {
+  background: #fff7ed;
+  color: #b45309;
+}
+.pm-pill--provisional {
+  background: #eff6ff;
+  color: #1e40af;
+}

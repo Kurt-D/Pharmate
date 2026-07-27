@@ -36,6 +36,13 @@ PharMate_Development_Plan.md
 PharMate_Schedule_Engine_Design.md
 Drug Reference.xlsx
 
+# GUI design mockups (reference only; large binaries)
+GUI_Draft.pdf
+GUI_Draft/
+
+# Local editor/harness tooling
+.claude/
+
 # Capacitor generated
 client/android/
 client/.capacitor/
