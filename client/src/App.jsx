@@ -6,9 +6,11 @@ import PatientLayout from './pages/patient/PatientLayout.jsx';
 import Medications from './pages/patient/Medications.jsx';
 import AddMedicine from './pages/patient/AddMedicine.jsx';
 import Schedule from './pages/patient/Schedule.jsx';
+import PrescriptionUpload from './pages/patient/PrescriptionUpload.jsx';
 import Placeholder from './pages/patient/Placeholder.jsx';
 import PharmacistLayout from './pages/pharmacist/PharmacistLayout.jsx';
 import DrugCuration from './pages/pharmacist/DrugCuration.jsx';
+import Validation from './pages/pharmacist/Validation.jsx';
 import PwPlaceholder from './pages/pharmacist/PwPlaceholder.jsx';
 import AdminDashboard from './pages/AdminDashboard.jsx';
 import CaregiverDashboard from './pages/CaregiverDashboard.jsx';
@@ -48,6 +50,7 @@ export default function App() {
             <Route path="medications" element={<Medications />} />
             <Route path="medications/add" element={<AddMedicine />} />
             <Route path="schedule" element={<Schedule />} />
+            <Route path="medications/:id/prescription" element={<PrescriptionUpload />} />
             <Route
               path="ask"
               element={<Placeholder title="Ask a Pharmacist" note="We're here to help." />}
@@ -75,10 +78,7 @@ export default function App() {
               element={<PwPlaceholder title="Dashboard" sprint="Sprint 7" />}
             />
             <Route path="curation" element={<DrugCuration />} />
-            <Route
-              path="validation"
-              element={<PwPlaceholder title="Prescription Verification" sprint="Sprint 5" />}
-            />
+            <Route path="validation" element={<Validation />} />
             <Route
               path="inquiries"
               element={<PwPlaceholder title="Inquiries" sprint="Sprint 8" />}

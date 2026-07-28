@@ -80,22 +80,47 @@ export default function Medications() {
         </div>
       ) : (
         <>
-          {meds.map((m, i) => (
-            <div key={m.id} className="pm-card d-flex align-items-center gap-3 p-3 mb-3">
-              <div className="pm-med-icon" style={{ background: ICON_BG[i % ICON_BG.length] }}>
-                💊
-              </div>
-              <div className="flex-grow-1">
-                <div className="d-flex align-items-center gap-2">
-                  <strong>{m.drug_name_raw}</strong>
-                  {statusPill(m.status)}
+          {meds.map((m, i) => {
+            // RX med awaiting a prescription: prompt upload (or re-upload if the
+            // pharmacist rejected / asked for a clearer photo).
+            const needsPhoto =
+              m.status === 'pending_validation' &&
+              m.source === 'RX_VALIDATED' &&
+              m.prescription_status !== 'pending';
+            const wasRejected =
+              m.prescription_status === 'rejected' || m.prescription_status === 'needs_clearer';
+            return (
+              <div key={m.id} className="pm-card p-3 mb-3">
+                <div className="d-flex align-items-center gap-3">
+                  <div className="pm-med-icon" style={{ background: ICON_BG[i % ICON_BG.length] }}>
+                    💊
+                  </div>
+                  <div className="flex-grow-1">
+                    <div className="d-flex align-items-center gap-2">
+                      <strong>{m.drug_name_raw}</strong>
+                      {statusPill(m.status)}
+                    </div>
+                    <div className="text-muted small">
+                      {[m.dosage_instruction, m.frequency].filter(Boolean).join(' • ') || '—'}
+                    </div>
+                  </div>
                 </div>
-                <div className="text-muted small">
-                  {[m.dosage_instruction, m.frequency].filter(Boolean).join(' • ') || '—'}
-                </div>
+                {wasRejected && m.prescription_reason && (
+                  <div className="pm-banner pm-banner--warn mt-2 small">
+                    Pharmacist note: {m.prescription_reason}
+                  </div>
+                )}
+                {needsPhoto && (
+                  <button
+                    className="pm-btn-primary mt-2"
+                    onClick={() => navigate(`/patient/medications/${m.id}/prescription`)}
+                  >
+                    📷 {wasRejected ? 'Re-upload prescription' : 'Upload prescription'}
+                  </button>
+                )}
               </div>
-            </div>
-          ))}
+            );
+          })}
 
           <div className="pm-card p-3 mb-3">
             <div className="d-flex align-items-start gap-2">

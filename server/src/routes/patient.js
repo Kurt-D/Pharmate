@@ -7,6 +7,8 @@ import { requireRole } from '../middleware/role.js';
 import { parseFrequency } from '../../engine/frequencyParser.js';
 import { findRestricted, resolveDrug, searchDrugs } from '../services/formulary.js';
 import { proposeForPatient, confirmForPatient } from '../services/schedule.js';
+import { uploadPrescription } from '../middleware/upload.js';
+import { attachPhoto } from '../services/prescription.js';
 
 const router = Router();
 
@@ -202,13 +204,42 @@ router.post('/medications', async (req, res) => {
 // ── GET /api/patient/medications ──────────────────────────────────────────────
 router.get('/medications', async (req, res) => {
   const [rows] = await pool.execute(
-    `SELECT id, drug_id, drug_name_raw, source, is_prn, frequency, frequency_code,
-            dosage_instruction, start_date, end_date, status, created_at
-     FROM medications WHERE patient_id = ? ORDER BY created_at DESC`,
+    `SELECT m.id, m.drug_id, m.drug_name_raw, m.source, m.is_prn, m.frequency, m.frequency_code,
+            m.dosage_instruction, m.start_date, m.end_date, m.status, m.created_at,
+            pp.status AS prescription_status, pp.decision_reason AS prescription_reason
+     FROM medications m
+     LEFT JOIN prescription_photos pp ON pp.id = m.prescription_photo_id
+     WHERE m.patient_id = ? ORDER BY m.created_at DESC`,
     [req.user.sub]
   );
   res.json(rows);
 });
+
+// ── POST /api/patient/medications/:id/prescription ────────────────────────────
+// Upload the CLIENT-REDACTED prescription photo for an RX medication (UC-03, D-K).
+// The unredacted original never leaves the device. Multer errors (size/type) → 400.
+router.post(
+  '/medications/:id/prescription',
+  (req, res, next) => {
+    uploadPrescription(req, res, (err) => {
+      if (err) return res.status(400).json({ error: err.message });
+      next();
+    });
+  },
+  async (req, res) => {
+    if (!req.file) return res.status(400).json({ error: 'photo file is required (field: photo)' });
+    const result = await attachPhoto(req.user.sub, req.params.id, req.file.filename);
+    if (result.error === 'not_found')
+      return res.status(404).json({ error: 'Medication not found' });
+    if (result.error === 'not_rx') {
+      return res.status(400).json({ error: 'Only RX_VALIDATED medications need a prescription' });
+    }
+    if (result.error === 'not_pending') {
+      return res.status(409).json({ error: 'This medication is not awaiting validation' });
+    }
+    res.status(201).json({ photo_id: result.photoId, status: 'pending' });
+  }
+);
 
 // ── GET /api/patient/schedule ─────────────────────────────────────────────────
 // Generate a schedule proposal for today from active medications (ENG §5). The
