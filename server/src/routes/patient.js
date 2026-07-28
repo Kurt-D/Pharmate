@@ -9,6 +9,7 @@ import { findRestricted, resolveDrug, searchDrugs } from '../services/formulary.
 import { proposeForPatient, confirmForPatient, validateMove } from '../services/schedule.js';
 import { uploadPrescription } from '../middleware/upload.js';
 import { attachPhoto } from '../services/prescription.js';
+import { todayDoses, logDose, syncLogs } from '../services/doses.js';
 
 const router = Router();
 
@@ -276,6 +277,37 @@ router.post('/schedule/confirm', async (req, res) => {
     return res.status(400).json({ error: 'Unknown medication in the adjusted layout' });
   }
   res.status(201).json({ message: 'Schedule confirmed', ...result });
+});
+
+// ── GET /api/patient/doses/today ──────────────────────────────────────────────
+// The current confirmed day plan with each dose's status — drives the dose
+// confirmation UI and the on-device notification schedule.
+router.get('/doses/today', async (req, res) => {
+  res.json(await todayDoses(req.user.sub));
+});
+
+// ── POST /api/patient/doses/:scheduleId/log ───────────────────────────────────
+// Log a dose. Timing decides taken/taken_late/missed (D-C) unless action:'snooze'.
+// A late intake returns a reflow suggestion (ENG §8). TC-03: manual method logs.
+router.post('/doses/:scheduleId/log', async (req, res) => {
+  const { logged_at, method, notes, log_id, action } = req.body ?? {};
+  const result = await logDose(req.user.sub, req.params.scheduleId, {
+    logged_at,
+    method,
+    notes,
+    log_id,
+    action,
+  });
+  if (result.error === 'not_found') return res.status(404).json({ error: 'Dose not found' });
+  res.status(201).json(result);
+});
+
+// ── POST /api/patient/doses/sync ──────────────────────────────────────────────
+// Flush the offline outbox (D-F). Idempotent on each log's client-generated id.
+router.post('/doses/sync', async (req, res) => {
+  const logs = req.body?.logs;
+  if (!Array.isArray(logs)) return res.status(400).json({ error: 'logs[] is required' });
+  res.json(await syncLogs(req.user.sub, logs));
 });
 
 export default router;

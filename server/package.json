@@ -11,6 +11,7 @@
     "seed:dev": "node src/db/seed-dev.js",
     "seed:formulary": "node src/db/seed-formulary.js",
     "purge:photos": "node src/jobs/purgePhotos.js",
+    "sweep:missed": "node src/jobs/sweepMissed.js",
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js --runInBand --forceExit",
     "lint": "eslint ."
   },

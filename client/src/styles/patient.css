@@ -149,6 +149,18 @@
   background: #eff6ff;
   color: #1e40af;
 }
+.pm-pill--taken {
+  background: #f0fdf4;
+  color: #166534;
+}
+.pm-pill--late {
+  background: #fffbeb;
+  color: #b45309;
+}
+.pm-pill--missed {
+  background: #fef2f2;
+  color: #b91c1c;
+}
 
 /* Schedule timeline (Figs 32–33) */
 .pm-timeline {
