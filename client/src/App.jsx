@@ -9,6 +9,7 @@ import Schedule from './pages/patient/Schedule.jsx';
 import PrescriptionUpload from './pages/patient/PrescriptionUpload.jsx';
 import Today from './pages/patient/Today.jsx';
 import Ask from './pages/patient/Ask.jsx';
+import Orders from './pages/patient/Orders.jsx';
 import Placeholder from './pages/patient/Placeholder.jsx';
 import PharmacistLayout from './pages/pharmacist/PharmacistLayout.jsx';
 import DrugCuration from './pages/pharmacist/DrugCuration.jsx';
@@ -50,10 +51,7 @@ export default function App() {
             <Route path="schedule" element={<Schedule />} />
             <Route path="medications/:id/prescription" element={<PrescriptionUpload />} />
             <Route path="ask" element={<Ask />} />
-            <Route
-              path="orders"
-              element={<Placeholder title="Orders" note="Track your orders." />}
-            />
+            <Route path="orders" element={<Orders />} />
             <Route
               path="profile"
               element={<Placeholder title="Profile" note="Edit your profile." />}

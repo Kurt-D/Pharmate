@@ -53,6 +53,19 @@ export async function computeAdherence(patientId, window = {}) {
   };
 }
 
+/**
+ * Loyalty-discount flag derived purely from the adherence streak (Sprint 9).
+ * Sales-side only: this returns a tier the pharmacy can honor at the counter —
+ * NO purchase-identity record is created or stored anywhere (D-4 spirit).
+ */
+export async function loyaltyFor(patientId) {
+  const { streak } = await computeAdherence(patientId);
+  let tier = 'none';
+  if (streak >= 14) tier = 'gold';
+  else if (streak >= 7) tier = 'silver';
+  return { streak, tier };
+}
+
 /** Per-patient adherence rows for the CSV export (patient_code only). */
 export async function adherenceReport() {
   const [patients] = await pool.execute(
