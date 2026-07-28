@@ -53,3 +53,15 @@ export async function apiBlobUrl(path) {
   if (!res.ok) throw new Error(`Failed to load (${res.status})`);
   return URL.createObjectURL(await res.blob());
 }
+
+/** Download a protected file (e.g. a CSV export) to disk. */
+export async function downloadFile(path, filename) {
+  const url = await apiBlobUrl(path);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}

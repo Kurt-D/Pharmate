@@ -5,10 +5,17 @@ import { requireAuth } from '../middleware/auth.js';
 import { requireRole } from '../middleware/role.js';
 import { canonicalName } from '../services/formulary.js';
 import { pendingValidations, photoFilePath, decideValidation } from '../services/prescription.js';
+import { pharmacistFollowups } from '../services/alerts.js';
 
 const router = Router();
 
 router.use(requireAuth, requireRole('pharmacist'));
+
+// ── GET /api/pharmacist/followups ─────────────────────────────────────────────
+// No-caregiver missed-dose flags (UC-08). patient_code only — no PII.
+router.get('/followups', async (_req, res) => {
+  res.json(await pharmacistFollowups());
+});
 
 // ── GET /api/pharmacist/validations ──────────────────────────────────────────
 // Prescription validation queue (UC-03). Patients shown by patient_code only.
