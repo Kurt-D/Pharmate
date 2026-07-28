@@ -7,6 +7,7 @@ import Medications from './pages/patient/Medications.jsx';
 import AddMedicine from './pages/patient/AddMedicine.jsx';
 import Schedule from './pages/patient/Schedule.jsx';
 import PrescriptionUpload from './pages/patient/PrescriptionUpload.jsx';
+import Today from './pages/patient/Today.jsx';
 import Placeholder from './pages/patient/Placeholder.jsx';
 import PharmacistLayout from './pages/pharmacist/PharmacistLayout.jsx';
 import DrugCuration from './pages/pharmacist/DrugCuration.jsx';
@@ -41,12 +42,7 @@ export default function App() {
             }
           >
             <Route index element={<Navigate to="/patient/medications" replace />} />
-            <Route
-              path="home"
-              element={
-                <Placeholder title="Welcome, Patient!" note="Manage your health with ease." />
-              }
-            />
+            <Route path="home" element={<Today />} />
             <Route path="medications" element={<Medications />} />
             <Route path="medications/add" element={<AddMedicine />} />
             <Route path="schedule" element={<Schedule />} />
