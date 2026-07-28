@@ -16,6 +16,7 @@ import { classifyByDelay } from '../../engine/doseStatus.js';
 import { reflowRemaining } from '../../engine/index.js';
 import { idealSlots } from '../../engine/intervals.js';
 import { parseClock } from '../../engine/time.js';
+import { raiseMissedAlerts } from './alerts.js';
 
 const VALID_METHODS = ['fcm', 'local', 'manual', 'ocr'];
 const MANILA_OFFSET_MS = 8 * 3600 * 1000;
@@ -135,7 +136,7 @@ async function reflowSuggestion(patientId, frequencyCode, loggedAt) {
  */
 export async function sweepMissed(now = new Date()) {
   const [rows] = await pool.execute(
-    `SELECT id, scheduled_time FROM medication_schedules WHERE status = 'scheduled'`
+    `SELECT id, patient_id, scheduled_time FROM medication_schedules WHERE status = 'scheduled'`
   );
   let missed = 0;
   for (const r of rows) {
@@ -145,7 +146,11 @@ export async function sweepMissed(now = new Date()) {
         `UPDATE medication_schedules SET status = 'missed' WHERE id = ? AND status = 'scheduled'`,
         [r.id]
       );
-      missed += res.affectedRows;
+      if (res.affectedRows > 0) {
+        missed += res.affectedRows;
+        // UC-08: alert caregivers (or flag the pharmacist if none) on the missed dose.
+        await raiseMissedAlerts(r.patient_id, r.id);
+      }
     }
   }
   return missed;

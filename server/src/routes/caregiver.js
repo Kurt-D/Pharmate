@@ -3,10 +3,18 @@ import { v4 as uuidv4 } from 'uuid';
 import { pool } from '../db/connection.js';
 import { requireAuth } from '../middleware/auth.js';
 import { requireRole } from '../middleware/role.js';
+import { caregiverAlerts } from '../services/alerts.js';
 
 const router = Router();
 
 router.use(requireAuth, requireRole('caregiver'));
+
+// ── GET /api/caregiver/alerts ─────────────────────────────────────────────────
+// Missed-dose alerts for this caregiver's linked patients (UC-08). Patients are
+// shown by patient_code only — the payload carries no PII.
+router.get('/alerts', async (req, res) => {
+  res.json(await caregiverAlerts(req.user.sub));
+});
 
 // ── POST /api/caregiver/link ──────────────────────────────────────────────────
 // Caregiver submits a patient's invite code to link accounts
