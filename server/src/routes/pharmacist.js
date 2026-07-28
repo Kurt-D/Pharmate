@@ -6,6 +6,7 @@ import { requireRole } from '../middleware/role.js';
 import { canonicalName } from '../services/formulary.js';
 import { pendingValidations, photoFilePath, decideValidation } from '../services/prescription.js';
 import { pharmacistFollowups } from '../services/alerts.js';
+import { pharmacistQueue, postMessage, getMessages, closeThread } from '../services/inquiry.js';
 
 const router = Router();
 
@@ -15,6 +16,31 @@ router.use(requireAuth, requireRole('pharmacist'));
 // No-caregiver missed-dose flags (UC-08). patient_code only — no PII.
 router.get('/followups', async (_req, res) => {
   res.json(await pharmacistFollowups());
+});
+
+// ── Ask Your Pharmacist — pharmacist side (D-I) ───────────────────────────────
+// Queue and threads show patient_code only; never a name.
+router.get('/inquiries', async (_req, res) => {
+  res.json(await pharmacistQueue());
+});
+
+router.get('/inquiries/:id/messages', async (req, res) => {
+  res.json(await getMessages(req.params.id));
+});
+
+router.post('/inquiries/:id/reply', async (req, res) => {
+  const message = String(req.body?.message ?? '').trim();
+  if (!message) return res.status(400).json({ error: 'message is required' });
+  const result = await postMessage(req.params.id, 'pharmacist', req.user.sub, message);
+  if (result.error === 'not_found') return res.status(404).json({ error: 'Thread not found' });
+  if (result.error === 'closed') return res.status(409).json({ error: 'This inquiry is closed' });
+  res.status(201).json(result);
+});
+
+router.post('/inquiries/:id/close', async (req, res) => {
+  const result = await closeThread(req.params.id);
+  if (result.error === 'not_found') return res.status(404).json({ error: 'Thread not found' });
+  res.json({ message: 'Inquiry closed; server-side messages purged', ...result });
 });
 
 // ── GET /api/pharmacist/validations ──────────────────────────────────────────

@@ -12,6 +12,7 @@ import caregiverRouter from './routes/caregiver.js';
 import pharmacistRouter from './routes/pharmacist.js';
 import adminRouter from './routes/admin.js';
 import surveysRouter from './routes/surveys.js';
+import directoryRouter from './routes/directory.js';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -28,6 +29,7 @@ app.use('/api/caregiver', caregiverRouter);
 app.use('/api/pharmacist', pharmacistRouter);
 app.use('/api/admin', adminRouter);
 app.use('/api/surveys', surveysRouter);
+app.use('/api/directory', directoryRouter);
 
 // 404 handler
 app.use((_req, res) => {
