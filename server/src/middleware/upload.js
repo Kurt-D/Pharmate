@@ -12,6 +12,7 @@
 import multer from 'multer';
 import path from 'node:path';
 import { randomBytes } from 'node:crypto';
+import { createUploadsDir } from '../db/connection.js';
 
 const UPLOADS_DIR = path.resolve(process.env.UPLOADS_DIR || './uploads');
 const MAX_BYTES = 5 * 1024 * 1024; // 5 MB
@@ -20,6 +21,8 @@ const ALLOWED = new Map([
   ['image/png', '.png'],
   ['image/webp', '.webp'],
 ]);
+
+createUploadsDir();
 
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => cb(null, UPLOADS_DIR),
