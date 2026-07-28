@@ -3,29 +3,106 @@ import { useNavigate } from 'react-router-dom';
 import { api } from '../../api.js';
 
 // Suggested Schedule — Review & Confirm (Figs 32–33, ENG §6 / UC-03 steps 4–6).
-// The engine proposes; the patient reviews each dose with its reason and confirms.
+// The engine proposes; the patient may nudge each dose within ±60 min (D-E) with
+// a bounded drag handle. Every move is re-validated live server-side — a move
+// that breaks a spacing rule snaps back and names the conflict. Then they confirm.
+
+const NUDGE = 60; // ±60 min bound (D-E)
+
+function slotMinute(s) {
+  return s.day_offset * 1440 + Number(s.time.slice(0, 2)) * 60 + Number(s.time.slice(3, 5));
+}
+
+function label(minute) {
+  const m = ((Math.round(minute) % 1440) + 1440) % 1440;
+  const hh = String(Math.floor(m / 60)).padStart(2, '0');
+  const mm = String(m % 60).padStart(2, '0');
+  return { time: `${hh}:${mm}`, nextDay: minute >= 1440 };
+}
+
 export default function Schedule() {
   const navigate = useNavigate();
   const [proposal, setProposal] = useState(null); // null = loading
+  const [doses, setDoses] = useState([]); // editable, one per scheduled slot
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
   const [confirming, setConfirming] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
 
   useEffect(() => {
     api('/api/patient/schedule')
-      .then((r) => setProposal(r.data))
+      .then((r) => {
+        setProposal(r.data);
+        setDoses(
+          r.data.slots.map((s) => {
+            const orig = slotMinute(s);
+            return {
+              medication_id: s.medication_id,
+              drug_name: s.drug_name,
+              generated_reason: s.generated_reason,
+              orig,
+              minute: orig, // committed (last-validated) value
+              draft: orig, // live slider value while dragging
+            };
+          })
+        );
+      })
       .catch((e) => setError(e.message));
   }, []);
+
+  // Live slider value (visual only) while dragging.
+  function onDrag(i, value) {
+    setDoses((ds) => ds.map((d, idx) => (idx === i ? { ...d, draft: value } : d)));
+  }
+
+  // On release: re-validate the candidate layout server-side (D-E).
+  async function onCommit(i) {
+    setNotice('');
+    const candidate = doses.map((d, idx) => ({
+      medication_id: d.medication_id,
+      minute: idx === i ? doses[i].draft : d.minute,
+    }));
+    try {
+      const r = await api('/api/patient/schedule/validate', {
+        method: 'POST',
+        body: { doses: candidate, index: i },
+      });
+      if (r.data.ok) {
+        setDoses((ds) => ds.map((d, idx) => (idx === i ? { ...d, minute: d.draft } : d)));
+      } else {
+        const v = r.data.violation || {};
+        const gap = v.min_gap_hours ? ` (needs ${v.min_gap_hours}h gap)` : '';
+        setNotice(`Can’t move there — too close to ${v.drug || 'another dose'}${gap}.`);
+        setDoses((ds) => ds.map((d, idx) => (idx === i ? { ...d, draft: d.minute } : d)));
+      }
+    } catch (e) {
+      setError(e.message);
+      setDoses((ds) => ds.map((d, idx) => (idx === i ? { ...d, draft: d.minute } : d)));
+    }
+  }
 
   async function confirm() {
     setConfirming(true);
     setError('');
     try {
-      await api('/api/patient/schedule/confirm', { method: 'POST' });
+      await api('/api/patient/schedule/confirm', {
+        method: 'POST',
+        body: {
+          slots: doses.map((d) => ({
+            medication_id: d.medication_id,
+            minute: d.minute,
+            generated_reason: d.generated_reason,
+          })),
+        },
+      });
       setConfirmed(true);
       setTimeout(() => navigate('/patient/medications'), 1500);
     } catch (e) {
-      setError(e.message);
+      if (e.status === 409) {
+        setError(`${e.message}${e.body?.violation?.drug ? ` (vs ${e.body.violation.drug})` : ''}`);
+      } else {
+        setError(e.message);
+      }
     } finally {
       setConfirming(false);
     }
@@ -41,9 +118,12 @@ export default function Schedule() {
           Suggested Schedule
         </h1>
       </div>
-      <p className="pm-subtitle">Review the plan we built, then confirm to set your reminders.</p>
+      <p className="pm-subtitle">
+        Review the plan. You can nudge any dose up to an hour — we’ll keep it safe.
+      </p>
 
       {error && <div className="pm-banner pm-banner--warn mb-3">{error}</div>}
+      {notice && <div className="pm-banner pm-banner--warn mb-3">{notice}</div>}
       {confirmed && (
         <div className="pm-banner pm-banner--success mb-3">
           Schedule confirmed. Your reminders are set.
@@ -56,7 +136,7 @@ export default function Schedule() {
 
       {proposal && (
         <>
-          {proposal.slots.length === 0 && proposal.unresolved.length === 0 && (
+          {doses.length === 0 && proposal.unresolved.length === 0 && (
             <div className="pm-card text-center p-4">
               <div
                 className="pm-med-icon mx-auto mb-3"
@@ -77,27 +157,45 @@ export default function Schedule() {
             </div>
           )}
 
-          {proposal.slots.length > 0 && (
+          {doses.length > 0 && (
             <div className="pm-card p-3 mb-3">
               <div className="pm-timeline">
-                {proposal.slots.map((s, i) => (
-                  <div className="pm-dose" key={`${s.medication_id}-${i}`}>
-                    <div className="pm-dose__rail">
-                      <span
-                        className={'pm-dose__dot' + (s.day_offset > 0 ? ' pm-dose__dot--next' : '')}
-                      />
-                      {i < proposal.slots.length - 1 && <span className="pm-dose__line" />}
-                    </div>
-                    <div className="pm-dose__body">
-                      <div className="pm-dose__time">
-                        {s.time}
-                        {s.day_offset > 0 && <small>next day</small>}
+                {doses.map((d, i) => {
+                  const l = label(d.draft);
+                  const moved = d.minute !== d.orig;
+                  return (
+                    <div className="pm-dose" key={`${d.medication_id}-${i}`}>
+                      <div className="pm-dose__rail">
+                        <span
+                          className={'pm-dose__dot' + (l.nextDay ? ' pm-dose__dot--next' : '')}
+                        />
+                        {i < doses.length - 1 && <span className="pm-dose__line" />}
                       </div>
-                      <div className="pm-dose__drug">{s.drug_name}</div>
-                      <div className="pm-dose__reason">{s.generated_reason}</div>
+                      <div className="pm-dose__body">
+                        <div className="pm-dose__time">
+                          {l.time}
+                          {l.nextDay && <small>next day</small>}
+                          {moved && <small>adjusted</small>}
+                        </div>
+                        <div className="pm-dose__drug">{d.drug_name}</div>
+                        <div className="pm-dose__reason">{d.generated_reason}</div>
+                        <input
+                          type="range"
+                          className="form-range mt-2"
+                          min={Math.max(0, d.orig - NUDGE)}
+                          max={d.orig + NUDGE}
+                          step={5}
+                          value={d.draft}
+                          onChange={(e) => onDrag(i, Number(e.target.value))}
+                          onMouseUp={() => onCommit(i)}
+                          onTouchEnd={() => onCommit(i)}
+                          onKeyUp={() => onCommit(i)}
+                          aria-label={`Adjust ${d.drug_name} dose time`}
+                        />
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}
@@ -131,7 +229,7 @@ export default function Schedule() {
             </div>
           )}
 
-          {proposal.slots.length > 0 && (
+          {doses.length > 0 && (
             <button className="pm-btn-primary" disabled={confirming || confirmed} onClick={confirm}>
               {confirming ? 'Confirming…' : confirmed ? 'Confirmed ✓' : 'Confirm Schedule'}
             </button>

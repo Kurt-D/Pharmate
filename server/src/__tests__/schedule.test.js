@@ -85,3 +85,63 @@ describe('POST /api/patient/schedule/confirm', () => {
     expect(second.body.count).toBe(first.body.count);
   });
 });
+
+// Layout: patient has paracetamol TID (3 doses, min interval 4h) at 08:00/16:00/00:00.
+function toDoses(slots) {
+  return slots.map((s) => ({
+    medication_id: s.medication_id,
+    minute: s.day_offset * 1440 + Number(s.time.slice(0, 2)) * 60 + Number(s.time.slice(3, 5)),
+  }));
+}
+
+describe('POST /api/patient/schedule/validate — ±60 min drag (D-E)', () => {
+  test('a move that keeps the min interval is allowed', async () => {
+    const sched = await request(app).get('/api/patient/schedule').set(auth());
+    const doses = toDoses(sched.body.slots);
+    doses[1].minute = 15 * 60; // 16:00 → 15:00, still ≥4h from 08:00 and 00:00
+    const res = await request(app)
+      .post('/api/patient/schedule/validate')
+      .set(auth())
+      .send({ doses, index: 1 });
+    expect(res.status).toBe(200);
+    expect(res.body.ok).toBe(true);
+  });
+
+  test('a move within the drug’s own min interval is blocked and names the drug', async () => {
+    const sched = await request(app).get('/api/patient/schedule').set(auth());
+    const doses = toDoses(sched.body.slots);
+    doses[1].minute = 11 * 60; // 16:00 → 11:00, only 3h after the 08:00 dose (< 4h)
+    const res = await request(app)
+      .post('/api/patient/schedule/validate')
+      .set(auth())
+      .send({ doses, index: 1 });
+    expect(res.body.ok).toBe(false);
+    expect(res.body.violation.drug).toMatch(/paracetamol/i);
+  });
+});
+
+describe('POST /api/patient/schedule/confirm — adjusted layout re-validation', () => {
+  test('a valid adjusted layout is persisted', async () => {
+    const sched = await request(app).get('/api/patient/schedule').set(auth());
+    const doses = toDoses(sched.body.slots);
+    doses[1].minute = 15 * 60; // safe nudge
+    const res = await request(app)
+      .post('/api/patient/schedule/confirm')
+      .set(auth())
+      .send({ slots: doses });
+    expect(res.status).toBe(201);
+    expect(res.body.count).toBe(doses.length);
+  });
+
+  test('an invalid adjusted layout is rejected with 409 (never persisted)', async () => {
+    const sched = await request(app).get('/api/patient/schedule').set(auth());
+    const doses = toDoses(sched.body.slots);
+    doses[1].minute = 11 * 60; // violates the 4h min interval
+    const res = await request(app)
+      .post('/api/patient/schedule/confirm')
+      .set(auth())
+      .send({ slots: doses });
+    expect(res.status).toBe(409);
+    expect(res.body.violation.drug).toMatch(/paracetamol/i);
+  });
+});

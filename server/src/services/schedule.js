@@ -13,6 +13,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import { pool } from '../db/connection.js';
 import { generateSchedule } from '../../engine/index.js';
+import { buildInteractionMap, checkDose } from '../../engine/constraints.js';
 
 /** Today's calendar date in Asia/Manila (UTC+8, no DST). */
 function manilaToday() {
@@ -128,14 +129,115 @@ export async function proposeForPatient(patientId) {
   };
 }
 
+/** medication_id → {drugId, drugName, minIntervalHours} + the interaction map. */
+async function loadLookup(patientId) {
+  const { medications, interactions } = await loadEngineInput(patientId);
+  return {
+    byId: new Map(medications.map((m) => [m.id, m])),
+    interactionMap: buildInteractionMap(interactions),
+  };
+}
+
 /**
- * Persist the current proposal as the patient's confirmed plan (UC-03 steps 5–6).
- * Replaces prior still-scheduled (not-yet-taken) doses; taken/missed rows are
- * immutable. Bumps schedule_version so dose logs can reference the version that
- * fired them (ENG §9).
+ * Live re-validation of a single dragged dose against the rest of the layout
+ * (ENG §6 / D-E). The moved dose is identified by its array index (doses of the
+ * same medication share a medication_id, so index — not id — is the identity).
+ * Curated gap data stays server-side; the client only learns whether the move is
+ * safe and, if not, which pair/gap blocked it.
+ *
+ * @param {string}   patientId
+ * @param {Object[]} doses  full layout [{medication_id, minute}] with the move applied
+ * @param {number}   index  position of the dose being validated
  */
-export async function confirmForPatient(patientId) {
-  const proposal = await proposeForPatient(patientId);
+export async function validateMove(patientId, doses, index) {
+  if (!Array.isArray(doses) || index < 0 || index >= doses.length) {
+    return { ok: false, error: 'bad_index' };
+  }
+  const { byId, interactionMap } = await loadLookup(patientId);
+  const moved = doses[index];
+  const m = byId.get(moved.medication_id);
+  if (!m) return { ok: false, error: 'unknown_medication' };
+
+  const placed = doses
+    .filter((_, i) => i !== index)
+    .map((o) => {
+      const om = byId.get(o.medication_id);
+      return {
+        minuteOfDay: o.minute,
+        drugId: om?.drugId,
+        medId: o.medication_id,
+        drugName: om?.drugName,
+      };
+    });
+
+  const minIntervalMin = m.minIntervalHours ? Math.round(m.minIntervalHours * 60) : 0;
+  const res = checkDose(
+    { time: moved.minute, drugId: m.drugId, medId: moved.medication_id, minIntervalMin },
+    placed,
+    interactionMap
+  );
+  if (res.ok) return { ok: true };
+  return {
+    ok: false,
+    violation: { drug: res.otherDrug, min_gap_hours: res.minGapHours ?? null, kind: res.kind },
+  };
+}
+
+/**
+ * Persist the confirmed plan (UC-03 steps 5–6). If the patient adjusted doses on
+ * the Review & Confirm screen, `adjusted` carries the final layout — every dose
+ * is re-validated server-side before it is written (defense-in-depth: a bad drop
+ * can never be persisted even if the client checks were bypassed). With no
+ * adjustments, the fresh engine proposal is persisted as-is.
+ *
+ * Replaces prior still-scheduled (not-yet-taken) doses; taken/missed rows are
+ * immutable. Bumps schedule_version so dose logs can reference their version.
+ */
+export async function confirmForPatient(patientId, adjusted) {
+  let slots;
+  let generationDate;
+
+  if (Array.isArray(adjusted) && adjusted.length > 0) {
+    const { byId, interactionMap } = await loadLookup(patientId);
+    for (const dose of adjusted) {
+      const m = byId.get(dose.medication_id);
+      if (!m) return { error: 'unknown_medication' };
+      const placed = adjusted
+        .filter((o) => o !== dose)
+        .map((o) => {
+          const om = byId.get(o.medication_id);
+          return {
+            minuteOfDay: o.minute,
+            drugId: om?.drugId,
+            medId: o.medication_id,
+            drugName: om?.drugName,
+          };
+        });
+      const minIntervalMin = m.minIntervalHours ? Math.round(m.minIntervalHours * 60) : 0;
+      const res = checkDose(
+        { time: dose.minute, drugId: m.drugId, medId: dose.medication_id, minIntervalMin },
+        placed,
+        interactionMap
+      );
+      if (!res.ok) {
+        return {
+          error: 'invalid_layout',
+          violation: { drug: res.otherDrug, min_gap_hours: res.minGapHours ?? null },
+        };
+      }
+    }
+    generationDate = manilaToday();
+    slots = adjusted.map((d) => ({
+      medication_id: d.medication_id,
+      scheduled_time: wallClock(generationDate, d.minute),
+      generated_reason: d.generated_reason || 'patient-adjusted',
+    }));
+  } else {
+    const proposal = await proposeForPatient(patientId);
+    generationDate = proposal.generation_date;
+    slots = proposal.slots;
+  }
+
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
@@ -153,7 +255,7 @@ export async function confirmForPatient(patientId) {
       [patientId]
     );
 
-    for (const s of proposal.slots) {
+    for (const s of slots) {
       await conn.execute(
         `INSERT INTO medication_schedules
            (id, medication_id, patient_id, scheduled_time, generated_reason,
@@ -164,7 +266,7 @@ export async function confirmForPatient(patientId) {
     }
 
     await conn.commit();
-    return { version, count: proposal.slots.length, generation_date: proposal.generation_date };
+    return { version, count: slots.length, generation_date: generationDate };
   } catch (err) {
     await conn.rollback();
     throw err;

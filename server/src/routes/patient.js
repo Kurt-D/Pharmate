@@ -6,7 +6,7 @@ import { requireAuth } from '../middleware/auth.js';
 import { requireRole } from '../middleware/role.js';
 import { parseFrequency } from '../../engine/frequencyParser.js';
 import { findRestricted, resolveDrug, searchDrugs } from '../services/formulary.js';
-import { proposeForPatient, confirmForPatient } from '../services/schedule.js';
+import { proposeForPatient, confirmForPatient, validateMove } from '../services/schedule.js';
 import { uploadPrescription } from '../middleware/upload.js';
 import { attachPhoto } from '../services/prescription.js';
 
@@ -250,11 +250,31 @@ router.get('/schedule', async (req, res) => {
   res.json(proposal);
 });
 
+// ── POST /api/patient/schedule/validate ───────────────────────────────────────
+// Live re-validation of a single dragged dose against the rest of the layout
+// (D-E). Returns { ok } or { ok:false, violation:{ drug, min_gap_hours } }.
+router.post('/schedule/validate', async (req, res) => {
+  const { doses, index } = req.body ?? {};
+  if (!Array.isArray(doses) || typeof index !== 'number') {
+    return res.status(400).json({ error: 'doses[] and index are required' });
+  }
+  res.json(await validateMove(req.user.sub, doses, index));
+});
+
 // ── POST /api/patient/schedule/confirm ────────────────────────────────────────
-// Persist the current proposal as the confirmed plan (is_confirmed = TRUE),
-// bumping schedule_version. Replaces prior not-yet-taken doses (ENG §6, §9).
+// Persist the confirmed plan (is_confirmed = TRUE), bumping schedule_version.
+// An optional `slots` body carries the patient's ±60-min adjustments (D-E),
+// re-validated server-side before persisting. Replaces prior not-yet-taken doses.
 router.post('/schedule/confirm', async (req, res) => {
-  const result = await confirmForPatient(req.user.sub);
+  const result = await confirmForPatient(req.user.sub, req.body?.slots);
+  if (result.error === 'invalid_layout') {
+    return res
+      .status(409)
+      .json({ error: 'A dose violates a spacing rule', violation: result.violation });
+  }
+  if (result.error === 'unknown_medication') {
+    return res.status(400).json({ error: 'Unknown medication in the adjusted layout' });
+  }
   res.status(201).json({ message: 'Schedule confirmed', ...result });
 });
 
