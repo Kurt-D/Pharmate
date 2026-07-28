@@ -4,16 +4,50 @@ import { pool } from '../db/connection.js';
 import { requireAuth } from '../middleware/auth.js';
 import { requireRole } from '../middleware/role.js';
 import { canonicalName } from '../services/formulary.js';
+import { pendingValidations, photoFilePath, decideValidation } from '../services/prescription.js';
 
 const router = Router();
 
 router.use(requireAuth, requireRole('pharmacist'));
 
+// ── GET /api/pharmacist/validations ──────────────────────────────────────────
+// Prescription validation queue (UC-03). Patients shown by patient_code only.
+router.get('/validations', async (_req, res) => {
+  res.json(await pendingValidations());
+});
+
+// ── GET /api/pharmacist/validations/:id/photo ────────────────────────────────
+// Serve the redacted prescription image for review. 404 once purged (D-K).
+router.get('/validations/:id/photo', async (req, res) => {
+  const abs = await photoFilePath(req.params.id);
+  if (!abs) return res.status(404).json({ error: 'Photo not available' });
+  res.sendFile(abs);
+});
+
 // ── POST /api/pharmacist/validate ────────────────────────────────────────────
-// Prescription validation — full implementation in Sprint 5.
-// Stub present now so TC-06 can assert that a patient gets 403 on this endpoint.
-router.post('/validate', (_req, res) => {
-  res.status(501).json({ error: 'Prescription validation arrives in Sprint 5' });
+// Record a validation decision (TC-04). The pharmacist's role ends here — there
+// are no scheduling controls. Approval flips the medication to `active`, which
+// the patient then schedules and confirms separately (ENG §6).
+router.post('/validate', async (req, res) => {
+  const { photo_id, action, reason } = req.body;
+  if (!photo_id) return res.status(400).json({ error: 'photo_id is required' });
+
+  const result = await decideValidation(req.user.sub, photo_id, action, reason);
+  if (result.error === 'bad_action') {
+    return res
+      .status(400)
+      .json({ error: "action must be 'approve', 'reject', or 'needs_clearer'" });
+  }
+  if (result.error === 'reason_required') {
+    return res
+      .status(400)
+      .json({ error: 'A reason is required to reject or request a clearer photo' });
+  }
+  if (result.error === 'not_found') return res.status(404).json({ error: 'Validation not found' });
+  if (result.error === 'already_decided') {
+    return res.status(409).json({ error: 'This prescription has already been decided' });
+  }
+  res.json(result);
 });
 
 // ── GET /api/pharmacist/pending-drugs ─────────────────────────────────────────
