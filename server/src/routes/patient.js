@@ -6,6 +6,7 @@ import { requireAuth } from '../middleware/auth.js';
 import { requireRole } from '../middleware/role.js';
 import { parseFrequency } from '../../engine/frequencyParser.js';
 import { findRestricted, resolveDrug, searchDrugs } from '../services/formulary.js';
+import { proposeForPatient, confirmForPatient } from '../services/schedule.js';
 
 const router = Router();
 
@@ -207,6 +208,23 @@ router.get('/medications', async (req, res) => {
     [req.user.sub]
   );
   res.json(rows);
+});
+
+// ── GET /api/patient/schedule ─────────────────────────────────────────────────
+// Generate a schedule proposal for today from active medications (ENG §5). The
+// engine is deterministic and pure; this endpoint does NOT persist — the patient
+// reviews the proposal and confirms it separately (UC-03 steps 4–6).
+router.get('/schedule', async (req, res) => {
+  const proposal = await proposeForPatient(req.user.sub);
+  res.json(proposal);
+});
+
+// ── POST /api/patient/schedule/confirm ────────────────────────────────────────
+// Persist the current proposal as the confirmed plan (is_confirmed = TRUE),
+// bumping schedule_version. Replaces prior not-yet-taken doses (ENG §6, §9).
+router.post('/schedule/confirm', async (req, res) => {
+  const result = await confirmForPatient(req.user.sub);
+  res.status(201).json({ message: 'Schedule confirmed', ...result });
 });
 
 export default router;

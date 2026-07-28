@@ -107,15 +107,9 @@ export default function Medications() {
                 </div>
               </div>
             </div>
-            <button
-              className="pm-btn-primary mt-3"
-              onClick={() => navigate('/patient/medications')}
-            >
+            <button className="pm-btn-primary mt-3" onClick={() => navigate('/patient/schedule')}>
               📅 Create Schedule
             </button>
-            <p className="text-muted small text-center mt-2 mb-0">
-              Schedule generation arrives in Sprint 4–5.
-            </p>
           </div>
         </>
       )}

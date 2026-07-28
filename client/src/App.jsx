@@ -5,6 +5,7 @@ import AnchorOnboarding from './pages/AnchorOnboarding.jsx';
 import PatientLayout from './pages/patient/PatientLayout.jsx';
 import Medications from './pages/patient/Medications.jsx';
 import AddMedicine from './pages/patient/AddMedicine.jsx';
+import Schedule from './pages/patient/Schedule.jsx';
 import Placeholder from './pages/patient/Placeholder.jsx';
 import PharmacistLayout from './pages/pharmacist/PharmacistLayout.jsx';
 import DrugCuration from './pages/pharmacist/DrugCuration.jsx';
@@ -46,6 +47,7 @@ export default function App() {
             />
             <Route path="medications" element={<Medications />} />
             <Route path="medications/add" element={<AddMedicine />} />
+            <Route path="schedule" element={<Schedule />} />
             <Route
               path="ask"
               element={<Placeholder title="Ask a Pharmacist" note="We're here to help." />}

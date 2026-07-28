@@ -149,3 +149,64 @@
   background: #eff6ff;
   color: #1e40af;
 }
+
+/* Schedule timeline (Figs 32–33) */
+.pm-timeline {
+  position: relative;
+  margin: 0.5rem 0 0;
+  padding-left: 0.25rem;
+}
+.pm-dose {
+  display: flex;
+  gap: 0.85rem;
+  align-items: flex-start;
+  position: relative;
+}
+.pm-dose__rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex-shrink: 0;
+}
+.pm-dose__dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--pm-blue);
+  margin-top: 6px;
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.12);
+}
+.pm-dose__dot--next {
+  background: #f97316;
+  box-shadow: 0 0 0 4px rgba(249, 115, 22, 0.15);
+}
+.pm-dose__line {
+  flex: 1;
+  width: 2px;
+  background: #e5e9f2;
+  min-height: 1.25rem;
+}
+.pm-dose__body {
+  flex: 1;
+  padding-bottom: 1rem;
+}
+.pm-dose__time {
+  font-weight: 800;
+  color: var(--pm-ink);
+  font-size: 1.05rem;
+}
+.pm-dose__time small {
+  font-weight: 600;
+  color: var(--pm-muted);
+  font-size: 0.72rem;
+  margin-left: 0.35rem;
+}
+.pm-dose__drug {
+  font-weight: 600;
+  color: var(--pm-ink);
+}
+.pm-dose__reason {
+  font-size: 0.78rem;
+  color: var(--pm-muted);
+  margin-top: 0.15rem;
+}
