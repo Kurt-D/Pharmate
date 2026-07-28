@@ -7,6 +7,7 @@ import { canonicalName } from '../services/formulary.js';
 import { pendingValidations, photoFilePath, decideValidation } from '../services/prescription.js';
 import { pharmacistFollowups } from '../services/alerts.js';
 import { pharmacistQueue, postMessage, getMessages, closeThread } from '../services/inquiry.js';
+import { orderQueue, updateOrderStatus } from '../services/orders.js';
 
 const router = Router();
 
@@ -41,6 +42,22 @@ router.post('/inquiries/:id/close', async (req, res) => {
   const result = await closeThread(req.params.id);
   if (result.error === 'not_found') return res.status(404).json({ error: 'Thread not found' });
   res.json({ message: 'Inquiry closed; server-side messages purged', ...result });
+});
+
+// ── Refill & delivery queue (Tier 2b) — patient_code only, status only ────────
+router.get('/orders', async (_req, res) => {
+  res.json(await orderQueue());
+});
+
+router.post('/orders/:kind/:id/status', async (req, res) => {
+  const { kind, id } = req.params;
+  if (kind !== 'refill' && kind !== 'delivery') {
+    return res.status(400).json({ error: 'kind must be refill or delivery' });
+  }
+  const result = await updateOrderStatus(kind, id, req.body?.status);
+  if (result.error === 'bad_status') return res.status(400).json({ error: 'Invalid status' });
+  if (result.error === 'not_found') return res.status(404).json({ error: 'Order not found' });
+  res.json(result);
 });
 
 // ── GET /api/pharmacist/validations ──────────────────────────────────────────

@@ -17,6 +17,9 @@ import {
   closeThread,
   patientThreads,
 } from '../services/inquiry.js';
+import { createRefill, createDelivery, listOrders } from '../services/orders.js';
+import { verifyLabel } from '../services/labelScan.js';
+import { loyaltyFor } from '../services/adherence.js';
 
 const router = Router();
 
@@ -362,6 +365,51 @@ router.post('/inquiries/:id/close', async (req, res) => {
   const result = await closeThread(req.params.id);
   if (result.error === 'not_found') return res.status(404).json({ error: 'Thread not found' });
   res.json({ message: 'Inquiry closed; server-side messages purged', ...result });
+});
+
+// ── Refill & delivery (Tier 2b, D-4 — request + status only, no payments) ─────
+router.get('/orders', async (req, res) => {
+  res.json(await listOrders(req.user.sub));
+});
+
+router.post('/refills', async (req, res) => {
+  const result = await createRefill(req.user.sub, req.body ?? {});
+  if (result.error === 'branch_required') {
+    return res.status(400).json({ error: 'A branch must be selected' });
+  }
+  if (result.error === 'medication_not_found') {
+    return res.status(404).json({ error: 'Medication not found' });
+  }
+  res.status(201).json(result);
+});
+
+router.post('/deliveries', async (req, res) => {
+  const result = await createDelivery(req.user.sub, req.body ?? {});
+  if (result.error === 'branch_required') {
+    return res.status(400).json({ error: 'A branch must be selected for delivery' }); // TC-08
+  }
+  if (result.error === 'medication_not_found') {
+    return res.status(404).json({ error: 'Medication not found' });
+  }
+  if (result.error === 'branch_not_found') {
+    return res.status(404).json({ error: 'Branch not found' });
+  }
+  if (result.error === 'no_delivery_coverage') {
+    return res.status(400).json({ error: 'The selected branch does not offer delivery' });
+  }
+  res.status(201).json(result);
+});
+
+// ── Label-scan verification (TC-02) ───────────────────────────────────────────
+router.post('/label/verify', async (req, res) => {
+  const name = String(req.body?.scanned_name ?? '').trim();
+  if (!name) return res.status(400).json({ error: 'scanned_name is required' });
+  res.json(await verifyLabel(req.user.sub, name));
+});
+
+// ── Loyalty flag (adherence-derived; no purchase identity) ────────────────────
+router.get('/loyalty', async (req, res) => {
+  res.json(await loyaltyFor(req.user.sub));
 });
 
 export default router;
