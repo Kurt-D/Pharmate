@@ -31,8 +31,11 @@ echo "--- Running database migrations"
 npm --prefix server run migrate
 
 # 4. Build client (React → dist/)
+# NOTE: build tooling (Vite, plugins) lives in devDependencies, so the client
+# install must include dev deps or `vite build` will fail. The built dist/ is
+# static — none of these dev packages run at serve time.
 echo "--- Building client"
-npm --prefix client install --omit=dev
+npm --prefix client install --include=dev
 npm --prefix client run build
 
 # 5. Reload PM2 (starts fresh if not running)
