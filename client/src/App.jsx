@@ -10,13 +10,21 @@ import PrescriptionUpload from './pages/patient/PrescriptionUpload.jsx';
 import Today from './pages/patient/Today.jsx';
 import Ask from './pages/patient/Ask.jsx';
 import Orders from './pages/patient/Orders.jsx';
-import Placeholder from './pages/patient/Placeholder.jsx';
+import Profile from './pages/patient/Profile.jsx';
 import PharmacistLayout from './pages/pharmacist/PharmacistLayout.jsx';
 import DrugCuration from './pages/pharmacist/DrugCuration.jsx';
 import Validation from './pages/pharmacist/Validation.jsx';
 import Inquiries from './pages/pharmacist/Inquiries.jsx';
+import OrdersQueue from './pages/pharmacist/OrdersQueue.jsx';
 import PwPlaceholder from './pages/pharmacist/PwPlaceholder.jsx';
-import AdminDashboard from './pages/AdminDashboard.jsx';
+import AdminLayout from './pages/admin/AdminLayout.jsx';
+import AdminDashboard from './pages/admin/Dashboard.jsx';
+import AdminUsers from './pages/admin/Users.jsx';
+import AdminMedicines from './pages/admin/Medicines.jsx';
+import AdminOrders from './pages/admin/Orders.jsx';
+import AdminPriority from './pages/admin/Priority.jsx';
+import AdminAlerts from './pages/admin/Alerts.jsx';
+import AdminReports from './pages/admin/Reports.jsx';
 import CaregiverDashboard from './pages/CaregiverDashboard.jsx';
 import ProtectedRoute from './components/ProtectedRoute.jsx';
 import './App.css';
@@ -52,10 +60,7 @@ export default function App() {
             <Route path="medications/:id/prescription" element={<PrescriptionUpload />} />
             <Route path="ask" element={<Ask />} />
             <Route path="orders" element={<Orders />} />
-            <Route
-              path="profile"
-              element={<Placeholder title="Profile" note="Edit your profile." />}
-            />
+            <Route path="profile" element={<Profile />} />
           </Route>
           <Route
             path="/pharmacist"
@@ -73,16 +78,26 @@ export default function App() {
             <Route path="curation" element={<DrugCuration />} />
             <Route path="validation" element={<Validation />} />
             <Route path="inquiries" element={<Inquiries />} />
+            <Route path="orders" element={<OrdersQueue />} />
             <Route path="patients" element={<PwPlaceholder title="Patients" sprint="Sprint 7" />} />
           </Route>
           <Route
-            path="/admin/*"
+            path="/admin"
             element={
               <ProtectedRoute role="admin">
-                <AdminDashboard />
+                <AdminLayout />
               </ProtectedRoute>
             }
-          />
+          >
+            <Route index element={<Navigate to="/admin/dashboard" replace />} />
+            <Route path="dashboard" element={<AdminDashboard />} />
+            <Route path="users" element={<AdminUsers />} />
+            <Route path="medicines" element={<AdminMedicines />} />
+            <Route path="orders" element={<AdminOrders />} />
+            <Route path="priority" element={<AdminPriority />} />
+            <Route path="alerts" element={<AdminAlerts />} />
+            <Route path="reports" element={<AdminReports />} />
+          </Route>
           <Route
             path="/caregiver/*"
             element={

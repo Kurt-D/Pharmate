@@ -29,7 +29,15 @@ export default function AnchorOnboarding() {
     fetch('/api/patient/anchors', { headers: { Authorization: `Bearer ${token}` } })
       .then((r) => r.json())
       .then((data) => {
-        if (data.wake_anchor) setAnchors({ ...DEFAULTS, ...data });
+        // TIME columns come back as "HH:MM:SS"; the time input and the server
+        // both expect "HH:MM", so normalize (and keep only the anchor fields).
+        if (data && data.wake_anchor) {
+          const loaded = {};
+          for (const k of Object.keys(DEFAULTS)) {
+            loaded[k] = data[k] ? String(data[k]).slice(0, 5) : DEFAULTS[k];
+          }
+          setAnchors(loaded);
+        }
       })
       .catch(() => {})
       .finally(() => setLoading(false));

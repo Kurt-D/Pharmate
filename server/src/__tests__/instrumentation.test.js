@@ -88,7 +88,10 @@ describe('Caregiver missed-dose alert (UC-08) — no PII', () => {
     await request(app)
       .post('/api/patient/schedule/confirm')
       .set({ Authorization: `Bearer ${patientToken}` });
-    const when = new Date(Date.now() + 3 * 3600 * 1000); // well past every dose today
+    // Sweep 3 days out so it clears every generated dose regardless of the UTC
+    // time-of-day (manilaToday() can roll the plan to "tomorrow", putting doses
+    // hours in the future — a 3h sweep would miss them and raise no alert).
+    const when = new Date(Date.now() + 3 * 24 * 3600 * 1000);
     await sweepMissed(when);
 
     const res = await request(app)
@@ -105,7 +108,7 @@ describe('Caregiver missed-dose alert (UC-08) — no PII', () => {
   test('a patient with no caregiver raises a pharmacist follow-up flag', async () => {
     const solo = await register('patient', { full_name: 'Solo S7' });
     await confirmParacetamolSchedule(solo.token);
-    await sweepMissed(new Date(Date.now() + 3 * 3600 * 1000));
+    await sweepMissed(new Date(Date.now() + 3 * 24 * 3600 * 1000));
 
     const pharm = await register('pharmacist', { full_name: 'Dr S7b' });
     const res = await request(app)
@@ -181,5 +184,48 @@ describe('SUS / TAM instruments', () => {
     expect(csv.status).toBe(200);
     expect(csv.text.split('\n')[0]).toMatch(/^id,role,submitted_at,/);
     expect(csv.text).toMatch(/patient/); // the role column
+  });
+});
+
+describe('Admin console endpoints (Figs 50–54) — pseudonymous', () => {
+  const admin = () => ({ Authorization: `Bearer ${adminToken}` });
+
+  test('users list is by code/role, never a name; active toggle works', async () => {
+    const res = await request(app).get('/api/admin/users?role=patient').set(admin());
+    expect(res.status).toBe(200);
+    expect(res.body.length).toBeGreaterThan(0);
+    expect(res.body[0].label).toMatch(/^PM-[A-Z0-9]{6}$/);
+    expect(JSON.stringify(res.body)).not.toContain(PATIENT_PII);
+
+    const toggle = await request(app)
+      .put(`/api/admin/users/${res.body[0].id}/active`)
+      .set(admin())
+      .send({ active: false });
+    expect(toggle.status).toBe(200);
+    expect(toggle.body.is_active).toBe(0);
+    await request(app)
+      .put(`/api/admin/users/${res.body[0].id}/active`)
+      .set(admin())
+      .send({ active: true });
+  });
+
+  test('orders, alerts, adherence-trend, priority all return without PII', async () => {
+    for (const path of [
+      '/api/admin/orders',
+      '/api/admin/alerts',
+      '/api/admin/adherence-trend',
+      '/api/admin/priority',
+    ]) {
+      const res = await request(app).get(path).set(admin());
+      expect(res.status).toBe(200);
+      expect(JSON.stringify(res.body)).not.toContain(PATIENT_PII);
+    }
+  });
+
+  test('a non-admin is refused the console endpoints (403)', async () => {
+    const res = await request(app)
+      .get('/api/admin/users')
+      .set({ Authorization: `Bearer ${patientToken}` });
+    expect(res.status).toBe(403);
   });
 });
