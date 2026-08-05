@@ -88,7 +88,10 @@ describe('Caregiver missed-dose alert (UC-08) — no PII', () => {
     await request(app)
       .post('/api/patient/schedule/confirm')
       .set({ Authorization: `Bearer ${patientToken}` });
-    const when = new Date(Date.now() + 3 * 3600 * 1000); // well past every dose today
+    // Sweep 3 days out so it clears every generated dose regardless of the UTC
+    // time-of-day (manilaToday() can roll the plan to "tomorrow", putting doses
+    // hours in the future — a 3h sweep would miss them and raise no alert).
+    const when = new Date(Date.now() + 3 * 24 * 3600 * 1000);
     await sweepMissed(when);
 
     const res = await request(app)
@@ -105,7 +108,7 @@ describe('Caregiver missed-dose alert (UC-08) — no PII', () => {
   test('a patient with no caregiver raises a pharmacist follow-up flag', async () => {
     const solo = await register('patient', { full_name: 'Solo S7' });
     await confirmParacetamolSchedule(solo.token);
-    await sweepMissed(new Date(Date.now() + 3 * 3600 * 1000));
+    await sweepMissed(new Date(Date.now() + 3 * 24 * 3600 * 1000));
 
     const pharm = await register('pharmacist', { full_name: 'Dr S7b' });
     const res = await request(app)
