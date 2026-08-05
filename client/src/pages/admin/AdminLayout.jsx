@@ -2,18 +2,21 @@ import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext.jsx';
 import '../../styles/pharmacist.css';
 
+// Admin web console (Figs 50–54). Aggregates + pseudonymous management — no
+// patient names or conditions anywhere (TC-05).
 const MENU = [
-  { to: '/pharmacist/dashboard', label: 'Dashboard' },
-  { to: '/pharmacist/curation', label: 'Drug Curation' },
-  { to: '/pharmacist/validation', label: 'Prescription Verification' },
-  { to: '/pharmacist/inquiries', label: 'Inquiries' },
-  { to: '/pharmacist/orders', label: 'Refills & Deliveries' },
-  { to: '/pharmacist/patients', label: 'Patients' },
+  { to: '/admin/dashboard', label: 'Dashboard' },
+  { to: '/admin/users', label: 'User Management' },
+  { to: '/admin/medicines', label: 'Medications' },
+  { to: '/admin/orders', label: 'Orders' },
+  { to: '/admin/priority', label: 'Priority' },
+  { to: '/admin/alerts', label: 'Alerts' },
+  { to: '/admin/reports', label: 'Reports' },
 ];
 
-export default function PharmacistLayout() {
+export default function AdminLayout() {
   const navigate = useNavigate();
-  const { user, logout } = useAuth();
+  const { logout } = useAuth();
 
   async function handleLogout() {
     await logout();
@@ -44,11 +47,11 @@ export default function PharmacistLayout() {
       <div className="pw-main">
         <header className="pw-header">
           <div>
-            <h1>Pharmacist Console</h1>
-            <div className="pw-sub">Manage the medicine database and validations.</div>
+            <h1>Admin Console</h1>
+            <div className="pw-sub">Aggregates only — no individual names or conditions.</div>
           </div>
           <div className="text-end">
-            <div className="fw-semibold">{user?.id ? 'Pharmacist' : ''}</div>
+            <div className="fw-semibold">Admin</div>
             <div className="pw-sub">Signed in</div>
           </div>
         </header>

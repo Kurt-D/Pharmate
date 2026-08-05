@@ -183,3 +183,46 @@ describe('SUS / TAM instruments', () => {
     expect(csv.text).toMatch(/patient/); // the role column
   });
 });
+
+describe('Admin console endpoints (Figs 50–54) — pseudonymous', () => {
+  const admin = () => ({ Authorization: `Bearer ${adminToken}` });
+
+  test('users list is by code/role, never a name; active toggle works', async () => {
+    const res = await request(app).get('/api/admin/users?role=patient').set(admin());
+    expect(res.status).toBe(200);
+    expect(res.body.length).toBeGreaterThan(0);
+    expect(res.body[0].label).toMatch(/^PM-[A-Z0-9]{6}$/);
+    expect(JSON.stringify(res.body)).not.toContain(PATIENT_PII);
+
+    const toggle = await request(app)
+      .put(`/api/admin/users/${res.body[0].id}/active`)
+      .set(admin())
+      .send({ active: false });
+    expect(toggle.status).toBe(200);
+    expect(toggle.body.is_active).toBe(0);
+    await request(app)
+      .put(`/api/admin/users/${res.body[0].id}/active`)
+      .set(admin())
+      .send({ active: true });
+  });
+
+  test('orders, alerts, adherence-trend, priority all return without PII', async () => {
+    for (const path of [
+      '/api/admin/orders',
+      '/api/admin/alerts',
+      '/api/admin/adherence-trend',
+      '/api/admin/priority',
+    ]) {
+      const res = await request(app).get(path).set(admin());
+      expect(res.status).toBe(200);
+      expect(JSON.stringify(res.body)).not.toContain(PATIENT_PII);
+    }
+  });
+
+  test('a non-admin is refused the console endpoints (403)', async () => {
+    const res = await request(app)
+      .get('/api/admin/users')
+      .set({ Authorization: `Bearer ${patientToken}` });
+    expect(res.status).toBe(403);
+  });
+});
