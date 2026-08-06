@@ -123,6 +123,17 @@ export async function decideValidation(pharmacistId, photoId, action, reason) {
          WHERE id = ?`,
         [pharmacistId, photo.medication_id]
       );
+      // PART 2: approving a prescription for a patient who declared a chronic
+      // condition at enrollment verifies that condition — priority_flag flips
+      // true. This is DERIVED from the validation the pharmacist already does;
+      // there is no severity picker anywhere (PART 4, flag 2).
+      await conn.execute(
+        `UPDATE patients p
+           JOIN medications m ON m.patient_id = p.id
+            SET p.priority_flag = 1
+          WHERE m.id = ? AND p.medical_condition_enc IS NOT NULL`,
+        [photo.medication_id]
+      );
     }
     // reject / needs_clearer: medication stays 'pending_validation' so the
     // patient can upload a clearer photo (TC-04 resubmission path).

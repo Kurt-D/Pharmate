@@ -21,6 +21,7 @@ export default function AddMedicine() {
   const [customFreq, setCustomFreq] = useState('');
   const [isPrn, setIsPrn] = useState(false);
   const [source, setSource] = useState('OTC_SELF');
+  const [rxClass, setRxClass] = useState(null); // 'OTC' | 'RX' | null (unknown)
 
   const [suggestions, setSuggestions] = useState([]);
   const [showSuggest, setShowSuggest] = useState(false);
@@ -76,6 +77,15 @@ export default function AddMedicine() {
           message:
             'This medicine isn’t in our verified list yet. It has been sent to a pharmacist for verification and will be schedulable once approved.',
         });
+      } else if (r.data.status === 'pending_validation') {
+        // A prescription medicine — even if labeled OTC, it needs validation.
+        // Send the patient straight to the prescription upload for this med.
+        setResult({
+          kind: 'pending',
+          message:
+            'This is a prescription medicine. Please upload your prescription so a pharmacist can validate it.',
+        });
+        setTimeout(() => navigate(`/patient/medications/${r.data.id}/prescription`), 1600);
       } else {
         setResult({
           kind: 'success',
@@ -140,6 +150,7 @@ export default function AddMedicine() {
             onChange={(e) => {
               setName(e.target.value);
               setShowSuggest(true);
+              setRxClass(null); // no longer a confirmed formulary pick
             }}
             onFocus={() => setShowSuggest(true)}
             autoComplete="off"
@@ -157,9 +168,17 @@ export default function AddMedicine() {
                   onClick={() => {
                     setName(s.generic_name);
                     setShowSuggest(false);
+                    setRxClass(s.rx_class ?? null);
+                    // An Rx drug can't be self-added as OTC — lock it.
+                    if (s.rx_class === 'RX') setSource('RX_VALIDATED');
                   }}
                 >
                   {s.generic_name}
+                  {s.rx_class === 'RX' ? (
+                    <span className="pm-pill pm-pill--pending ms-2">Rx</span>
+                  ) : s.rx_class === 'OTC' ? (
+                    <span className="pm-pill pm-pill--taken ms-2">OTC</span>
+                  ) : null}
                   {s.is_provisional ? (
                     <span className="pm-pill pm-pill--provisional ms-2">unverified</span>
                   ) : null}
@@ -232,13 +251,21 @@ export default function AddMedicine() {
         {/* Source */}
         <label className="form-label fw-semibold">Source</label>
         <select
-          className="form-select mb-4"
+          className="form-select mb-1"
           value={source}
           onChange={(e) => setSource(e.target.value)}
+          disabled={rxClass === 'RX'}
         >
           <option value="OTC_SELF">Over-the-counter (self)</option>
           <option value="RX_VALIDATED">From a prescription</option>
         </select>
+        {rxClass === 'RX' && (
+          <div className="form-text mb-4 text-warning-emphasis">
+            This is a prescription medicine — it must be validated by a pharmacist. You’ll be asked
+            to upload your prescription.
+          </div>
+        )}
+        {rxClass !== 'RX' && <div className="mb-4" />}
 
         <button className="pm-btn-primary" type="submit" disabled={submitting}>
           {submitting ? 'Adding…' : 'Add Medicine'}

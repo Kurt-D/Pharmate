@@ -109,6 +109,107 @@ describe('Delivery requests (TC-08 — branch limitation)', () => {
   });
 });
 
+describe('UC-09 — prescription gating for refills & deliveries', () => {
+  const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+
+  // amoxicillin is Rx (antibiotic) in the PH FDA formulary; paracetamol is OTC.
+  async function encode(t, { drug_name = 'amoxicillin', source = 'RX_VALIDATED' } = {}) {
+    const res = await request(app)
+      .post('/api/patient/medications')
+      .set(auth(t))
+      .send({ drug_name, frequency: 'TID', source, is_prn: false });
+    return res.body.id;
+  }
+
+  test('an OTC drug (ibuprofen) proceeds without any prescription', async () => {
+    // Use ibuprofen (OTC) rather than paracetamol so we don't create a second
+    // active paracetamol for this patient — the label-scan test asserts a
+    // specific paracetamol medication id.
+    const otc = await encode(token, { drug_name: 'ibuprofen', source: 'OTC_SELF' });
+    const res = await request(app)
+      .post('/api/patient/refills')
+      .set(auth())
+      .send({ medication_id: otc, branch_id: pickupBranch });
+    expect(res.status).toBe(201);
+  });
+
+  test('an Rx drug with NO approved prescription is declined (prescription_required)', async () => {
+    const rxMed = await encode(token);
+    const res = await request(app)
+      .post('/api/patient/refills')
+      .set(auth())
+      .send({ medication_id: rxMed, branch_id: pickupBranch });
+    expect(res.status).toBe(403);
+    expect(res.body.error).toBe('prescription_required');
+  });
+
+  test('the drug class is authoritative: an Rx drug mislabeled OTC_SELF is still gated', async () => {
+    // Patient tries to bypass validation by self-encoding an antibiotic as OTC.
+    const rxMed = await encode(token, { drug_name: 'amoxicillin', source: 'OTC_SELF' });
+    const res = await request(app)
+      .post('/api/patient/refills')
+      .set(auth())
+      .send({ medication_id: rxMed, branch_id: pickupBranch });
+    expect(res.status).toBe(403);
+    expect(res.body.error).toBe('prescription_required');
+  });
+
+  test('a delivery for an unvalidated Rx med is likewise declined', async () => {
+    const rxMed = await encode(token);
+    const res = await request(app)
+      .post('/api/patient/deliveries')
+      .set(auth())
+      .send({ medication_id: rxMed, branch_id: deliveryBranch, address: '1 Main St' });
+    expect(res.status).toBe(403);
+    expect(res.body.error).toBe('prescription_required');
+  });
+
+  test('an Rx med WITH an approved prescription proceeds', async () => {
+    const rxMed = await encode(token);
+    const up = await request(app)
+      .post(`/api/patient/medications/${rxMed}/prescription`)
+      .set(auth())
+      .attach('photo', PNG, { filename: 'rx.png', contentType: 'image/png' });
+    const decision = await request(app)
+      .post('/api/pharmacist/validate')
+      .set(auth(pharmToken))
+      .send({ photo_id: up.body.photo_id, action: 'approve' });
+    expect(decision.status).toBe(200);
+
+    const res = await request(app)
+      .post('/api/patient/refills')
+      .set(auth())
+      .send({ medication_id: rxMed, branch_id: pickupBranch });
+    expect(res.status).toBe(201);
+  });
+
+  test('a restricted med is declined with the visit-nearest-branch message (TC-11)', async () => {
+    // Restricted drugs can't be encoded via the normal path, so seed the med row
+    // directly against a restricted formulary entry.
+    const { randomUUID } = await import('node:crypto');
+    const drugId = randomUUID();
+    const medRow = randomUUID();
+    const pat = await register('patient');
+    await pool.execute(
+      `INSERT INTO drug_reference (id, generic_name, is_restricted) VALUES (?, ?, 1)`,
+      [drugId, `zzz-restricted-${stamp}`]
+    );
+    await pool.execute(
+      `INSERT INTO medications (id, patient_id, drug_id, drug_name_raw, source, status)
+       VALUES (?, ?, ?, 'zzz-restricted', 'RX_VALIDATED', 'active')`,
+      [medRow, pat.id, drugId]
+    );
+
+    const res = await request(app)
+      .post('/api/patient/refills')
+      .set(auth(pat.token))
+      .send({ medication_id: medRow, branch_id: pickupBranch });
+    expect(res.status).toBe(403);
+    expect(res.body.error).toBe('restricted_substance');
+    expect(res.body.redirect).toBe('visit_nearest_branch');
+  });
+});
+
 describe('Pharmacist order queue', () => {
   test('queue shows patient_code only and status can advance', async () => {
     const queue = await request(app).get('/api/pharmacist/orders').set(auth(pharmToken));

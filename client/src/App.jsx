@@ -16,6 +16,7 @@ import DrugCuration from './pages/pharmacist/DrugCuration.jsx';
 import Validation from './pages/pharmacist/Validation.jsx';
 import Inquiries from './pages/pharmacist/Inquiries.jsx';
 import OrdersQueue from './pages/pharmacist/OrdersQueue.jsx';
+import Patients from './pages/pharmacist/Patients.jsx';
 import PwPlaceholder from './pages/pharmacist/PwPlaceholder.jsx';
 import AdminLayout from './pages/admin/AdminLayout.jsx';
 import AdminDashboard from './pages/admin/Dashboard.jsx';
@@ -79,7 +80,7 @@ export default function App() {
             <Route path="validation" element={<Validation />} />
             <Route path="inquiries" element={<Inquiries />} />
             <Route path="orders" element={<OrdersQueue />} />
-            <Route path="patients" element={<PwPlaceholder title="Patients" sprint="Sprint 7" />} />
+            <Route path="patients" element={<Patients />} />
           </Route>
           <Route
             path="/admin"

@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
 import { api } from '../../api.js';
 
-// Orders (Tier 2b, D-4). Request a refill or delivery and track status — no
-// payments anywhere. Delivery requires a branch that offers it (TC-08).
+// Orders (Tier 2b, D-4). Two tabs by medicine class — OTC vs Prescription — each
+// letting the patient request a refill (pickup) or delivery. No payments (D-4);
+// delivery requires a branch that offers it (TC-08). Prescription medicines that
+// aren't yet validated are declined by the server (UC-09).
 const STATUS_CLS = {
   pending: 'pm-pill--pending',
   processing: 'pm-pill--provisional',
@@ -12,17 +14,17 @@ const STATUS_CLS = {
   cancelled: 'pm-pill--missed',
 };
 
+// A medicine's effective class: the drug's FDA class, or its source when the
+// drug is uncurated (no formulary row yet).
+const classOf = (o) => o.rx_class || (o.source === 'RX_VALIDATED' ? 'RX' : 'OTC');
+
 export default function Orders() {
   const [meds, setMeds] = useState([]);
   const [branches, setBranches] = useState([]);
   const [orders, setOrders] = useState({ refills: [], deliveries: [] });
   const [loyalty, setLoyalty] = useState(null);
-  const [form, setForm] = useState({
-    kind: 'refill',
-    medication_id: '',
-    branch_id: '',
-    address: '',
-  });
+  const [tab, setTab] = useState('OTC'); // 'OTC' | 'RX'
+  const [form, setForm] = useState({ kind: 'refill', medication_id: '', branch_id: '', address: '' });
   const [msg, setMsg] = useState('');
   const [error, setError] = useState('');
 
@@ -51,6 +53,13 @@ export default function Orders() {
     setForm((f) => ({ ...f, [k]: v }));
   }
 
+  function switchTab(t) {
+    setTab(t);
+    setForm((f) => ({ ...f, medication_id: '' })); // clear cross-class selection
+    setMsg('');
+    setError('');
+  }
+
   async function submit() {
     setError('');
     setMsg('');
@@ -73,9 +82,15 @@ export default function Orders() {
     }
   }
 
-  const pill = (s) => (
-    <span className={'pm-pill ' + (STATUS_CLS[s] || 'pm-pill--pending')}>{s}</span>
-  );
+  const pill = (s) => <span className={'pm-pill ' + (STATUS_CLS[s] || 'pm-pill--pending')}>{s}</span>;
+
+  const medsInTab = meds.filter((m) => classOf(m) === tab);
+  const historyInTab = [
+    ...orders.refills.map((o) => ({ ...o, kind: 'Refill' })),
+    ...orders.deliveries.map((o) => ({ ...o, kind: 'Delivery' })),
+  ]
+    .filter((o) => classOf(o) === tab)
+    .sort((a, b) => new Date(b.requested_at) - new Date(a.requested_at));
 
   return (
     <>
@@ -94,15 +109,41 @@ export default function Orders() {
       {error && <div className="pm-banner pm-banner--warn mb-3">{error}</div>}
       {msg && <div className="pm-banner pm-banner--success mb-3">{msg}</div>}
 
+      <ul className="nav nav-tabs mb-3">
+        {[
+          ['OTC', 'Over-the-counter'],
+          ['RX', 'Prescription'],
+        ].map(([k, label]) => (
+          <li className="nav-item" key={k}>
+            <button
+              className={'nav-link' + (tab === k ? ' active' : '')}
+              onClick={() => switchTab(k)}
+            >
+              {label}
+            </button>
+          </li>
+        ))}
+      </ul>
+
+      {tab === 'RX' && (
+        <div className="pm-banner pm-banner--info mb-3">
+          Prescription medicines must have a pharmacist-approved prescription on record before a
+          refill or delivery can be requested.
+        </div>
+      )}
+
       <div className="pm-card p-3 mb-3">
         <div className="btn-group w-100 mb-3">
-          {['refill', 'delivery'].map((k) => (
+          {[
+            ['refill', 'Refill (pickup)'],
+            ['delivery', 'Delivery'],
+          ].map(([k, label]) => (
             <button
               key={k}
               className={'btn ' + (form.kind === k ? 'btn-primary' : 'btn-outline-secondary')}
               onClick={() => set('kind', k)}
             >
-              {k === 'refill' ? 'Refill (pickup)' : 'Delivery'}
+              {label}
             </button>
           ))}
         </div>
@@ -113,8 +154,10 @@ export default function Orders() {
           value={form.medication_id}
           onChange={(e) => set('medication_id', e.target.value)}
         >
-          <option value="">Select medicine</option>
-          {meds.map((m) => (
+          <option value="">
+            {medsInTab.length ? 'Select medicine' : 'No active medicines in this category'}
+          </option>
+          {medsInTab.map((m) => (
             <option key={m.id} value={m.id}>
               {m.drug_name_raw}
             </option>
@@ -147,35 +190,32 @@ export default function Orders() {
           </>
         )}
 
-        <button className="pm-btn-primary mt-2" onClick={submit}>
+        <button className="pm-btn-primary mt-2" onClick={submit} disabled={!medsInTab.length}>
           Request {form.kind}
         </button>
       </div>
 
-      {[
-        ['Refills', orders.refills],
-        ['Deliveries', orders.deliveries],
-      ].map(([title, list]) => (
-        <div key={title} className="mb-3">
-          <strong className="d-block mb-2">{title}</strong>
-          {list.length === 0 ? (
-            <p className="text-muted small">None yet.</p>
-          ) : (
-            list.map((o) => (
-              <div
-                key={o.id}
-                className="pm-card d-flex align-items-center justify-content-between p-3 mb-2"
-              >
-                <div>
-                  <div className="pm-dose__drug">{o.drug}</div>
-                  <div className="text-muted small">{o.branch}</div>
-                </div>
-                {pill(o.status)}
+      <strong className="d-block mb-2">
+        Your {tab === 'RX' ? 'prescription' : 'over-the-counter'} requests
+      </strong>
+      {historyInTab.length === 0 ? (
+        <p className="text-muted small">None yet.</p>
+      ) : (
+        historyInTab.map((o) => (
+          <div
+            key={o.kind + o.id}
+            className="pm-card d-flex align-items-center justify-content-between p-3 mb-2"
+          >
+            <div>
+              <div className="pm-dose__drug">{o.drug}</div>
+              <div className="text-muted small">
+                {o.kind} · {o.branch}
               </div>
-            ))
-          )}
-        </div>
-      ))}
+            </div>
+            {pill(o.status)}
+          </div>
+        ))
+      )}
     </>
   );
 }

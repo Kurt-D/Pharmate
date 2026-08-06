@@ -71,6 +71,27 @@ describe('Encode — curated drug', () => {
     expect(res.body.frequency_code).toBe('CONSULT');
     expect(res.body.needs_frequency_review).toBe(true);
   });
+
+  test('an OTC drug self-adds as active', async () => {
+    const res = await request(app)
+      .post('/api/patient/medications')
+      .set('Authorization', `Bearer ${patientToken}`)
+      .send({ drug_name: 'paracetamol', frequency: 'BID', source: 'OTC_SELF' });
+    expect(res.status).toBe(201);
+    expect(res.body.status).toBe('active');
+    expect(res.body.requires_prescription).toBe(false);
+  });
+
+  test('an Rx drug labeled OTC is forced into prescription validation (drug class wins)', async () => {
+    const res = await request(app)
+      .post('/api/patient/medications')
+      .set('Authorization', `Bearer ${patientToken}`)
+      .send({ drug_name: 'amoxicillin', frequency: 'TID', source: 'OTC_SELF' });
+    expect(res.status).toBe(201);
+    expect(res.body.source).toBe('RX_VALIDATED'); // overridden by the drug's class
+    expect(res.body.status).toBe('pending_validation'); // not active — needs validation
+    expect(res.body.requires_prescription).toBe(true);
+  });
 });
 
 describe('TC-11 — restricted-substance redirect', () => {

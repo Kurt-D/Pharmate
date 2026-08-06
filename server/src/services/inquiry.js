@@ -4,7 +4,8 @@
  * Anonymous text inquiry: the pharmacist only ever sees patient_code. Transport
  * is polling (no realtime infra). The server holds a thread only while it is
  * open and PURGES the messages on close — the patient device keeps its own local
- * history. Priority is severity-based (B-8), never streak-based.
+ * history. Priority is the patient's verified chronic-condition flag (boolean,
+ * PART 2), never streak-based.
  *
  * Scope: pharmacy-level medication questions only. A restricted-substance
  * mention short-circuits to a branch-visit message (the pharmacist is never
@@ -13,11 +14,6 @@
 import { v4 as uuidv4 } from 'uuid';
 import { pool } from '../db/connection.js';
 import { findRestricted } from './formulary.js';
-
-/** Map verified chronic-condition severity → thread priority (B-8). */
-function priorityFromSeverity(severity) {
-  return severity === 'moderate' || severity === 'high' ? 'high' : 'normal';
-}
 
 /**
  * Open a thread. If `drugName` names a restricted substance, no thread is
@@ -32,10 +28,12 @@ export async function openThread(
     if (restricted) return { error: 'restricted', generic_name: restricted.generic_name };
   }
 
-  const [[patient]] = await pool.execute('SELECT chronic_severity FROM patients WHERE id = ?', [
+  // Priority is the patient's verified chronic-condition flag (PART 2), a
+  // boolean derived from prescription validation — never a severity tier.
+  const [[patient]] = await pool.execute('SELECT priority_flag FROM patients WHERE id = ?', [
     patientId,
   ]);
-  const priority = priorityFromSeverity(patient?.chronic_severity);
+  const priority = patient?.priority_flag ? 'high' : 'normal';
 
   const id = uuidv4();
   await pool.execute(

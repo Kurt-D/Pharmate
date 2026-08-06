@@ -20,6 +20,7 @@ import {
 import { createRefill, createDelivery, listOrders } from '../services/orders.js';
 import { verifyLabel } from '../services/labelScan.js';
 import { loyaltyFor } from '../services/adherence.js';
+import { encrypt, decrypt } from '../utils/crypto.js';
 
 const router = Router();
 
@@ -61,6 +62,44 @@ router.put('/anchors', async (req, res) => {
     req.user.sub,
   ]);
   res.json({ message: 'Anchors updated' });
+});
+
+// ── GET /api/patient/profile ──────────────────────────────────────────────────
+// The patient's own enrollment details, decrypted for themselves only (they may
+// see their own PII — PART 3). medical_condition is a plain self-declaration.
+router.get('/profile', async (req, res) => {
+  const [rows] = await pool.execute(
+    'SELECT patient_code, medical_condition_enc FROM patients WHERE id = ?',
+    [req.user.sub]
+  );
+  if (rows.length === 0) return res.status(404).json({ error: 'Patient not found' });
+  res.json({
+    patient_code: rows[0].patient_code,
+    medical_condition: rows[0].medical_condition_enc
+      ? decrypt(rows[0].medical_condition_enc)
+      : '',
+  });
+});
+
+// ── PUT /api/patient/profile ──────────────────────────────────────────────────
+// Patient self-declares their medical condition (encrypted PII). This is a plain
+// condition statement — NOT a severity or priority selector. Whether it confers
+// priority is decided later by the pharmacist during prescription validation
+// (PART 2): declaring a condition here does not itself set priority_flag.
+router.put('/profile', async (req, res) => {
+  const raw = req.body?.medical_condition;
+  if (raw !== undefined && typeof raw !== 'string') {
+    return res.status(400).json({ error: 'medical_condition must be text' });
+  }
+  const value = String(raw ?? '').trim();
+  if (value.length > 500) {
+    return res.status(400).json({ error: 'medical_condition is too long (max 500 characters)' });
+  }
+  await pool.execute('UPDATE patients SET medical_condition_enc = ? WHERE id = ?', [
+    value ? encrypt(value) : null,
+    req.user.sub,
+  ]);
+  res.json({ message: 'Profile updated' });
 });
 
 // ── POST /api/patient/invite ──────────────────────────────────────────────────
@@ -139,8 +178,12 @@ router.post('/medications', async (req, res) => {
 
     if (drug) {
       // 3. Curated drug — encode normally.
+      // The drug's PH FDA class is authoritative: an Rx drug MUST go through
+      // prescription validation, even if the patient labeled it OTC. It cannot
+      // be self-added as active — it lands in pending_validation for upload.
+      const effectiveSource = drug.rx_class === 'RX' ? 'RX_VALIDATED' : source;
       const prn = is_prn !== undefined ? (is_prn ? 1 : 0) : drug.is_prn_default;
-      const status = source === 'RX_VALIDATED' ? 'pending_validation' : 'active';
+      const status = effectiveSource === 'RX_VALIDATED' ? 'pending_validation' : 'active';
       await conn.execute(
         `INSERT INTO medications
            (id, patient_id, drug_id, drug_name_raw, source, is_prn, frequency,
@@ -151,7 +194,7 @@ router.post('/medications', async (req, res) => {
           req.user.sub,
           drug.id,
           drug_name,
-          source,
+          effectiveSource,
           prn,
           frequency ?? null,
           frequencyCode,
@@ -165,7 +208,13 @@ router.post('/medications', async (req, res) => {
       return res.status(201).json({
         id: medId,
         status,
+        source: effectiveSource,
         drug_id: drug.id,
+        rx_class: drug.rx_class,
+        // True when we forced validation despite an OTC request — the client
+        // should prompt the patient to upload their prescription.
+        requires_prescription:
+          drug.rx_class === 'RX' && source !== 'RX_VALIDATED',
         frequency_code: frequencyCode,
         needs_frequency_review: frequencyCode === 'CONSULT',
         is_provisional_drug: !!drug.is_provisional,
@@ -217,8 +266,10 @@ router.get('/medications', async (req, res) => {
   const [rows] = await pool.execute(
     `SELECT m.id, m.drug_id, m.drug_name_raw, m.source, m.is_prn, m.frequency, m.frequency_code,
             m.dosage_instruction, m.start_date, m.end_date, m.status, m.created_at,
+            dr.rx_class,
             pp.status AS prescription_status, pp.decision_reason AS prescription_reason
      FROM medications m
+     LEFT JOIN drug_reference dr ON dr.id = m.drug_id
      LEFT JOIN prescription_photos pp ON pp.id = m.prescription_photo_id
      WHERE m.patient_id = ? ORDER BY m.created_at DESC`,
     [req.user.sub]
@@ -380,6 +431,23 @@ router.post('/refills', async (req, res) => {
   if (result.error === 'medication_not_found') {
     return res.status(404).json({ error: 'Medication not found' });
   }
+  if (result.error === 'restricted') {
+    return res.status(403).json({
+      error: 'restricted_substance',
+      redirect: 'visit_nearest_branch', // TC-11
+      message:
+        'This medication requires in-person verification. Please visit your nearest branch — ' +
+        'it can’t be requested for refill here.',
+    });
+  }
+  if (result.error === 'no_valid_prescription') {
+    return res.status(403).json({
+      error: 'prescription_required',
+      message:
+        'This medication needs an approved prescription on record before you can request a refill. ' +
+        'Please upload your prescription for validation first.',
+    });
+  }
   res.status(201).json(result);
 });
 
@@ -396,6 +464,23 @@ router.post('/deliveries', async (req, res) => {
   }
   if (result.error === 'no_delivery_coverage') {
     return res.status(400).json({ error: 'The selected branch does not offer delivery' });
+  }
+  if (result.error === 'restricted') {
+    return res.status(403).json({
+      error: 'restricted_substance',
+      redirect: 'visit_nearest_branch', // TC-11
+      message:
+        'This medication requires in-person verification. Please visit your nearest branch — ' +
+        'it can’t be requested for delivery here.',
+    });
+  }
+  if (result.error === 'no_valid_prescription') {
+    return res.status(403).json({
+      error: 'prescription_required',
+      message:
+        'This medication needs an approved prescription on record before you can request delivery. ' +
+        'Please upload your prescription for validation first.',
+    });
   }
   res.status(201).json(result);
 });

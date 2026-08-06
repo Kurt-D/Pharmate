@@ -232,16 +232,22 @@ router.get('/adherence-trend', async (req, res) => {
 });
 
 // ── GET /api/admin/priority ───────────────────────────────────────────────────
-// Severity-based priority (B-8) — patients flagged by verified chronic severity,
-// by patient_code. (Not a token issuance/expiry system; that GUI concept is not
-// in the data model — see Limitations.)
+// Priority-token overview (PART 3, PART 4 flag 4): AGGREGATE COUNTS ONLY. Admin
+// never sees a per-patient priority list or any clinical reason column — that is
+// the pharmacist's ID-only roster, not the admin's. Priority is the boolean
+// priority_flag derived from prescription validation (PART 2).
 router.get('/priority', async (_req, res) => {
-  const [rows] = await pool.execute(
-    `SELECT patient_code, chronic_severity
-     FROM patients WHERE chronic_severity IN ('moderate','high')
-     ORDER BY FIELD(chronic_severity,'high','moderate'), patient_code LIMIT 100`
+  const [[c]] = await pool.execute(
+    `SELECT SUM(priority_flag = 1) AS priority,
+            SUM(priority_flag = 0) AS standard,
+            COUNT(*)              AS total
+     FROM patients`
   );
-  res.json(rows);
+  res.json({
+    priority: Number(c.priority ?? 0),
+    standard: Number(c.standard ?? 0),
+    total: Number(c.total ?? 0),
+  });
 });
 
 export default router;

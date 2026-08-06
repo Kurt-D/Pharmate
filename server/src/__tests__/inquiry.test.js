@@ -132,10 +132,12 @@ describe('Ask Your Pharmacist (D-I)', () => {
   });
 });
 
-describe('Severity-based priority (B-8)', () => {
-  test('a high-severity patient’s thread is prioritized in the queue', async () => {
-    const hi = await register('patient', { full_name: 'HighSeverity S8' });
-    await pool.execute(`UPDATE patients SET chronic_severity = 'high' WHERE id = ?`, [hi.id]);
+describe('Priority-flag inquiry ordering (PART 2)', () => {
+  test('a priority-flagged patient’s thread is prioritized in the queue', async () => {
+    const hi = await register('patient', { full_name: 'PriorityFlag S8' });
+    // priority_flag is normally derived from prescription validation; set it
+    // directly here to exercise the queue ordering.
+    await pool.execute(`UPDATE patients SET priority_flag = 1 WHERE id = ?`, [hi.id]);
 
     const open = await request(app)
       .post('/api/patient/inquiries')

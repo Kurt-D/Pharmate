@@ -53,7 +53,7 @@ export async function searchDrugs(query, limit = 20) {
   const safeLimit = Math.min(Math.max(parseInt(limit, 10) || 20, 1), 100);
   const [rows] = await pool.execute(
     `SELECT id, generic_name, brand_names_json, min_interval_hours, max_daily_doses,
-            is_prn_default, default_interval_hours, meal_anchor_code, is_restricted, is_provisional
+            is_prn_default, default_interval_hours, meal_anchor_code, is_restricted, rx_class, is_provisional
      FROM drug_reference
      WHERE LOWER(generic_name) LIKE ? OR LOWER(brand_names_json) LIKE ?
      ORDER BY generic_name
