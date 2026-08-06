@@ -66,9 +66,12 @@ async function seed() {
   // ── Role-specific rows ───────────────────────────────────────────────────
   const [existingPat] = await conn.execute('SELECT id FROM patients WHERE id = ?', [patientUserId]);
   if (existingPat.length === 0) {
+    // Chronic condition on file + priority_flag=1 stands in for an approved
+    // prescription (PART 4, flag 7) so the Priority/Standard badge is testable.
+    // In production the flag is DERIVED from pharmacist validation, never seeded.
     await conn.execute(
-      `INSERT INTO patients (id, patient_code, full_name_enc, medical_condition_enc)
-       VALUES (?, 'PM-DEV001', 'DEV_PLAINTEXT_Juan_dela_Cruz', 'DEV_PLAINTEXT_Hypertension')`,
+      `INSERT INTO patients (id, patient_code, full_name_enc, medical_condition_enc, priority_flag)
+       VALUES (?, 'PM-DEV001', 'DEV_PLAINTEXT_Juan_dela_Cruz', 'DEV_PLAINTEXT_Hypertension', 1)`,
       [patientUserId]
     );
     await conn.execute('INSERT INTO patient_anchors (patient_id) VALUES (?)', [patientUserId]);

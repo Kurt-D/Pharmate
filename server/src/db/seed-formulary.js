@@ -110,12 +110,14 @@ async function seedFormulary(conn) {
   for (const r of rows) {
     const canonical = canonicalName(r.generic_name);
     const isProvisional = r.verified_by ? 0 : 1;
+    // OTC/Rx classification (PH FDA); default RX when the sheet doesn't say.
+    const rxClass = String(r.rx_class ?? '').toUpperCase() === 'OTC' ? 'OTC' : 'RX';
     const [res] = await conn.execute(
       `INSERT INTO drug_reference
          (generic_name, brand_names_json, min_interval_hours, max_daily_doses,
           is_prn_default, default_interval_hours, meal_anchor_code, meal_instruction,
-          frequency_default, notes, is_restricted, verified_by, verified_at, is_provisional)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NULL, NULL, ?)`,
+          frequency_default, notes, is_restricted, rx_class, verified_by, verified_at, is_provisional)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, NULL, NULL, ?)`,
       [
         canonical,
         JSON.stringify(brandArray(r.brand_names)),
@@ -127,6 +129,7 @@ async function seedFormulary(conn) {
         r.meal_instruction ?? null,
         r.standard_frequency ?? null,
         r.notes ?? null,
+        rxClass,
         isProvisional,
       ]
     );

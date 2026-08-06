@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '../../api.js';
 
 // Ask Your Pharmacist — pharmacist side (D-I). Queue and threads show
-// patient_code only; high-severity inquiries (B-8) sort first. Polling transport.
+// patient_code only; priority-flagged patients' inquiries sort first. Polling transport.
 export default function Inquiries() {
   const [queue, setQueue] = useState([]);
   const [active, setActive] = useState(null);

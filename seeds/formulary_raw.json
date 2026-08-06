@@ -11,7 +11,8 @@
     "meal_anchor_code": "NONE",
     "notes": "Once-daily CCB, no food restriction per standard prescribing references.",
     "verified_by": null,
-    "date_approved": null
+    "date_approved": null,
+    "rx_class": "RX"
   },
   {
     "generic_name": "losartan",
@@ -25,7 +26,8 @@
     "meal_anchor_code": "NONE",
     "notes": "ARB, food does not significantly affect absorption.",
     "verified_by": null,
-    "date_approved": null
+    "date_approved": null,
+    "rx_class": "RX"
   },
   {
     "generic_name": "telmisartan",
@@ -39,7 +41,8 @@
     "meal_anchor_code": "NONE",
     "notes": "ARB, once-daily standard dosing.",
     "verified_by": null,
-    "date_approved": null
+    "date_approved": null,
+    "rx_class": "RX"
   },
   {
     "generic_name": "enalapril",
@@ -53,7 +56,8 @@
     "meal_anchor_code": "NONE",
     "notes": "ACE inhibitor.",
     "verified_by": null,
-    "date_approved": null
+    "date_approved": null,
+    "rx_class": "RX"
   },
   {
     "generic_name": "metoprolol succinate",
@@ -67,7 +71,8 @@
     "meal_anchor_code": "WITH_MEAL",
     "notes": "Extended-release beta-blocker; taking with food improves consistency of absorption.",
     "verified_by": null,
-    "date_approved": null
+    "date_approved": null,
+    "rx_class": "RX"
   },
   {
     "generic_name": "hydrochlorothiazide",
@@ -81,7 +86,8 @@
     "meal_anchor_code": "WITH_MEAL",
     "notes": "Morning dosing conventionally recommended to reduce nighttime urination — pharmacist to confirm local convention.",
     "verified_by": null,
-    "date_approved": null
+    "date_approved": null,
+    "rx_class": "RX"
   },
   {
     "generic_name": "atorvastatin",
@@ -95,7 +101,8 @@
     "meal_anchor_code": "NONE",
     "notes": "Not in brief's core list but commonly co-prescribed for this pilot population; add/remove per pharmacist.",
     "verified_by": null,
-    "date_approved": null
+    "date_approved": null,
+    "rx_class": "RX"
   },
   {
     "generic_name": "metformin",
@@ -109,7 +116,8 @@
     "meal_anchor_code": "WITH_MEAL",
     "notes": "Taken with food to reduce GI side effects.",
     "verified_by": null,
-    "date_approved": null
+    "date_approved": null,
+    "rx_class": "RX"
   },
   {
     "generic_name": "metformin",
@@ -123,7 +131,8 @@
     "meal_anchor_code": "WITH_MEAL",
     "notes": "Extended-release formulation, once-daily.",
     "verified_by": null,
-    "date_approved": null
+    "date_approved": null,
+    "rx_class": "RX"
   },
   {
     "generic_name": "gliclazide",
@@ -137,7 +146,8 @@
     "meal_anchor_code": "AC",
     "notes": "Sulfonylurea; taken before meals to align insulin secretion with food intake.",
     "verified_by": null,
-    "date_approved": null
+    "date_approved": null,
+    "rx_class": "RX"
   },
   {
     "generic_name": "glimepiride",
@@ -151,7 +161,8 @@
     "meal_anchor_code": "AC",
     "notes": "Sulfonylurea, once-daily.",
     "verified_by": null,
-    "date_approved": null
+    "date_approved": null,
+    "rx_class": "RX"
   },
   {
     "generic_name": "sitagliptin",
@@ -165,7 +176,8 @@
     "meal_anchor_code": "NONE",
     "notes": "DPP-4 inhibitor, food does not significantly affect absorption.",
     "verified_by": null,
-    "date_approved": null
+    "date_approved": null,
+    "rx_class": "RX"
   },
   {
     "generic_name": "insulin regular",
@@ -179,7 +191,8 @@
     "meal_anchor_code": "AC",
     "notes": "Insulin — encode only; timing individualized by prescriber, engine does not interval-check.",
     "verified_by": null,
-    "date_approved": null
+    "date_approved": null,
+    "rx_class": "RX"
   },
   {
     "generic_name": "insulin NPH",
@@ -193,7 +206,8 @@
     "meal_anchor_code": "NONE",
     "notes": "Insulin — encode only. Intentionally left blank; prescriber sets timing.",
     "verified_by": null,
-    "date_approved": null
+    "date_approved": null,
+    "rx_class": "RX"
   },
   {
     "generic_name": "insulin glargine",
@@ -207,7 +221,8 @@
     "meal_anchor_code": "NONE",
     "notes": "Insulin — encode only. Intentionally left blank; prescriber sets timing.",
     "verified_by": null,
-    "date_approved": null
+    "date_approved": null,
+    "rx_class": "RX"
   },
   {
     "generic_name": "paracetamol",
@@ -221,7 +236,8 @@
     "meal_anchor_code": "NONE",
     "notes": "FLAGSHIP DRUG. Max 4 g/24h at 500 mg/dose = 8 doses; widely consistent across NHS/hospital patient guidance.",
     "verified_by": null,
-    "date_approved": null
+    "date_approved": null,
+    "rx_class": "OTC"
   },
   {
     "generic_name": "ibuprofen",
@@ -235,7 +251,8 @@
     "meal_anchor_code": "PC",
     "notes": "FLAGSHIP DRUG. OTC max commonly cited as 1200 mg/day at 400 mg/dose = 3 doses; prescription doses can go higher — pharmacist to confirm product strength being scheduled.",
     "verified_by": null,
-    "date_approved": null
+    "date_approved": null,
+    "rx_class": "OTC"
   },
   {
     "generic_name": "mefenamic acid",
@@ -249,7 +266,8 @@
     "meal_anchor_code": "PC",
     "notes": "NSAID commonly used OTC in this region.",
     "verified_by": null,
-    "date_approved": null
+    "date_approved": null,
+    "rx_class": "OTC"
   },
   {
     "generic_name": "cetirizine",
@@ -263,7 +281,8 @@
     "meal_anchor_code": "NONE",
     "notes": "Second-generation antihistamine, once-daily.",
     "verified_by": null,
-    "date_approved": null
+    "date_approved": null,
+    "rx_class": "OTC"
   },
   {
     "generic_name": "loratadine",
@@ -277,7 +296,8 @@
     "meal_anchor_code": "NONE",
     "notes": "Second-generation antihistamine, once-daily.",
     "verified_by": null,
-    "date_approved": null
+    "date_approved": null,
+    "rx_class": "OTC"
   },
   {
     "generic_name": "diphenhydramine",
@@ -291,7 +311,8 @@
     "meal_anchor_code": "NONE",
     "notes": "First-generation sedating antihistamine.",
     "verified_by": null,
-    "date_approved": null
+    "date_approved": null,
+    "rx_class": "OTC"
   },
   {
     "generic_name": "oral rehydration salts",
@@ -305,7 +326,8 @@
     "meal_anchor_code": "NONE",
     "notes": "Dosed per episode of fluid loss rather than on a fixed hourly interval.",
     "verified_by": null,
-    "date_approved": null
+    "date_approved": null,
+    "rx_class": "OTC"
   },
   {
     "generic_name": "loperamide",
@@ -319,7 +341,8 @@
     "meal_anchor_code": "NONE",
     "notes": "Antidiarrheal.",
     "verified_by": null,
-    "date_approved": null
+    "date_approved": null,
+    "rx_class": "OTC"
   },
   {
     "generic_name": "omeprazole",
@@ -333,7 +356,8 @@
     "meal_anchor_code": "AC",
     "notes": "Proton pump inhibitor, most effective taken before the first meal of the day.",
     "verified_by": null,
-    "date_approved": null
+    "date_approved": null,
+    "rx_class": "OTC"
   },
   {
     "generic_name": "amoxicillin",
@@ -347,7 +371,8 @@
     "meal_anchor_code": "NONE",
     "notes": "Penicillin-class antibiotic commonly prescribed three times daily for susceptible bacterial infections. May be taken with or without food; taking with food may help reduce stomach upset. Complete the full prescribed course even if symptoms improve to reduce the risk of antibiotic resistance.",
     "verified_by": null,
-    "date_approved": null
+    "date_approved": null,
+    "rx_class": "RX"
   },
   {
     "generic_name": "co-amoxiclav",
@@ -361,7 +386,8 @@
     "meal_anchor_code": "WITH_MEAL",
     "notes": "Exact frequency depends on strength/formulation prescribed.",
     "verified_by": null,
-    "date_approved": null
+    "date_approved": null,
+    "rx_class": "RX"
   },
   {
     "generic_name": "azithromycin",
@@ -375,7 +401,8 @@
     "meal_anchor_code": "AC",
     "notes": "Macrolide antibiotic typically prescribed once daily. Food recommendations vary depending on the formulation; follow the product labeling or prescriber's instructions.",
     "verified_by": null,
-    "date_approved": null
+    "date_approved": null,
+    "rx_class": "RX"
   },
   {
     "generic_name": "ciprofloxacin",
@@ -389,7 +416,8 @@
     "meal_anchor_code": "AC",
     "notes": "Absorption reduced by concurrent dairy/calcium/antacids.",
     "verified_by": null,
-    "date_approved": null
+    "date_approved": null,
+    "rx_class": "RX"
   },
   {
     "generic_name": "cephalexin",
@@ -403,7 +431,8 @@
     "meal_anchor_code": "NONE",
     "notes": "First-generation cephalosporin antibiotic. May be taken with or without food; taking with food may reduce stomach upset. Complete the full prescribed course as directed",
     "verified_by": null,
-    "date_approved": null
+    "date_approved": null,
+    "rx_class": "RX"
   },
   {
     "generic_name": "clindamycin",
@@ -417,6 +446,7 @@
     "meal_anchor_code": "NONE",
     "notes": "Take with a full glass of water to reduce the risk of esophageal irritation. Food may be taken if stomach upset occurs. Complete the full prescribed course.",
     "verified_by": null,
-    "date_approved": null
+    "date_approved": null,
+    "rx_class": "RX"
   }
 ]

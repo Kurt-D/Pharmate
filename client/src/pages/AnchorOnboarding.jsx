@@ -20,27 +20,38 @@ const LABELS = {
 export default function AnchorOnboarding() {
   const navigate = useNavigate();
   const [anchors, setAnchors] = useState(DEFAULTS);
+  const [condition, setCondition] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
     const token = localStorage.getItem('pm_token');
-    fetch('/api/patient/anchors', { headers: { Authorization: `Bearer ${token}` } })
-      .then((r) => r.json())
-      .then((data) => {
-        // TIME columns come back as "HH:MM:SS"; the time input and the server
-        // both expect "HH:MM", so normalize (and keep only the anchor fields).
-        if (data && data.wake_anchor) {
-          const loaded = {};
-          for (const k of Object.keys(DEFAULTS)) {
-            loaded[k] = data[k] ? String(data[k]).slice(0, 5) : DEFAULTS[k];
+    const auth = { Authorization: `Bearer ${token}` };
+    Promise.all([
+      fetch('/api/patient/anchors', { headers: auth })
+        .then((r) => r.json())
+        .then((data) => {
+          // TIME columns come back as "HH:MM:SS"; the time input and the server
+          // both expect "HH:MM", so normalize (and keep only the anchor fields).
+          if (data && data.wake_anchor) {
+            const loaded = {};
+            for (const k of Object.keys(DEFAULTS)) {
+              loaded[k] = data[k] ? String(data[k]).slice(0, 5) : DEFAULTS[k];
+            }
+            setAnchors(loaded);
           }
-          setAnchors(loaded);
-        }
-      })
-      .catch(() => {})
-      .finally(() => setLoading(false));
+        })
+        .catch(() => {}),
+      fetch('/api/patient/profile', { headers: auth })
+        .then((r) => r.json())
+        .then((data) => {
+          if (data && typeof data.medical_condition === 'string') {
+            setCondition(data.medical_condition);
+          }
+        })
+        .catch(() => {}),
+    ]).finally(() => setLoading(false));
   }, []);
 
   function handleChange(field, value) {
@@ -52,10 +63,22 @@ export default function AnchorOnboarding() {
     setSaving(true);
     setError('');
     const token = localStorage.getItem('pm_token');
+    const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
     try {
+      // Save the self-declared condition first, then the anchors.
+      const profileRes = await fetch('/api/patient/profile', {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify({ medical_condition: condition }),
+      });
+      if (!profileRes.ok) {
+        const d = await profileRes.json();
+        setError(d.error || 'Failed to save');
+        return;
+      }
       const res = await fetch('/api/patient/anchors', {
         method: 'PUT',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify(anchors),
       });
       if (!res.ok) {
@@ -106,6 +129,27 @@ export default function AnchorOnboarding() {
                 </div>
               </div>
             ))}
+
+            <hr className="my-3" />
+            <div className="mb-2">
+              <label htmlFor="condition" className="form-label fw-medium">
+                Medical condition <span className="text-muted fw-normal">(optional)</span>
+              </label>
+              <textarea
+                id="condition"
+                className="form-control"
+                rows={2}
+                maxLength={500}
+                placeholder="e.g. Hypertension, Type 2 diabetes"
+                value={condition}
+                onChange={(e) => setCondition(e.target.value)}
+              />
+              <div className="form-text">
+                If you have an ongoing condition, tell us here. Your pharmacist confirms it when
+                reviewing your prescription. Only your patient code — never your name — is shown to
+                staff.
+              </div>
+            </div>
 
             <button type="submit" className="btn btn-primary w-100 mt-2" disabled={saving}>
               {saving ? (

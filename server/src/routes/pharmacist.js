@@ -19,6 +19,35 @@ router.get('/followups', async (_req, res) => {
   res.json(await pharmacistFollowups());
 });
 
+// ── GET /api/pharmacist/patients ──────────────────────────────────────────────
+// Roster for the pharmacist console (PART 3). patient_code only, with columns:
+// priority badge (boolean), active meds, adherence. Never a name or the clinical
+// condition itself (TC-05).
+router.get('/patients', async (_req, res) => {
+  const [rows] = await pool.execute(
+    `SELECT p.patient_code,
+            p.priority_flag,
+            COUNT(DISTINCT CASE WHEN m.status = 'active' THEN m.id END) AS active_meds,
+            COUNT(ms.id) AS scheduled,
+            SUM(ms.status IN ('taken','taken_late')) AS taken
+     FROM patients p
+     LEFT JOIN medications m ON m.patient_id = p.id
+     LEFT JOIN medication_schedules ms ON ms.patient_id = p.id
+     GROUP BY p.id, p.patient_code, p.priority_flag
+     ORDER BY p.priority_flag DESC, p.patient_code`
+  );
+  res.json(
+    rows.map((r) => ({
+      patient_code: r.patient_code,
+      priority: !!r.priority_flag,
+      active_meds: Number(r.active_meds ?? 0),
+      adherence_pct: r.scheduled
+        ? Math.round((Number(r.taken ?? 0) / Number(r.scheduled)) * 100)
+        : null,
+    }))
+  );
+});
+
 // ── Ask Your Pharmacist — pharmacist side (D-I) ───────────────────────────────
 // Queue and threads show patient_code only; never a name.
 router.get('/inquiries', async (_req, res) => {

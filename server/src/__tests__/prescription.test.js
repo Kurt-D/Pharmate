@@ -171,6 +171,88 @@ describe('Pharmacist validation queue + decision', () => {
   });
 });
 
+describe('Priority derivation on approval (PART 2)', () => {
+  // Register a dedicated patient, run the full upload → approve flow, and return
+  // that patient's row so we can inspect priority_flag.
+  async function approveRxFor(patientEmail, { declareCondition } = {}) {
+    await request(app).post('/api/auth/register').send({
+      email: patientEmail,
+      password: PASSWORD,
+      role: 'patient',
+      full_name: 'Derivation Pt',
+    });
+    const login = await request(app)
+      .post('/api/auth/login')
+      .send({ email: patientEmail, password: PASSWORD });
+    const token = login.body.accessToken;
+    const patientId = login.body.user.id;
+
+    if (declareCondition) {
+      const put = await request(app)
+        .put('/api/patient/profile')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ medical_condition: declareCondition });
+      expect(put.status).toBe(200);
+    }
+
+    const med = await request(app)
+      .post('/api/patient/medications')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ drug_name: 'paracetamol', frequency: 'TID', source: 'RX_VALIDATED', is_prn: false });
+    const up = await request(app)
+      .post(`/api/patient/medications/${med.body.id}/prescription`)
+      .set('Authorization', `Bearer ${token}`)
+      .attach('photo', PNG, { filename: 'rx.png', contentType: 'image/png' });
+    const decision = await request(app)
+      .post('/api/pharmacist/validate')
+      .set('Authorization', `Bearer ${pharmToken}`)
+      .send({ photo_id: up.body.photo_id, action: 'approve' });
+    expect(decision.status).toBe(200);
+
+    const [[row]] = await pool.execute('SELECT priority_flag FROM patients WHERE id = ?', [
+      patientId,
+    ]);
+    return row;
+  }
+
+  test('approving an RX for a patient WITH a declared condition flips priority_flag true', async () => {
+    const row = await approveRxFor(`prio.yes.${Date.now()}@test.pharmate`, {
+      declareCondition: 'Hypertension',
+    });
+    expect(row.priority_flag).toBe(1);
+  });
+
+  test('approving an RX for a patient with NO condition leaves priority_flag false', async () => {
+    const row = await approveRxFor(`prio.no.${Date.now()}@test.pharmate`);
+    expect(row.priority_flag).toBe(0);
+  });
+
+  test('the profile endpoint round-trips the condition and never exposes it to staff', async () => {
+    const email = `prio.roundtrip.${Date.now()}@test.pharmate`;
+    await request(app)
+      .post('/api/auth/register')
+      .send({ email, password: PASSWORD, role: 'patient', full_name: 'Roundtrip Pt' });
+    const login = await request(app).post('/api/auth/login').send({ email, password: PASSWORD });
+    const token = login.body.accessToken;
+
+    await request(app)
+      .put('/api/patient/profile')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ medical_condition: 'Type 2 diabetes' });
+    const prof = await request(app)
+      .get('/api/patient/profile')
+      .set('Authorization', `Bearer ${token}`);
+    expect(prof.body.medical_condition).toBe('Type 2 diabetes'); // patient sees own PII
+    expect(prof.body.patient_code).toMatch(/^PM-[A-Z0-9]{6}$/);
+
+    // The pharmacist roster shows this patient by code only — never the condition.
+    const roster = await request(app)
+      .get('/api/pharmacist/patients')
+      .set('Authorization', `Bearer ${pharmToken}`);
+    expect(JSON.stringify(roster.body)).not.toContain('Type 2 diabetes');
+  });
+});
+
 describe('D-K — 7-day photo purge', () => {
   test('purges the redacted file of an 8-day-old decision, retains the row', async () => {
     // Seed a decided photo whose retention window elapsed, with a real file.
