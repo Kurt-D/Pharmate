@@ -75,9 +75,7 @@ router.get('/profile', async (req, res) => {
   if (rows.length === 0) return res.status(404).json({ error: 'Patient not found' });
   res.json({
     patient_code: rows[0].patient_code,
-    medical_condition: rows[0].medical_condition_enc
-      ? decrypt(rows[0].medical_condition_enc)
-      : '',
+    medical_condition: rows[0].medical_condition_enc ? decrypt(rows[0].medical_condition_enc) : '',
   });
 });
 
@@ -213,8 +211,7 @@ router.post('/medications', async (req, res) => {
         rx_class: drug.rx_class,
         // True when we forced validation despite an OTC request — the client
         // should prompt the patient to upload their prescription.
-        requires_prescription:
-          drug.rx_class === 'RX' && source !== 'RX_VALIDATED',
+        requires_prescription: drug.rx_class === 'RX' && source !== 'RX_VALIDATED',
         frequency_code: frequencyCode,
         needs_frequency_review: frequencyCode === 'CONSULT',
         is_provisional_drug: !!drug.is_provisional,

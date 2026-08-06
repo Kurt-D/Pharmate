@@ -175,9 +175,12 @@ describe('Priority derivation on approval (PART 2)', () => {
   // Register a dedicated patient, run the full upload → approve flow, and return
   // that patient's row so we can inspect priority_flag.
   async function approveRxFor(patientEmail, { declareCondition } = {}) {
-    await request(app)
-      .post('/api/auth/register')
-      .send({ email: patientEmail, password: PASSWORD, role: 'patient', full_name: 'Derivation Pt' });
+    await request(app).post('/api/auth/register').send({
+      email: patientEmail,
+      password: PASSWORD,
+      role: 'patient',
+      full_name: 'Derivation Pt',
+    });
     const login = await request(app)
       .post('/api/auth/login')
       .send({ email: patientEmail, password: PASSWORD });

@@ -24,7 +24,12 @@ export default function Orders() {
   const [orders, setOrders] = useState({ refills: [], deliveries: [] });
   const [loyalty, setLoyalty] = useState(null);
   const [tab, setTab] = useState('OTC'); // 'OTC' | 'RX'
-  const [form, setForm] = useState({ kind: 'refill', medication_id: '', branch_id: '', address: '' });
+  const [form, setForm] = useState({
+    kind: 'refill',
+    medication_id: '',
+    branch_id: '',
+    address: '',
+  });
   const [msg, setMsg] = useState('');
   const [error, setError] = useState('');
 
@@ -82,7 +87,9 @@ export default function Orders() {
     }
   }
 
-  const pill = (s) => <span className={'pm-pill ' + (STATUS_CLS[s] || 'pm-pill--pending')}>{s}</span>;
+  const pill = (s) => (
+    <span className={'pm-pill ' + (STATUS_CLS[s] || 'pm-pill--pending')}>{s}</span>
+  );
 
   const medsInTab = meds.filter((m) => classOf(m) === tab);
   const historyInTab = [
