@@ -20,7 +20,8 @@ import {
 import { createRefill, createDelivery, listOrders } from '../services/orders.js';
 import { verifyLabel } from '../services/labelScan.js';
 import { loyaltyFor } from '../services/adherence.js';
-import { encrypt, decrypt } from '../utils/crypto.js';
+import { encrypt } from '../utils/crypto.js';
+import { serializePatient } from '../utils/serializer.js';
 
 const router = Router();
 
@@ -65,38 +66,55 @@ router.put('/anchors', async (req, res) => {
 });
 
 // ── GET /api/patient/profile ──────────────────────────────────────────────────
-// The patient's own enrollment details, decrypted for themselves only (they may
-// see their own PII — PART 3). medical_condition is a plain self-declaration.
+// The patient's own enrollment details, decrypted for themselves only — routed
+// through serializePatient, the single PII enforcement point (PART 3). Staff can
+// never reach this shape: the serializer emits full_name/condition only when the
+// viewer is the record's own patient.
 router.get('/profile', async (req, res) => {
-  const [rows] = await pool.execute(
-    'SELECT patient_code, medical_condition_enc FROM patients WHERE id = ?',
-    [req.user.sub]
-  );
+  const [rows] = await pool.execute('SELECT * FROM patients WHERE id = ?', [req.user.sub]);
   if (rows.length === 0) return res.status(404).json({ error: 'Patient not found' });
-  res.json({
-    patient_code: rows[0].patient_code,
-    medical_condition: rows[0].medical_condition_enc ? decrypt(rows[0].medical_condition_enc) : '',
-  });
+  res.json(serializePatient(rows[0], req.user.role, req.user.sub));
 });
 
 // ── PUT /api/patient/profile ──────────────────────────────────────────────────
-// Patient self-declares their medical condition (encrypted PII). This is a plain
-// condition statement — NOT a severity or priority selector. Whether it confers
-// priority is decided later by the pharmacist during prescription validation
-// (PART 2): declaring a condition here does not itself set priority_flag.
+// Patient edits their own account: full_name and/or medical_condition (both
+// encrypted PII). medical_condition is a plain self-declaration — NOT a severity
+// or priority selector; whether it confers priority is decided later by the
+// pharmacist during prescription validation (PART 2).
 router.put('/profile', async (req, res) => {
-  const raw = req.body?.medical_condition;
-  if (raw !== undefined && typeof raw !== 'string') {
-    return res.status(400).json({ error: 'medical_condition must be text' });
+  const body = req.body ?? {};
+  const sets = [];
+  const params = [];
+
+  if ('full_name' in body) {
+    if (body.full_name !== null && typeof body.full_name !== 'string') {
+      return res.status(400).json({ error: 'full_name must be text' });
+    }
+    const name = String(body.full_name ?? '').trim();
+    if (name.length > 200) {
+      return res.status(400).json({ error: 'full_name is too long (max 200 characters)' });
+    }
+    sets.push('full_name_enc = ?');
+    params.push(name ? encrypt(name) : null);
   }
-  const value = String(raw ?? '').trim();
-  if (value.length > 500) {
-    return res.status(400).json({ error: 'medical_condition is too long (max 500 characters)' });
+
+  if ('medical_condition' in body) {
+    if (body.medical_condition !== null && typeof body.medical_condition !== 'string') {
+      return res.status(400).json({ error: 'medical_condition must be text' });
+    }
+    const value = String(body.medical_condition ?? '').trim();
+    if (value.length > 500) {
+      return res.status(400).json({ error: 'medical_condition is too long (max 500 characters)' });
+    }
+    sets.push('medical_condition_enc = ?');
+    params.push(value ? encrypt(value) : null);
   }
-  await pool.execute('UPDATE patients SET medical_condition_enc = ? WHERE id = ?', [
-    value ? encrypt(value) : null,
-    req.user.sub,
-  ]);
+
+  if (sets.length === 0) {
+    return res.status(400).json({ error: 'Nothing to update' });
+  }
+  params.push(req.user.sub);
+  await pool.execute(`UPDATE patients SET ${sets.join(', ')} WHERE id = ?`, params);
   res.json({ message: 'Profile updated' });
 });
 

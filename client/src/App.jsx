@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext.jsx';
 import Login from './pages/Login.jsx';
+import Signup from './pages/Signup.jsx';
 import AnchorOnboarding from './pages/AnchorOnboarding.jsx';
 import PatientLayout from './pages/patient/PatientLayout.jsx';
 import Medications from './pages/patient/Medications.jsx';
@@ -17,7 +18,7 @@ import Validation from './pages/pharmacist/Validation.jsx';
 import Inquiries from './pages/pharmacist/Inquiries.jsx';
 import OrdersQueue from './pages/pharmacist/OrdersQueue.jsx';
 import Patients from './pages/pharmacist/Patients.jsx';
-import PwPlaceholder from './pages/pharmacist/PwPlaceholder.jsx';
+import PharmacistDashboard from './pages/pharmacist/Dashboard.jsx';
 import AdminLayout from './pages/admin/AdminLayout.jsx';
 import AdminDashboard from './pages/admin/Dashboard.jsx';
 import AdminUsers from './pages/admin/Users.jsx';
@@ -36,6 +37,7 @@ export default function App() {
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<Login />} />
+          <Route path="/signup" element={<Signup />} />
 
           <Route
             path="/patient/onboarding"
@@ -71,11 +73,8 @@ export default function App() {
               </ProtectedRoute>
             }
           >
-            <Route index element={<Navigate to="/pharmacist/curation" replace />} />
-            <Route
-              path="dashboard"
-              element={<PwPlaceholder title="Dashboard" sprint="Sprint 7" />}
-            />
+            <Route index element={<Navigate to="/pharmacist/dashboard" replace />} />
+            <Route path="dashboard" element={<PharmacistDashboard />} />
             <Route path="curation" element={<DrugCuration />} />
             <Route path="validation" element={<Validation />} />
             <Route path="inquiries" element={<Inquiries />} />

@@ -13,6 +13,39 @@ const router = Router();
 
 router.use(requireAuth, requireRole('pharmacist'));
 
+// ── GET /api/pharmacist/summary ───────────────────────────────────────────────
+// Dashboard counts for the pharmacist's work queues. Aggregates only — no PII.
+router.get('/summary', async (_req, res) => {
+  const [[validations]] = await pool.execute(
+    "SELECT COUNT(*) AS c FROM prescription_photos WHERE status = 'pending'"
+  );
+  const [[curation]] = await pool.execute(
+    "SELECT COUNT(*) AS c FROM pending_drug_requests WHERE status = 'pending'"
+  );
+  const [[inquiries]] = await pool.execute(
+    "SELECT COUNT(*) AS c FROM inquiry_threads WHERE status = 'open'"
+  );
+  const [[refills]] = await pool.execute(
+    "SELECT COUNT(*) AS c FROM refill_requests WHERE status IN ('pending','processing')"
+  );
+  const [[deliveries]] = await pool.execute(
+    "SELECT COUNT(*) AS c FROM delivery_requests WHERE status IN ('pending','processing','out_for_delivery')"
+  );
+  const [[followups]] = await pool.execute(
+    "SELECT COUNT(*) AS c FROM caregiver_alerts WHERE channel = 'pharmacist' AND status = 'unseen'"
+  );
+  const [[patients]] = await pool.execute('SELECT COUNT(*) AS c FROM patients');
+
+  res.json({
+    pending_validations: validations.c,
+    pending_curation: curation.c,
+    open_inquiries: inquiries.c,
+    open_orders: refills.c + deliveries.c,
+    followups: followups.c,
+    patients: patients.c,
+  });
+});
+
 // ── GET /api/pharmacist/followups ─────────────────────────────────────────────
 // No-caregiver missed-dose flags (UC-08). patient_code only — no PII.
 router.get('/followups', async (_req, res) => {
