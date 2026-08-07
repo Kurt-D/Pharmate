@@ -238,18 +238,48 @@ describe('Priority derivation on approval (PART 2)', () => {
     await request(app)
       .put('/api/patient/profile')
       .set('Authorization', `Bearer ${token}`)
-      .send({ medical_condition: 'Type 2 diabetes' });
+      .send({ full_name: 'Jane Roundtrip', medical_condition: 'Type 2 diabetes' });
     const prof = await request(app)
       .get('/api/patient/profile')
       .set('Authorization', `Bearer ${token}`);
-    expect(prof.body.medical_condition).toBe('Type 2 diabetes'); // patient sees own PII
+    // Patient sees their own PII via the serializer.
+    expect(prof.body.full_name).toBe('Jane Roundtrip');
+    expect(prof.body.medical_condition).toBe('Type 2 diabetes');
     expect(prof.body.patient_code).toMatch(/^PM-[A-Z0-9]{6}$/);
 
-    // The pharmacist roster shows this patient by code only — never the condition.
+    // Staff views show this patient by code only — never the name or condition.
     const roster = await request(app)
       .get('/api/pharmacist/patients')
       .set('Authorization', `Bearer ${pharmToken}`);
+    expect(JSON.stringify(roster.body)).not.toContain('Jane Roundtrip');
     expect(JSON.stringify(roster.body)).not.toContain('Type 2 diabetes');
+  });
+});
+
+describe('Pharmacist dashboard summary', () => {
+  test('returns work-queue counts and no PII', async () => {
+    const res = await request(app)
+      .get('/api/pharmacist/summary')
+      .set('Authorization', `Bearer ${pharmToken}`);
+    expect(res.status).toBe(200);
+    for (const key of [
+      'pending_validations',
+      'pending_curation',
+      'open_inquiries',
+      'open_orders',
+      'followups',
+      'patients',
+    ]) {
+      expect(typeof res.body[key]).toBe('number');
+    }
+    expect(JSON.stringify(res.body)).not.toContain('S5 Tester');
+  });
+
+  test('a non-pharmacist is refused (403)', async () => {
+    const res = await request(app)
+      .get('/api/pharmacist/summary')
+      .set('Authorization', `Bearer ${patientToken}`);
+    expect(res.status).toBe(403);
   });
 });
 

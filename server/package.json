@@ -10,6 +10,7 @@
     "migrate": "node src/db/migrate.js",
     "seed:dev": "node src/db/seed-dev.js",
     "seed:formulary": "node src/db/seed-formulary.js",
+    "db:test:setup": "node src/db/setup-test-db.js",
     "purge:photos": "node src/jobs/purgePhotos.js",
     "sweep:missed": "node src/jobs/sweepMissed.js",
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js --runInBand --forceExit",

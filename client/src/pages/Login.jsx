@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 
 const ROLE_ROUTES = {
@@ -99,6 +99,10 @@ export default function Login() {
               {loading ? 'Signing in…' : 'Sign in'}
             </button>
           </form>
+
+          <p className="text-center small text-muted mt-3 mb-0">
+            New patient? <Link to="/signup">Create an account</Link>
+          </p>
         </div>
       </div>
     </div>
