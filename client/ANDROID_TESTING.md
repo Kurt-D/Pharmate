@@ -30,7 +30,7 @@ pre-wired except the actual compile, which needs the Android SDK on this machine
 
 ## On your phone
 
-2. Enable **Developer Options** (Settings → About phone → tap *Build number* 7×),
+2. Enable **Developer Options** (Settings → About phone → tap _Build number_ 7×),
    then turn on **USB debugging**. Connect the phone by USB and accept the
    "Allow USB debugging?" prompt.
 3. Put the phone on the **same Wi-Fi** as this PC.
@@ -56,12 +56,14 @@ pre-wired except the actual compile, which needs the Android SDK on this machine
 ```bash
 cd C:\Projects\Pharmate\client\android && ./gradlew assembleDebug
 ```
+
 APK lands at `android/app/build/outputs/apk/debug/app-debug.apk`; install with
 `adb install -r app-debug.apk`.
 
 ## When your PC's IP changes (new network)
 
 The IP is compiled into the bundle, so re-point and rebuild:
+
 1. Update `VITE_API_BASE` in `.env.lantest` **and** the `<domain>` in
    `network_security_config.xml`.
 2. `npm run build:device && npx cap sync android`, then re-run from Studio.
