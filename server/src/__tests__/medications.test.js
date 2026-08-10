@@ -160,4 +160,31 @@ describe('D-D — uncurated drug flow', () => {
     expect(res.body.status).toBe('curated');
     expect(res.body.drug_id).toBeTruthy();
   });
+
+  test('a rejected curation cancels the med and hides it from the patient list', async () => {
+    const drug = `zzz-rejectme-${Date.now()}`;
+    const enc = await request(app)
+      .post('/api/patient/medications')
+      .set('Authorization', `Bearer ${patientToken}`)
+      .send({ drug_name: drug, frequency: 'BID', source: 'OTC_SELF' });
+    const rejectedMedId = enc.body.id;
+
+    const queue = await request(app)
+      .get('/api/pharmacist/pending-drugs')
+      .set('Authorization', `Bearer ${pharmToken}`);
+    const pendingId = queue.body.find((r) => r.medication_id === rejectedMedId).id;
+
+    const rej = await request(app)
+      .post(`/api/pharmacist/pending-drugs/${pendingId}/curate`)
+      .set('Authorization', `Bearer ${pharmToken}`)
+      .send({ action: 'reject' });
+    expect(rej.status).toBe(200);
+    expect(rej.body.status).toBe('rejected');
+
+    // The now-cancelled med must not appear in the patient's medications.
+    const list = await request(app)
+      .get('/api/patient/medications')
+      .set('Authorization', `Bearer ${patientToken}`);
+    expect(list.body.some((m) => m.id === rejectedMedId)).toBe(false);
+  });
 });

@@ -4,6 +4,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import { createUploadsDir } from './db/connection.js';
+import { startScheduler } from './jobs/scheduler.js';
 
 import healthRouter from './routes/health.js';
 import authRouter from './routes/auth.js';
@@ -52,6 +53,7 @@ if (process.env.NODE_ENV !== 'test') {
   app.listen(PORT, () => {
     console.log(`PharMate server listening on http://localhost:${PORT}`);
   });
+  startScheduler(); // reminder + missed-sweep + photo-purge cron pipeline
 }
 
 export default app;

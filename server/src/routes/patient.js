@@ -118,6 +118,31 @@ router.put('/profile', async (req, res) => {
   res.json({ message: 'Profile updated' });
 });
 
+// ── PUT /api/patient/device-token ─────────────────────────────────────────────
+// Register the device's FCM token for online dose reminders (feature #4). The
+// native app sends this on login / token refresh. Stored per patient; a new
+// token replaces the old (one active device). DELETE clears it on logout so a
+// signed-out device stops receiving pushes.
+router.put('/device-token', async (req, res) => {
+  const token = req.body?.token;
+  if (typeof token !== 'string' || !token.trim()) {
+    return res.status(400).json({ error: 'token is required' });
+  }
+  if (token.length > 4096) {
+    return res.status(400).json({ error: 'token is too long' });
+  }
+  await pool.execute('UPDATE patients SET fcm_token = ? WHERE id = ?', [
+    token.trim(),
+    req.user.sub,
+  ]);
+  res.json({ message: 'Device registered for reminders' });
+});
+
+router.delete('/device-token', async (req, res) => {
+  await pool.execute('UPDATE patients SET fcm_token = NULL WHERE id = ?', [req.user.sub]);
+  res.json({ message: 'Device unregistered' });
+});
+
 // ── POST /api/patient/invite ──────────────────────────────────────────────────
 // Generate a single-use 8-char invite code for a caregiver to link with (D-G)
 router.post('/invite', async (req, res) => {
@@ -286,7 +311,8 @@ router.get('/medications', async (req, res) => {
      FROM medications m
      LEFT JOIN drug_reference dr ON dr.id = m.drug_id
      LEFT JOIN prescription_photos pp ON pp.id = m.prescription_photo_id
-     WHERE m.patient_id = ? ORDER BY m.created_at DESC`,
+     WHERE m.patient_id = ? AND m.status != 'cancelled'
+     ORDER BY m.created_at DESC`,
     [req.user.sub]
   );
   res.json(rows);

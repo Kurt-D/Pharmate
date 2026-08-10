@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../../api.js';
 import { enqueue, flushOutbox, newLogId } from '../../lib/doseOutbox.js';
+import { scheduleDoseReminders, initReminderVoice, speak } from '../../lib/notifications.js';
 
 // Today — dose confirmation (UC-05/06). Each due dose can be marked Taken or
 // Snoozed. Logs made offline queue locally and flush on reconnect (D-F/TC-10).
@@ -26,6 +27,9 @@ export default function Today() {
       await flushOutbox(api); // drain anything queued while offline
       const r = await api('/api/patient/doses/today');
       setDoses(r.data);
+      // Offline layer: (re)arm on-device local notifications from the confirmed
+      // plan so reminders fire even with no network (no-op on web).
+      scheduleDoseReminders(r.data);
     } catch (e) {
       setError(e.message);
     }
@@ -37,6 +41,16 @@ export default function Today() {
     window.addEventListener('online', onOnline);
     return () => window.removeEventListener('online', onOnline);
   }, [load]);
+
+  // Foreground voice prompt: speak the medicine name when a reminder fires while
+  // the app is open. Cleanup removes the native listener on unmount.
+  useEffect(() => {
+    let dispose = () => {};
+    initReminderVoice().then((fn) => {
+      dispose = fn;
+    });
+    return () => dispose();
+  }, []);
 
   async function log(dose, action) {
     const logId = newLogId();
@@ -74,6 +88,17 @@ export default function Today() {
     <>
       <h1 className="pm-title">Today</h1>
       <p className="pm-subtitle">Confirm each dose as you take it.</p>
+
+      <div className="d-flex align-items-center gap-2 mb-3 text-muted small">
+        <span>🔔 Dose reminders are on</span>
+        <button
+          type="button"
+          className="pm-link p-0"
+          onClick={() => speak('Time to take your medicine')}
+        >
+          🔊 Test voice
+        </button>
+      </div>
 
       {notice && <div className="pm-banner pm-banner--info mb-3">{notice}</div>}
 
