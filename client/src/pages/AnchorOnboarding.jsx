@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { apiUrl } from '../config.js';
 
 const DEFAULTS = {
   wake_anchor: '08:00',
@@ -29,7 +30,7 @@ export default function AnchorOnboarding() {
     const token = localStorage.getItem('pm_token');
     const auth = { Authorization: `Bearer ${token}` };
     Promise.all([
-      fetch('/api/patient/anchors', { headers: auth })
+      fetch(apiUrl('/api/patient/anchors'), { headers: auth })
         .then((r) => r.json())
         .then((data) => {
           // TIME columns come back as "HH:MM:SS"; the time input and the server
@@ -43,7 +44,7 @@ export default function AnchorOnboarding() {
           }
         })
         .catch(() => {}),
-      fetch('/api/patient/profile', { headers: auth })
+      fetch(apiUrl('/api/patient/profile'), { headers: auth })
         .then((r) => r.json())
         .then((data) => {
           if (data && typeof data.medical_condition === 'string') {
@@ -66,7 +67,7 @@ export default function AnchorOnboarding() {
     const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
     try {
       // Save the self-declared condition first, then the anchors.
-      const profileRes = await fetch('/api/patient/profile', {
+      const profileRes = await fetch(apiUrl('/api/patient/profile'), {
         method: 'PUT',
         headers,
         body: JSON.stringify({ medical_condition: condition }),
@@ -76,7 +77,7 @@ export default function AnchorOnboarding() {
         setError(d.error || 'Failed to save');
         return;
       }
-      const res = await fetch('/api/patient/anchors', {
+      const res = await fetch(apiUrl('/api/patient/anchors'), {
         method: 'PUT',
         headers,
         body: JSON.stringify(anchors),

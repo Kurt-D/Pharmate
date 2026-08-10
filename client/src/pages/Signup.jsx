@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
+import { apiUrl } from '../config.js';
 
 // Patient self-registration. Staff accounts (pharmacist/admin/caregiver) are
 // provisioned separately — patients are the only role that can self-enrol here.
@@ -21,7 +22,7 @@ export default function Signup() {
     if (password !== confirm) return setError('Passwords do not match.');
     setLoading(true);
     try {
-      const reg = await fetch('/api/auth/register', {
+      const reg = await fetch(apiUrl('/api/auth/register'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -37,7 +38,7 @@ export default function Signup() {
         return;
       }
       // Auto sign-in so the new patient lands straight in onboarding.
-      const res = await fetch('/api/auth/login', {
+      const res = await fetch(apiUrl('/api/auth/login'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: email.trim(), password }),
