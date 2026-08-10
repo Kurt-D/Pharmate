@@ -15,6 +15,7 @@
  */
 import { Capacitor } from '@capacitor/core';
 import { LocalNotifications } from '@capacitor/local-notifications';
+import { PushNotifications } from '@capacitor/push-notifications';
 
 const isNative = Capacitor.isNativePlatform();
 
@@ -118,5 +119,35 @@ export async function registerDeviceToken(token, api) {
     await api('/api/patient/device-token', { method: 'PUT', body: { token } });
   } catch {
     /* best-effort — the local-notification fallback still covers reminders */
+  }
+}
+
+/**
+ * Register the device for ONLINE FCM push (layer 1). Requests permission, asks
+ * the OS/FCM for this device's token, and persists it via registerDeviceToken so
+ * the server dispatcher can reach it. No-op off-device. Safe to call on every
+ * patient session — the token is idempotent server-side (one row per patient).
+ */
+export async function registerPush(api) {
+  if (!isNative) return { supported: false };
+  try {
+    let perm = await PushNotifications.checkPermissions();
+    if (perm.receive === 'prompt' || perm.receive === 'prompt-with-rationale') {
+      perm = await PushNotifications.requestPermissions();
+    }
+    if (perm.receive !== 'granted') return { supported: true, permission: false };
+
+    // Listeners must be attached before register() so the token isn't missed.
+    await PushNotifications.removeAllListeners();
+    PushNotifications.addListener('registration', (token) => {
+      registerDeviceToken(token.value, api);
+    });
+    PushNotifications.addListener('registrationError', (err) => {
+      console.error('[push] registration failed', err?.error ?? err);
+    });
+    await PushNotifications.register();
+    return { supported: true, permission: true };
+  } catch (e) {
+    return { supported: true, error: String(e) };
   }
 }

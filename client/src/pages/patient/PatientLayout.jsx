@@ -1,5 +1,8 @@
+import { useEffect } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 import '../../styles/patient.css';
+import { api } from '../../api.js';
+import { registerPush } from '../../lib/notifications.js';
 
 const NAV = [
   { to: '/patient/home', icon: '🏠', label: 'Home' },
@@ -10,6 +13,12 @@ const NAV = [
 ];
 
 export default function PatientLayout() {
+  // Register this device for online FCM reminders once the patient is in the app
+  // (no-op on web; on the APK it grabs the token and posts it to the server).
+  useEffect(() => {
+    registerPush(api);
+  }, []);
+
   return (
     <div className="pm-phone">
       <div className="pm-phone__scroll">

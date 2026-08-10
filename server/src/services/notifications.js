@@ -10,8 +10,8 @@
  *     the dispatcher simply relies on the device's local-notification fallback.
  *
  * Configuration (any one enables FCM):
- *   FCM_SERVICE_ACCOUNT       inline service-account JSON
- *   FCM_SERVICE_ACCOUNT_PATH  path to a service-account JSON file
+ *   FCM_SERVICE_ACCOUNT           inline service-account JSON
+ *   FCM_SERVICE_ACCOUNT_KEY_PATH  path to a service-account JSON file
  *   GOOGLE_APPLICATION_CREDENTIALS  (firebase-admin picks this up natively)
  */
 import fs from 'node:fs';
@@ -28,7 +28,7 @@ async function getMessaging() {
 
   messagingPromise = (async () => {
     const inline = process.env.FCM_SERVICE_ACCOUNT;
-    const filePath = process.env.FCM_SERVICE_ACCOUNT_PATH;
+    const filePath = process.env.FCM_SERVICE_ACCOUNT_KEY_PATH;
     const adc = process.env.GOOGLE_APPLICATION_CREDENTIALS;
     if (!inline && !filePath && !adc) return null; // not configured — silent
 
@@ -59,7 +59,7 @@ async function getMessaging() {
 export function pushConfigured() {
   return Boolean(
     process.env.FCM_SERVICE_ACCOUNT ||
-    process.env.FCM_SERVICE_ACCOUNT_PATH ||
+    process.env.FCM_SERVICE_ACCOUNT_KEY_PATH ||
     process.env.GOOGLE_APPLICATION_CREDENTIALS
   );
 }
@@ -87,6 +87,33 @@ export async function sendPush(token, { title, body, data = {} } = {}) {
       err.code === 'messaging/registration-token-not-registered' ||
       err.code === 'messaging/invalid-registration-token';
     return { ok: false, error: err.message, stale };
+  }
+}
+
+/**
+ * Validate the FCM credential end-to-end WITHOUT a real device — a dry-run send
+ * to a throwaway token. Google authenticates the service account first (proving
+ * the credential is good) and only then rejects the bogus token, so any
+ * `messaging/*` error means we got past auth → creds work. An auth/credential
+ * error (or anything not under `messaging/`) means the service account is bad.
+ * Diagnostic only; sends nothing to anyone.
+ * @returns {Promise<{ok:boolean, reason?:string, projectId?:string}>}
+ */
+export async function validateCredential() {
+  const messaging = await getMessaging();
+  if (!messaging) return { ok: false, reason: 'not_configured' };
+  try {
+    await messaging.send(
+      { token: 'pharmate-credential-probe', notification: { title: 't', body: 'b' } },
+      true // dryRun — validate only, deliver nothing
+    );
+    return { ok: true }; // (unexpected: a bogus token shouldn't validate)
+  } catch (err) {
+    const code = err.code || '';
+    if (code.startsWith('messaging/')) {
+      return { ok: true, projectId: messaging.app.options.projectId };
+    }
+    return { ok: false, reason: code || err.message };
   }
 }
 
