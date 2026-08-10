@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useCallback } from 'react';
+import { apiUrl } from '../config.js';
 
 const AuthContext = createContext(null);
 
@@ -23,7 +24,7 @@ export function AuthProvider({ children }) {
     const refresh = localStorage.getItem('pm_refresh');
     try {
       if (token) {
-        await fetch('/api/auth/logout', {
+        await fetch(apiUrl('/api/auth/logout'), {
           method: 'POST',
           headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({ refreshToken: refresh }),
