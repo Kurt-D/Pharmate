@@ -13,6 +13,7 @@
     "db:test:setup": "node src/db/setup-test-db.js",
     "purge:photos": "node src/jobs/purgePhotos.js",
     "sweep:missed": "node src/jobs/sweepMissed.js",
+    "push:test": "node src/jobs/testPush.js",
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js --runInBand --forceExit",
     "lint": "eslint ."
   },
