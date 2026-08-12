@@ -218,13 +218,21 @@ router.post('/medications', async (req, res) => {
     await conn.beginTransaction();
 
     if (drug) {
-      // 3. Curated drug — encode normally.
-      // The drug's PH FDA class is authoritative: an Rx drug MUST go through
-      // prescription validation, even if the patient labeled it OTC. It cannot
-      // be self-added as active — it lands in pending_validation for upload.
-      const effectiveSource = drug.rx_class === 'RX' ? 'RX_VALIDATED' : source;
+      // 3. Curated drug — encode as an active, schedulable medication.
+      //
+      // Encoding NEVER forces prescription validation: a patient may freely build
+      // a schedule for any (non-restricted) medicine, including prescription-only
+      // ones — they usually already have the medicine from their own pharmacy.
+      // Whether a prescription is required is enforced LATER and only at
+      // refill/delivery time (the UC-09 gate in services/orders.js), keyed on the
+      // drug's PH FDA class. Restricted substances are the sole encode-time
+      // exception and were already declined above (TC-11).
+      //
+      // A patient may still OPT IN to up-front validation by declaring the source
+      // as a prescription (RX_VALIDATED) — that routes the med through the upload
+      // + pharmacist-approval flow. The default (OTC_SELF) just adds it as active.
       const prn = is_prn !== undefined ? (is_prn ? 1 : 0) : drug.is_prn_default;
-      const status = effectiveSource === 'RX_VALIDATED' ? 'pending_validation' : 'active';
+      const status = source === 'RX_VALIDATED' ? 'pending_validation' : 'active';
       await conn.execute(
         `INSERT INTO medications
            (id, patient_id, drug_id, drug_name_raw, source, is_prn, frequency,
@@ -235,7 +243,7 @@ router.post('/medications', async (req, res) => {
           req.user.sub,
           drug.id,
           drug_name,
-          effectiveSource,
+          source,
           prn,
           frequency ?? null,
           frequencyCode,
@@ -249,12 +257,13 @@ router.post('/medications', async (req, res) => {
       return res.status(201).json({
         id: medId,
         status,
-        source: effectiveSource,
+        source,
         drug_id: drug.id,
         rx_class: drug.rx_class,
-        // True when we forced validation despite an OTC request — the client
-        // should prompt the patient to upload their prescription.
-        requires_prescription: drug.rx_class === 'RX' && source !== 'RX_VALIDATED',
+        // Informational only: an Rx-class drug will need a prescription IF the
+        // patient later requests a refill/delivery through the app. It does NOT
+        // block adding the medicine or building a schedule for it.
+        requires_prescription: drug.rx_class === 'RX',
         frequency_code: frequencyCode,
         needs_frequency_review: frequencyCode === 'CONSULT',
         is_provisional_drug: !!drug.is_provisional,

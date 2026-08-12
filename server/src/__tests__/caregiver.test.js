@@ -87,7 +87,8 @@ describe('UC-09 — refill / delivery on the patient’s behalf', () => {
   });
 
   test('an unvalidated Rx medicine is declined (prescription_required)', async () => {
-    // amoxicillin is Rx; self-encoding forces it to pending_validation (no photo).
+    // amoxicillin is Rx: it adds as active/schedulable, but the refill gate still
+    // requires an approved prescription (none here), so the refill is declined.
     const med = await request(app)
       .post('/api/patient/medications')
       .set(auth(patientToken))
