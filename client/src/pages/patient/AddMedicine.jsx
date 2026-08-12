@@ -169,8 +169,6 @@ export default function AddMedicine() {
                     setName(s.generic_name);
                     setShowSuggest(false);
                     setRxClass(s.rx_class ?? null);
-                    // An Rx drug can't be self-added as OTC — lock it.
-                    if (s.rx_class === 'RX') setSource('RX_VALIDATED');
                   }}
                 >
                   {s.generic_name}
@@ -254,18 +252,18 @@ export default function AddMedicine() {
           className="form-select mb-1"
           value={source}
           onChange={(e) => setSource(e.target.value)}
-          disabled={rxClass === 'RX'}
         >
           <option value="OTC_SELF">Over-the-counter (self)</option>
-          <option value="RX_VALIDATED">From a prescription</option>
+          <option value="RX_VALIDATED">From a prescription (validate now)</option>
         </select>
-        {rxClass === 'RX' && (
-          <div className="form-text mb-4 text-warning-emphasis">
-            This is a prescription medicine — it must be validated by a pharmacist. You’ll be asked
-            to upload your prescription.
+        {rxClass === 'RX' ? (
+          <div className="form-text mb-4">
+            This is a prescription-only medicine. You can still add it and build your schedule now —
+            a prescription is only needed if you request a <strong>refill</strong> through the app.
           </div>
+        ) : (
+          <div className="mb-4" />
         )}
-        {rxClass !== 'RX' && <div className="mb-4" />}
 
         <button className="pm-btn-primary" type="submit" disabled={submitting}>
           {submitting ? 'Adding…' : 'Add Medicine'}

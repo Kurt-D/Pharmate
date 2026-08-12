@@ -23,7 +23,10 @@
 .pm-phone__scroll {
   flex: 1;
   overflow-y: auto;
-  padding: 1.25rem 1.25rem 6rem; /* leave room for bottom nav */
+  /* Top inset clears the Android 15 edge-to-edge status bar (targetSdk 35), so
+     top controls aren't hidden behind the clock/battery. Falls back to 1.25rem
+     on browsers/devices with no inset. */
+  padding: calc(1.25rem + env(safe-area-inset-top)) 1.25rem 6rem;
 }
 
 .pm-title {
@@ -92,7 +95,8 @@
   border-top: 1px solid #eef1f6;
   display: flex;
   justify-content: space-around;
-  padding: 0.5rem 0 0.6rem;
+  /* Bottom inset clears the gesture/navigation bar on edge-to-edge Android. */
+  padding: 0.5rem 0 calc(0.6rem + env(safe-area-inset-bottom));
 }
 .pm-bottomnav a {
   text-decoration: none;
