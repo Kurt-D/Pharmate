@@ -9,6 +9,8 @@
  */
 import request from 'supertest';
 import app from '../index.js';
+import { pool } from '../db/connection.js';
+import { createPrivilegedTestUser } from './helpers/testUsers.js';
 
 // Plaintext PII values we will register with — must never appear in any staff response
 const TEST_PII = {
@@ -41,12 +43,12 @@ beforeAll(async () => {
   });
   patientToken = patRes.body.accessToken;
 
-  // Register and log in a pharmacist
-  await request(app).post('/api/auth/register').send({
+  // Staff accounts are provisioned internally, never through public registration.
+  await createPrivilegedTestUser({
     email: PHARMACIST_EMAIL,
     password: PASSWORD,
     role: 'pharmacist',
-    full_name: 'Dr. Test Pharmacist',
+    fullName: 'Dr. Test Pharmacist',
   });
   const pharmRes = await request(app).post('/api/auth/login').send({
     email: PHARMACIST_EMAIL,
@@ -106,6 +108,21 @@ describe('PII containment — staff responses must not expose plaintext PII', ()
 
 // ── Auth happy paths ──────────────────────────────────────────────────────────
 describe('Auth — register and login', () => {
+  test.each(['pharmacist', 'caregiver', 'admin'])(
+    'public registration rejects %s self-registration without creating a user',
+    async (role) => {
+      const email = `${role}.self-register.${Date.now()}@test.pharmate`;
+      const res = await request(app)
+        .post('/api/auth/register')
+        .send({ email, password: PASSWORD, role });
+
+      expect(res.status).toBe(403);
+      expect(res.body.error).toMatch(/only to patients/i);
+      const [users] = await pool.execute('SELECT id FROM users WHERE email = ?', [email]);
+      expect(users).toHaveLength(0);
+    }
+  );
+
   test('patient login returns accessToken, refreshToken, and patientCode', async () => {
     const res = await request(app).post('/api/auth/login').send({
       email: PATIENT_EMAIL,

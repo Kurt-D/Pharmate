@@ -34,9 +34,11 @@ function refreshExpiresAt() {
 router.post('/register', async (req, res) => {
   const { email, password, role, full_name, contact_num, address, medical_condition } = req.body;
 
-  const VALID_ROLES = ['patient', 'pharmacist', 'caregiver', 'admin'];
-  if (!email || !password || !VALID_ROLES.includes(role)) {
-    return res.status(400).json({ error: 'email, password, and a valid role are required' });
+  if (!email || !password || !role) {
+    return res.status(400).json({ error: 'email, password, and role are required' });
+  }
+  if (role !== 'patient') {
+    return res.status(403).json({ error: 'Public registration is available only to patients' });
   }
   if (password.length < 8) {
     return res.status(400).json({ error: 'Password must be at least 8 characters' });
@@ -61,37 +63,22 @@ router.post('/register', async (req, res) => {
       role,
     ]);
 
-    if (role === 'patient') {
-      const patientCode = await generatePatientCode();
-      await conn.execute(
-        `INSERT INTO patients
-           (id, patient_code, full_name_enc, contact_num_enc, address_enc, medical_condition_enc)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-        [
-          userId,
-          patientCode,
-          full_name ? encrypt(full_name) : null,
-          contact_num ? encrypt(contact_num) : null,
-          address ? encrypt(address) : null,
-          medical_condition ? encrypt(medical_condition) : null,
-        ]
-      );
-      // Insert default anchors (D-B)
-      await conn.execute('INSERT INTO patient_anchors (patient_id) VALUES (?)', [userId]);
-    } else if (role === 'pharmacist') {
-      const { license_number, branch_id } = req.body;
-      await conn.execute(
-        'INSERT INTO pharmacists (id, full_name, license_number, branch_id) VALUES (?, ?, ?, ?)',
-        [userId, full_name || '', license_number || null, branch_id || null]
-      );
-    } else if (role === 'caregiver') {
-      await conn.execute('INSERT INTO caregivers (id, full_name) VALUES (?, ?)', [
+    const patientCode = await generatePatientCode();
+    await conn.execute(
+      `INSERT INTO patients
+         (id, patient_code, full_name_enc, contact_num_enc, address_enc, medical_condition_enc)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [
         userId,
-        full_name || '',
-      ]);
-    } else if (role === 'admin') {
-      await conn.execute('INSERT INTO admins (id) VALUES (?)', [userId]);
-    }
+        patientCode,
+        full_name ? encrypt(full_name) : null,
+        contact_num ? encrypt(contact_num) : null,
+        address ? encrypt(address) : null,
+        medical_condition ? encrypt(medical_condition) : null,
+      ]
+    );
+    // Insert default anchors (D-B)
+    await conn.execute('INSERT INTO patient_anchors (patient_id) VALUES (?)', [userId]);
 
     await conn.commit();
   } catch (err) {

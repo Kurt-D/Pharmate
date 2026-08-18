@@ -25,10 +25,10 @@ async function seed() {
   const hash = await bcrypt.hash(DEV_PASSWORD, 12);
 
   // ── Users ────────────────────────────────────────────────────────────────
-  const patientUserId = uuidv4();
-  const pharmacistUserId = uuidv4();
-  const caregiverUserId = uuidv4();
-  const adminUserId = uuidv4();
+  let patientUserId = uuidv4();
+  let pharmacistUserId = uuidv4();
+  let caregiverUserId = uuidv4();
+  let adminUserId = uuidv4();
   const branchId = uuidv4();
   const drugAId = uuidv4();
   const drugBId = uuidv4();
@@ -51,6 +51,20 @@ async function seed() {
       ]);
     }
   }
+
+  // A repeated run generates fresh candidate UUIDs above, but existing users keep
+  // their original IDs. Resolve those persisted IDs before inserting child rows;
+  // otherwise the second run attempts to reference users that do not exist.
+  const [persistedUsers] = await conn.execute(
+    `SELECT id, email FROM users
+     WHERE email IN (?, ?, ?, ?)`,
+    users.map(([, email]) => email)
+  );
+  const idsByEmail = new Map(persistedUsers.map((user) => [user.email, user.id]));
+  patientUserId = idsByEmail.get('patient@dev.pharmate');
+  pharmacistUserId = idsByEmail.get('pharmacist@dev.pharmate');
+  caregiverUserId = idsByEmail.get('caregiver@dev.pharmate');
+  adminUserId = idsByEmail.get('admin@dev.pharmate');
 
   // ── Branch ───────────────────────────────────────────────────────────────
   const [existingBranch] = await conn.execute('SELECT id FROM pharmacy_branches LIMIT 1');

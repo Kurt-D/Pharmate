@@ -11,6 +11,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import request from 'supertest';
 import app from '../index.js';
+import { createPrivilegedTestUser } from './helpers/testUsers.js';
 import { pool } from '../db/connection.js';
 import { purgeExpiredPhotos } from '../services/prescription.js';
 import { UPLOADS_DIR } from '../middleware/upload.js';
@@ -34,9 +35,12 @@ beforeAll(async () => {
     .send({ email: PATIENT_EMAIL, password: PASSWORD, role: 'patient', full_name: 'S5 Tester' });
   patientToken = await login(PATIENT_EMAIL);
 
-  await request(app)
-    .post('/api/auth/register')
-    .send({ email: PHARM_EMAIL, password: PASSWORD, role: 'pharmacist', full_name: 'Dr S5' });
+  await createPrivilegedTestUser({
+    email: PHARM_EMAIL,
+    password: PASSWORD,
+    role: 'pharmacist',
+    fullName: 'Dr S5',
+  });
   pharmToken = await login(PHARM_EMAIL);
 });
 

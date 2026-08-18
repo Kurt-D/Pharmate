@@ -10,6 +10,7 @@
  */
 import request from 'supertest';
 import app from '../index.js';
+import { createPrivilegedTestUser } from './helpers/testUsers.js';
 
 const PATIENT_EMAIL = `patient.s3.${Date.now()}@test.pharmate`;
 const PHARM_EMAIL = `pharm.s3.${Date.now()}@test.pharmate`;
@@ -29,11 +30,11 @@ beforeAll(async () => {
     await request(app).post('/api/auth/login').send({ email: PATIENT_EMAIL, password: PASSWORD })
   ).body.accessToken;
 
-  await request(app).post('/api/auth/register').send({
+  await createPrivilegedTestUser({
     email: PHARM_EMAIL,
     password: PASSWORD,
     role: 'pharmacist',
-    full_name: 'Dr S3',
+    fullName: 'Dr S3',
   });
   pharmToken = (
     await request(app).post('/api/auth/login').send({ email: PHARM_EMAIL, password: PASSWORD })
