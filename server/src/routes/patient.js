@@ -35,6 +35,14 @@ import {
   parseNotificationQuery,
   unreadCount,
 } from '../services/patientNotifications.js';
+import {
+  getMedication,
+  listMedicationHistory,
+  parseHistoryQuery,
+  stopMedication,
+  updateMedication,
+  validateMedicationPatch,
+} from '../services/patientMedications.js';
 
 const router = Router();
 
@@ -442,6 +450,33 @@ router.get('/medications', async (req, res) => {
     [req.user.sub]
   );
   res.json(rows);
+});
+
+// History must be declared before /:id so "history" is never interpreted as an id.
+router.get('/medications/history', async (req, res) => {
+  const parsed = parseHistoryQuery(req.query);
+  if (parsed.error) return res.status(parsed.error.status).json(parsed.error);
+  res.json(await listMedicationHistory(req.user.sub, parsed.value));
+});
+
+router.get('/medications/:id', async (req, res) => {
+  const item = await getMedication(req.user.sub, req.params.id);
+  if (!item) return res.status(404).json({ error: 'Medication not found' });
+  res.json(item);
+});
+
+router.patch('/medications/:id', async (req, res) => {
+  const parsed = validateMedicationPatch(req.body);
+  if (parsed.error) return res.status(parsed.error.status).json(parsed.error);
+  const result = await updateMedication(req.user.sub, req.params.id, parsed);
+  if (result.error) return res.status(result.error.status).json(result.error);
+  res.json(result);
+});
+
+router.post('/medications/:id/stop', async (req, res) => {
+  const result = await stopMedication(req.user.sub, req.params.id, req.body?.expected_updated_at);
+  if (result.error) return res.status(result.error.status).json(result.error);
+  res.json(result);
 });
 
 // ── POST /api/patient/medications/:id/prescription ────────────────────────────
