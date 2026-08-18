@@ -23,11 +23,26 @@ import { loyaltyFor } from '../services/adherence.js';
 import { encrypt } from '../utils/crypto.js';
 import { serializePatient } from '../utils/serializer.js';
 import { getPatientDashboard } from '../services/patientDashboard.js';
+import {
+  getPreferences,
+  updatePreferences,
+  validatePreferencePatch,
+} from '../services/preferences.js';
 
 const router = Router();
 
 // All patient routes require authentication + patient role
 router.use(requireAuth, requireRole('patient'));
+
+router.get('/preferences', async (req, res) => {
+  res.json(await getPreferences(req.user.sub));
+});
+
+router.put('/preferences', async (req, res) => {
+  const parsed = validatePreferencePatch(req.body);
+  if (parsed.error) return res.status(400).json({ error: parsed.error });
+  res.json(await updatePreferences(req.user.sub, parsed.value));
+});
 
 // A compact, PII-free summary for the signed-in patient's home screen.
 router.get('/dashboard', async (req, res) => {

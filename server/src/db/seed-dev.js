@@ -89,6 +89,7 @@ async function seed() {
       [patientUserId]
     );
     await conn.execute('INSERT INTO patient_anchors (patient_id) VALUES (?)', [patientUserId]);
+    await conn.execute('INSERT INTO patient_preferences (patient_id) VALUES (?)', [patientUserId]);
   }
 
   const [existingPharm] = await conn.execute('SELECT id FROM pharmacists WHERE id = ?', [

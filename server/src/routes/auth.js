@@ -90,6 +90,7 @@ router.post('/register', registerLimit, async (req, res) => {
     );
     // Insert default anchors (D-B)
     await conn.execute('INSERT INTO patient_anchors (patient_id) VALUES (?)', [userId]);
+    await conn.execute('INSERT INTO patient_preferences (patient_id) VALUES (?)', [userId]);
 
     await conn.commit();
   } catch (err) {

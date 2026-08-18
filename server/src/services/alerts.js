@@ -17,6 +17,11 @@ export async function raiseMissedAlerts(patientId, scheduleId) {
   );
 
   if (cgs.length > 0) {
+    const [[preferences]] = await pool.execute(
+      `SELECT caregiver_missed_alerts_enabled FROM patient_preferences WHERE patient_id = ?`,
+      [patientId]
+    );
+    if (preferences && !preferences.caregiver_missed_alerts_enabled) return 0;
     for (const c of cgs) {
       await pool.execute(
         `INSERT INTO caregiver_alerts (id, patient_id, schedule_id, caregiver_id, channel)
@@ -24,12 +29,14 @@ export async function raiseMissedAlerts(patientId, scheduleId) {
         [patientId, scheduleId, c.caregiver_id]
       );
     }
+    return cgs.length;
   } else {
     await pool.execute(
       `INSERT INTO caregiver_alerts (id, patient_id, schedule_id, caregiver_id, channel)
        VALUES (UUID(), ?, ?, NULL, 'pharmacist')`,
       [patientId, scheduleId]
     );
+    return 1;
   }
 }
 
