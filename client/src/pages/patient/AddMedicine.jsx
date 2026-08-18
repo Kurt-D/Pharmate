@@ -20,7 +20,7 @@ export default function AddMedicine() {
   const [freqChoice, setFreqChoice] = useState('once daily');
   const [customFreq, setCustomFreq] = useState('');
   const [isPrn, setIsPrn] = useState(false);
-  const [source, setSource] = useState('OTC_SELF');
+  const [source, setSource] = useState('');
   const [rxClass, setRxClass] = useState(null); // 'OTC' | 'RX' | null (unknown)
 
   const [suggestions, setSuggestions] = useState([]);
@@ -51,12 +51,22 @@ export default function AddMedicine() {
   async function handleSubmit(e) {
     e.preventDefault();
     setResult(null);
-    if (!name.trim()) {
-      setResult({ kind: 'error', message: 'Medicine name is required.' });
+    const frequency = isPrn ? 'as needed' : freqChoice === '__custom__' ? customFreq.trim() : freqChoice;
+    const missing = [
+      !name.trim() && 'medicine name',
+      !strength.trim() && 'strength (dose)',
+      !form && 'form',
+      !frequency && 'how often you take it',
+      !source && 'source',
+    ].filter(Boolean);
+
+    if (missing.length > 0) {
+      setResult({
+        kind: 'error',
+        message: `Complete the following before saving: ${missing.join(', ')}.`,
+      });
       return;
     }
-
-    const frequency = freqChoice === '__custom__' ? customFreq : isPrn ? 'as needed' : freqChoice;
 
     setSubmitting(true);
     try {
@@ -154,6 +164,7 @@ export default function AddMedicine() {
             }}
             onFocus={() => setShowSuggest(true)}
             autoComplete="off"
+            required
           />
           {showSuggest && suggestions.length > 0 && (
             <div
@@ -196,11 +207,17 @@ export default function AddMedicine() {
           placeholder="e.g., 500 mg"
           value={strength}
           onChange={(e) => setStrength(e.target.value)}
+          required
         />
 
         {/* Form */}
         <label className="form-label fw-semibold">Form</label>
-        <select className="form-select mb-3" value={form} onChange={(e) => setForm(e.target.value)}>
+        <select
+          className="form-select mb-3"
+          value={form}
+          onChange={(e) => setForm(e.target.value)}
+          required
+        >
           <option value="">Select form</option>
           <option>Tablet</option>
           <option>Capsule</option>
@@ -231,6 +248,7 @@ export default function AddMedicine() {
             placeholder="e.g., q8h, 1-0-1, at bedtime"
             value={customFreq}
             onChange={(e) => setCustomFreq(e.target.value)}
+            required
           />
         )}
 
@@ -255,7 +273,11 @@ export default function AddMedicine() {
           value={source}
           onChange={(e) => setSource(e.target.value)}
           disabled={rxClass === 'RX'}
+          required
         >
+          <option value="" disabled>
+            Select source
+          </option>
           <option value="OTC_SELF">Over-the-counter (self)</option>
           <option value="RX_VALIDATED">From a prescription</option>
         </select>
@@ -267,6 +289,10 @@ export default function AddMedicine() {
         )}
         {rxClass !== 'RX' && <div className="mb-4" />}
 
+        <p className="form-text mb-2">
+          Complete all fields above before saving. Prescription medicines will then be sent for
+          pharmacist verification.
+        </p>
         <button className="pm-btn-primary" type="submit" disabled={submitting}>
           {submitting ? 'Adding…' : 'Add Medicine'}
         </button>

@@ -4,7 +4,9 @@ import { useAuth } from '../context/AuthContext.jsx';
 import { apiUrl } from '../config.js';
 
 const ROLE_ROUTES = {
-  patient: '/patient/onboarding',
+  // New patients receive default schedule anchors from the API. Let them add a
+  // medicine first; the schedule details are collected only when a plan is made.
+  patient: '/patient/home',
   pharmacist: '/pharmacist',
   admin: '/admin',
   caregiver: '/caregiver',

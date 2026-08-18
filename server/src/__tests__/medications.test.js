@@ -82,6 +82,17 @@ describe('Encode — curated drug', () => {
     expect(res.body.requires_prescription).toBe(false);
   });
 
+  test('a verified OTC drug stays active even when the patient marks its source as prescription', async () => {
+    const res = await request(app)
+      .post('/api/patient/medications')
+      .set('Authorization', `Bearer ${patientToken}`)
+      .send({ drug_name: 'paracetamol', frequency: 'BID', source: 'RX_VALIDATED' });
+    expect(res.status).toBe(201);
+    expect(res.body.status).toBe('active');
+    expect(res.body.source).toBe('OTC_SELF');
+    expect(res.body.requires_prescription).toBe(false);
+  });
+
   test('an Rx drug labeled OTC is forced into prescription validation (drug class wins)', async () => {
     const res = await request(app)
       .post('/api/patient/medications')

@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { apiUpload } from '../../api.js';
 
@@ -13,12 +13,29 @@ export default function PrescriptionUpload() {
   const navigate = useNavigate();
   const canvasRef = useRef(null);
   const imgRef = useRef(null);
+  const videoRef = useRef(null);
+  const streamRef = useRef(null);
   const boxesRef = useRef([]); // committed redaction boxes
   const drawStart = useRef(null);
 
   const [hasImage, setHasImage] = useState(false);
+  const [cameraOpen, setCameraOpen] = useState(false);
+  const [cameraError, setCameraError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState(null); // { kind, message }
+
+  useEffect(() => {
+    if (cameraOpen && videoRef.current && streamRef.current) {
+      videoRef.current.srcObject = streamRef.current;
+      videoRef.current.play().catch(() => {});
+    }
+  }, [cameraOpen]);
+
+  useEffect(() => {
+    return () => {
+      streamRef.current?.getTracks().forEach((track) => track.stop());
+    };
+  }, []);
 
   function redraw(preview) {
     const canvas = canvasRef.current;
@@ -45,6 +62,52 @@ export default function PrescriptionUpload() {
       redraw();
     };
     img.src = URL.createObjectURL(file);
+  }
+
+  async function openCamera() {
+    setCameraError('');
+    setResult(null);
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setCameraError('Camera access is not supported in this browser. Choose an image from your gallery instead.');
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: 'environment' } },
+        audio: false,
+      });
+      streamRef.current = stream;
+      setCameraOpen(true);
+    } catch {
+      setCameraError('Camera access was denied or unavailable. Check your browser permission, then try again.');
+    }
+  }
+
+  function closeCamera() {
+    streamRef.current?.getTracks().forEach((track) => track.stop());
+    streamRef.current = null;
+    setCameraOpen(false);
+  }
+
+  function capturePhoto() {
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    if (!video?.videoWidth || !video?.videoHeight) return;
+
+    const scale = Math.min(1, MAX_W / video.videoWidth);
+    canvas.width = Math.round(video.videoWidth * scale);
+    canvas.height = Math.round(video.videoHeight * scale);
+    canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+
+    const image = new Image();
+    image.onload = () => {
+      imgRef.current = image;
+      boxesRef.current = [];
+      setHasImage(true);
+      closeCamera();
+      redraw();
+    };
+    image.src = canvas.toDataURL('image/jpeg', 0.9);
   }
 
   function pos(e) {
@@ -135,11 +198,42 @@ export default function PrescriptionUpload() {
       )}
 
       <div className="pm-card p-3">
-        {!hasImage && (
-          <label className="pm-btn-primary d-block text-center" style={{ cursor: 'pointer' }}>
-            📷 Choose or take a photo
-            <input type="file" accept="image/*" capture="environment" hidden onChange={onFile} />
-          </label>
+        {!hasImage && !cameraOpen && (
+          <div className="d-grid gap-2">
+            <button type="button" className="pm-btn-primary" onClick={openCamera}>
+              📷 Take Photo
+            </button>
+            <label className="btn btn-outline-secondary d-block text-center" style={{ cursor: 'pointer' }}>
+              🖼️ Choose from Gallery
+              <input type="file" accept="image/*" hidden onChange={onFile} />
+            </label>
+          </div>
+        )}
+
+        {cameraError && <div className="pm-banner pm-banner--warn mb-3">{cameraError}</div>}
+
+        {cameraOpen && (
+          <div>
+            <video
+              ref={videoRef}
+              autoPlay
+              playsInline
+              muted
+              className="w-100 rounded"
+              style={{ background: '#111', maxHeight: 420, objectFit: 'cover' }}
+            />
+            <p className="text-muted small mt-2 mb-2">
+              Position the full prescription inside the frame, then capture it.
+            </p>
+            <div className="d-flex gap-2">
+              <button type="button" className="pm-btn-primary" onClick={capturePhoto}>
+                📸 Capture Photo
+              </button>
+              <button type="button" className="btn btn-outline-secondary" onClick={closeCamera}>
+                Cancel
+              </button>
+            </div>
+          </div>
         )}
 
         <canvas
@@ -170,7 +264,7 @@ export default function PrescriptionUpload() {
                 className="btn btn-sm btn-outline-secondary mb-0"
                 style={{ cursor: 'pointer' }}
               >
-                Replace photo
+                Take or replace photo
                 <input
                   type="file"
                   accept="image/*"

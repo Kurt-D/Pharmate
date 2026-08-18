@@ -172,8 +172,8 @@ router.get('/drugs', async (req, res) => {
 // ── POST /api/patient/medications ─────────────────────────────────────────────
 // Encode a medication. Handles three outcomes:
 //   1. Restricted substance  → 403 + "visit nearest branch" redirect (TC-11)
-//   2. Uncurated drug        → pending_drug_request, med not schedulable (D-D)
-//   3. Curated drug          → encoded, frequency normalized via the parser
+//   2. Unknown/unverified drug → pending_drug_request, med not schedulable (D-D)
+//   3. Verified OTC drug      → active immediately; verified Rx → prescription validation
 router.post('/medications', async (req, res) => {
   const {
     drug_name,
@@ -217,12 +217,11 @@ router.post('/medications', async (req, res) => {
   try {
     await conn.beginTransaction();
 
-    if (drug) {
-      // 3. Curated drug — encode normally.
-      // The drug's PH FDA class is authoritative: an Rx drug MUST go through
-      // prescription validation, even if the patient labeled it OTC. It cannot
-      // be self-added as active — it lands in pending_validation for upload.
-      const effectiveSource = drug.rx_class === 'RX' ? 'RX_VALIDATED' : source;
+    if (drug && !drug.is_provisional) {
+      // The verified formulary classification is authoritative. A known OTC drug
+      // is active immediately regardless of where the patient obtained it; a
+      // known Rx drug must always go through prescription validation.
+      const effectiveSource = drug.rx_class === 'RX' ? 'RX_VALIDATED' : 'OTC_SELF';
       const prn = is_prn !== undefined ? (is_prn ? 1 : 0) : drug.is_prn_default;
       const status = effectiveSource === 'RX_VALIDATED' ? 'pending_validation' : 'active';
       await conn.execute(
@@ -261,7 +260,8 @@ router.post('/medications', async (req, res) => {
       });
     }
 
-    // Uncurated drug (D-D): create the med as pending_drug + raise a curation request.
+    // Unknown or provisional (not pharmacist-verified) drug: create the med as
+    // pending_drug and raise a curation request. It cannot be scheduled yet.
     await conn.execute(
       `INSERT INTO medications
          (id, patient_id, drug_id, drug_name_raw, source, is_prn, frequency,
