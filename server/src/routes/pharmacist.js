@@ -83,12 +83,14 @@ router.get('/patients', async (_req, res) => {
 
 // ── Ask Your Pharmacist — pharmacist side (D-I) ───────────────────────────────
 // Queue and threads show patient_code only; never a name.
-router.get('/inquiries', async (_req, res) => {
-  res.json(await pharmacistQueue());
+router.get('/inquiries', async (req, res) => {
+  res.json(await pharmacistQueue(req.user.sub));
 });
 
 router.get('/inquiries/:id/messages', async (req, res) => {
-  res.json(await getMessages(req.params.id));
+  const result = await getMessages(req.params.id, 'pharmacist', req.user.sub);
+  if (result.error === 'not_found') return res.status(404).json({ error: 'Thread not found' });
+  res.json(result.messages);
 });
 
 router.post('/inquiries/:id/reply', async (req, res) => {
@@ -101,7 +103,7 @@ router.post('/inquiries/:id/reply', async (req, res) => {
 });
 
 router.post('/inquiries/:id/close', async (req, res) => {
-  const result = await closeThread(req.params.id);
+  const result = await closeThread(req.params.id, 'pharmacist', req.user.sub);
   if (result.error === 'not_found') return res.status(404).json({ error: 'Thread not found' });
   res.json({ message: 'Inquiry closed; server-side messages purged', ...result });
 });

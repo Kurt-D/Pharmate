@@ -454,16 +454,17 @@ router.post('/inquiries/:id/messages', async (req, res) => {
   const result = await postMessage(req.params.id, 'patient', req.user.sub, message);
   if (result.error === 'not_found') return res.status(404).json({ error: 'Thread not found' });
   if (result.error === 'closed') return res.status(409).json({ error: 'This inquiry is closed' });
-  if (result.error === 'forbidden') return res.status(403).json({ error: 'Not your inquiry' });
   res.status(201).json(result);
 });
 
 router.get('/inquiries/:id/messages', async (req, res) => {
-  res.json(await getMessages(req.params.id));
+  const result = await getMessages(req.params.id, 'patient', req.user.sub);
+  if (result.error === 'not_found') return res.status(404).json({ error: 'Thread not found' });
+  res.json(result.messages);
 });
 
 router.post('/inquiries/:id/close', async (req, res) => {
-  const result = await closeThread(req.params.id);
+  const result = await closeThread(req.params.id, 'patient', req.user.sub);
   if (result.error === 'not_found') return res.status(404).json({ error: 'Thread not found' });
   res.json({ message: 'Inquiry closed; server-side messages purged', ...result });
 });

@@ -46,38 +46,88 @@ export async function openThread(
 
 /** Append a message. Only the thread's patient (or the assigned pharmacist) may post. */
 export async function postMessage(threadId, senderRole, senderId, message) {
-  const [[thread]] = await pool.execute(
-    'SELECT patient_id, pharmacist_id, status FROM inquiry_threads WHERE id = ?',
-    [threadId]
-  );
-  if (!thread) return { error: 'not_found' };
-  if (thread.status !== 'open') return { error: 'closed' };
-  if (senderRole === 'patient' && thread.patient_id !== senderId) return { error: 'forbidden' };
-
-  // A pharmacist replying claims the thread (first responder).
-  if (senderRole === 'pharmacist') {
-    await pool.execute(
-      'UPDATE inquiry_threads SET pharmacist_id = COALESCE(pharmacist_id, ?) WHERE id = ?',
-      [senderId, threadId]
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const [[thread]] = await conn.execute(
+      `SELECT patient_id, pharmacist_id, status FROM inquiry_threads
+       WHERE id = ? FOR UPDATE`,
+      [threadId]
     );
-  }
+    if (!thread || (senderRole === 'patient' && thread.patient_id !== senderId)) {
+      await conn.rollback();
+      return { error: 'not_found' };
+    }
+    if (senderRole === 'pharmacist') {
+      if (thread.pharmacist_id && thread.pharmacist_id !== senderId) {
+        await conn.rollback();
+        return { error: 'not_found' };
+      }
+      if (!thread.pharmacist_id) {
+        await conn.execute('UPDATE inquiry_threads SET pharmacist_id = ? WHERE id = ?', [
+          senderId,
+          threadId,
+        ]);
+      }
+    }
+    if (thread.status !== 'open') {
+      await conn.rollback();
+      return { error: 'closed' };
+    }
 
-  const id = uuidv4();
-  await pool.execute(
-    `INSERT INTO inquiry_messages (id, thread_id, sender_role, message) VALUES (?, ?, ?, ?)`,
-    [id, threadId, senderRole, message]
-  );
-  return { message_id: id };
+    const id = uuidv4();
+    await conn.execute(
+      `INSERT INTO inquiry_messages (id, thread_id, sender_role, message) VALUES (?, ?, ?, ?)`,
+      [id, threadId, senderRole, message]
+    );
+    await conn.commit();
+    return { message_id: id };
+  } catch (err) {
+    await conn.rollback();
+    throw err;
+  } finally {
+    conn.release();
+  }
 }
 
 /** Poll a thread's messages (patient or assigned pharmacist). */
-export async function getMessages(threadId) {
-  const [rows] = await pool.execute(
-    `SELECT id, sender_role, message, sent_at FROM inquiry_messages
-     WHERE thread_id = ? ORDER BY sent_at ASC`,
-    [threadId]
-  );
-  return rows;
+export async function getMessages(threadId, viewerRole, viewerId) {
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const [[thread]] = await conn.execute(
+      `SELECT patient_id, pharmacist_id FROM inquiry_threads WHERE id = ? FOR UPDATE`,
+      [threadId]
+    );
+    if (!thread || (viewerRole === 'patient' && thread.patient_id !== viewerId)) {
+      await conn.rollback();
+      return { error: 'not_found' };
+    }
+    if (viewerRole === 'pharmacist') {
+      if (thread.pharmacist_id && thread.pharmacist_id !== viewerId) {
+        await conn.rollback();
+        return { error: 'not_found' };
+      }
+      if (!thread.pharmacist_id) {
+        await conn.execute('UPDATE inquiry_threads SET pharmacist_id = ? WHERE id = ?', [
+          viewerId,
+          threadId,
+        ]);
+      }
+    }
+    const [rows] = await conn.execute(
+      `SELECT id, sender_role, message, sent_at FROM inquiry_messages
+       WHERE thread_id = ? ORDER BY sent_at ASC`,
+      [threadId]
+    );
+    await conn.commit();
+    return { messages: rows };
+  } catch (err) {
+    await conn.rollback();
+    throw err;
+  } finally {
+    conn.release();
+  }
 }
 
 /**
@@ -85,12 +135,23 @@ export async function getMessages(threadId) {
  * as a closed stub (patient_code-linked, no content); the patient device keeps
  * the conversation locally.
  */
-export async function closeThread(threadId) {
-  const [[thread]] = await pool.execute('SELECT id FROM inquiry_threads WHERE id = ?', [threadId]);
-  if (!thread) return { error: 'not_found' };
+export async function closeThread(threadId, closerRole, closerId) {
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
+    const [[thread]] = await conn.execute(
+      `SELECT patient_id, pharmacist_id FROM inquiry_threads WHERE id = ? FOR UPDATE`,
+      [threadId]
+    );
+    const ownsThread =
+      thread &&
+      (closerRole === 'patient'
+        ? thread.patient_id === closerId
+        : thread.pharmacist_id === closerId);
+    if (!ownsThread) {
+      await conn.rollback();
+      return { error: 'not_found' };
+    }
     await conn.execute('DELETE FROM inquiry_messages WHERE thread_id = ?', [threadId]);
     await conn.execute(
       "UPDATE inquiry_threads SET status = 'closed', closed_at = NOW(3) WHERE id = ?",
@@ -117,14 +178,15 @@ export async function patientThreads(patientId) {
 }
 
 /** The pharmacist queue — open threads by patient_code only, high priority first (B-8). */
-export async function pharmacistQueue() {
+export async function pharmacistQueue(pharmacistId) {
   const [rows] = await pool.execute(
     `SELECT t.id, t.priority, t.subject, t.opened_at, p.patient_code,
             (SELECT COUNT(*) FROM inquiry_messages m WHERE m.thread_id = t.id) AS message_count
      FROM inquiry_threads t
      JOIN patients p ON p.id = t.patient_id
-     WHERE t.status = 'open'
-     ORDER BY (t.priority = 'high') DESC, t.opened_at ASC`
+     WHERE t.status = 'open' AND (t.pharmacist_id IS NULL OR t.pharmacist_id = ?)
+     ORDER BY (t.priority = 'high') DESC, t.opened_at ASC`,
+    [pharmacistId]
   );
   return rows;
 }
