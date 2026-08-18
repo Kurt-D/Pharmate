@@ -8,6 +8,7 @@ import { encrypt } from '../utils/crypto.js';
 import { generatePatientCode } from '../utils/patientCode.js';
 import { requireAuth } from '../middleware/auth.js';
 import { failedAttemptLimit, rateLimit } from '../middleware/rateLimit.js';
+import { validatePassword } from '../utils/passwordPolicy.js';
 
 const router = Router();
 
@@ -23,7 +24,10 @@ const loginLimit = rateLimit({ windowMs: FIFTEEN_MINUTES, max: 20 });
 const failedLoginLimit = failedAttemptLimit({
   windowMs: FIFTEEN_MINUTES,
   max: 5,
-  keyGenerator: (req) => `${req.ip}:${String(req.body?.email || '').trim().toLowerCase()}`,
+  keyGenerator: (req) =>
+    `${req.ip}:${String(req.body?.email || '')
+      .trim()
+      .toLowerCase()}`,
 });
 const refreshLimit = rateLimit({ windowMs: FIFTEEN_MINUTES, max: 30 });
 
@@ -51,9 +55,8 @@ router.post('/register', registerLimit, async (req, res) => {
   if (role !== 'patient') {
     return res.status(403).json({ error: 'Public registration is available only to patients' });
   }
-  if (password.length < 8) {
-    return res.status(400).json({ error: 'Password must be at least 8 characters' });
-  }
+  const passwordError = validatePassword(password);
+  if (passwordError) return res.status(400).json({ error: passwordError });
 
   const [existing] = await pool.execute('SELECT id FROM users WHERE email = ?', [email]);
   if (existing.length > 0) {
@@ -111,7 +114,7 @@ router.post('/login', loginLimit, failedLoginLimit, async (req, res) => {
   }
 
   const [rows] = await pool.execute(
-    'SELECT id, password_hash, role, is_active FROM users WHERE email = ?',
+    'SELECT id, password_hash, role, is_active, session_version FROM users WHERE email = ?',
     [email]
   );
   const user = rows[0];
@@ -132,7 +135,7 @@ router.post('/login', loginLimit, failedLoginLimit, async (req, res) => {
     extra = { patientCode: pRows[0]?.patient_code ?? null };
   }
 
-  const payload = { sub: user.id, role: user.role };
+  const payload = { sub: user.id, role: user.role, sessionVersion: user.session_version };
   const accessToken = signAccess(payload);
   const rawRefresh = randomBytes(40).toString('hex');
 
@@ -155,7 +158,8 @@ router.post('/refresh', refreshLimit, async (req, res) => {
 
   const tokenHash = hashToken(refreshToken);
   const [rows] = await pool.execute(
-    `SELECT rt.id, rt.user_id, rt.expires_at, rt.revoked, u.role, u.is_active
+    `SELECT rt.id, rt.user_id, rt.expires_at, rt.revoked, u.role, u.is_active,
+            u.session_version
      FROM refresh_tokens rt
      JOIN users u ON u.id = rt.user_id
      WHERE rt.token_hash = ?`,
@@ -177,7 +181,11 @@ router.post('/refresh', refreshLimit, async (req, res) => {
     [uuidv4(), record.user_id, hashToken(newRaw), refreshExpiresAt()]
   );
 
-  const accessToken = signAccess({ sub: record.user_id, role: record.role });
+  const accessToken = signAccess({
+    sub: record.user_id,
+    role: record.role,
+    sessionVersion: record.session_version,
+  });
   res.json({ accessToken, refreshToken: newRaw });
 });
 
@@ -191,6 +199,74 @@ router.post('/logout', requireAuth, async (req, res) => {
     );
   }
   res.json({ message: 'Logged out' });
+});
+
+// ── POST /api/auth/change-password ───────────────────────────────────────────
+router.post('/change-password', requireAuth, async (req, res) => {
+  const { current_password: currentPassword, new_password: newPassword } = req.body;
+  if (!currentPassword || !newPassword) {
+    return res.status(400).json({ error: 'current_password and new_password are required' });
+  }
+  const passwordError = validatePassword(newPassword);
+  if (passwordError) return res.status(400).json({ error: passwordError });
+
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const [rows] = await conn.execute(
+      'SELECT password_hash FROM users WHERE id = ? AND is_active = 1 FOR UPDATE',
+      [req.user.sub]
+    );
+    const user = rows[0];
+    const matches = user ? await bcrypt.compare(currentPassword, user.password_hash) : false;
+    if (!matches) {
+      await conn.rollback();
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
+    if (await bcrypt.compare(newPassword, user.password_hash)) {
+      await conn.rollback();
+      return res.status(400).json({ error: 'New password must differ from current password' });
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, BCRYPT_COST);
+    await conn.execute(
+      'UPDATE users SET password_hash = ?, session_version = session_version + 1 WHERE id = ?',
+      [passwordHash, req.user.sub]
+    );
+    await conn.execute(
+      'UPDATE refresh_tokens SET revoked = 1, revoked_at = NOW(3) WHERE user_id = ? AND revoked = 0',
+      [req.user.sub]
+    );
+    await conn.commit();
+    res.json({ message: 'Password changed successfully' });
+  } catch (error) {
+    await conn.rollback();
+    throw error;
+  } finally {
+    conn.release();
+  }
+});
+
+// ── POST /api/auth/logout-all ────────────────────────────────────────────────
+router.post('/logout-all', requireAuth, async (req, res) => {
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    await conn.execute('UPDATE users SET session_version = session_version + 1 WHERE id = ?', [
+      req.user.sub,
+    ]);
+    await conn.execute(
+      'UPDATE refresh_tokens SET revoked = 1, revoked_at = NOW(3) WHERE user_id = ? AND revoked = 0',
+      [req.user.sub]
+    );
+    await conn.commit();
+    res.json({ message: 'Logged out from all sessions' });
+  } catch (error) {
+    await conn.rollback();
+    throw error;
+  } finally {
+    conn.release();
+  }
 });
 
 export default router;

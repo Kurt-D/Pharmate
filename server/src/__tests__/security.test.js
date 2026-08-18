@@ -1,7 +1,7 @@
 import request from 'supertest';
-import jwt from 'jsonwebtoken';
 import app from '../index.js';
 import { validateEnvironment } from '../config/environment.js';
+import { createAccessToken, createPrivilegedTestUser } from './helpers/testUsers.js';
 
 const PASSWORD = 'TestPass@123';
 
@@ -37,11 +37,12 @@ describe('authentication rate limits', () => {
   });
 
   test('applies the stricter failed-attempt limit to caregiver invite redemption', async () => {
-    const accessToken = jwt.sign(
-      { sub: 'security-test-caregiver', role: 'caregiver' },
-      process.env.JWT_SECRET,
-      { expiresIn: '5m' }
-    );
+    const caregiverId = await createPrivilegedTestUser({
+      email: `security-caregiver.${Date.now()}@test.pharmate`,
+      password: PASSWORD,
+      role: 'caregiver',
+    });
+    const accessToken = await createAccessToken(caregiverId);
     const authorization = `Bearer ${accessToken}`;
 
     for (let attempt = 0; attempt < 5; attempt += 1) {
@@ -92,9 +93,9 @@ describe('startup environment validation', () => {
 
   test('rejects missing required settings without exposing values', () => {
     const secret = 'do-not-expose-this-value';
-    expect(() => validateEnvironment({ ...validEnvironment, DB_HOST: '', DB_PASS: secret })).toThrow(
-      /Missing required environment variables: DB_HOST/
-    );
+    expect(() =>
+      validateEnvironment({ ...validEnvironment, DB_HOST: '', DB_PASS: secret })
+    ).toThrow(/Missing required environment variables: DB_HOST/);
     try {
       validateEnvironment({ ...validEnvironment, DB_HOST: '', DB_PASS: secret });
     } catch (error) {
@@ -103,9 +104,9 @@ describe('startup environment validation', () => {
   });
 
   test('rejects short or shared JWT secrets', () => {
-    expect(() =>
-      validateEnvironment({ ...validEnvironment, JWT_SECRET: 'short' })
-    ).toThrow(/JWT_SECRET must be at least 64 characters/);
+    expect(() => validateEnvironment({ ...validEnvironment, JWT_SECRET: 'short' })).toThrow(
+      /JWT_SECRET must be at least 64 characters/
+    );
     expect(() =>
       validateEnvironment({
         ...validEnvironment,

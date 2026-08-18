@@ -1,4 +1,5 @@
 import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
 import { v4 as uuidv4 } from 'uuid';
 import { pool } from '../../db/connection.js';
 
@@ -39,4 +40,22 @@ export async function createPrivilegedTestUser({ email, password, role, fullName
   } finally {
     conn.release();
   }
+}
+
+/** Sign an access token that matches the user's current database session. */
+export async function createAccessToken(userId, overrides = {}) {
+  const [rows] = await pool.execute('SELECT role, session_version FROM users WHERE id = ?', [
+    userId,
+  ]);
+  if (!rows[0]) throw new Error(`Test user not found: ${userId}`);
+  return jwt.sign(
+    {
+      sub: userId,
+      role: rows[0].role,
+      sessionVersion: rows[0].session_version,
+      ...overrides,
+    },
+    process.env.JWT_SECRET,
+    { expiresIn: '5m' }
+  );
 }

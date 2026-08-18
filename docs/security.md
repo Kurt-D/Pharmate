@@ -29,9 +29,50 @@ The pilot runs a single key epoch. A rotation only applies if the key is suspect
 ## JWT Tokens (D-G)
 
 - Access tokens: 15-minute TTL, signed with `JWT_SECRET`.
+- Access tokens contain the user's current `sessionVersion`. Every protected request reloads the
+  user and rejects the token if the user is missing, inactive, or has a different session version.
 - Refresh tokens: opaque 80-character random values with a 30-day TTL; only their SHA-256 hashes are stored in `refresh_tokens`.
 - `JWT_SECRET` and `JWT_REFRESH_SECRET` are required to be different and at least 64 characters. The refresh secret is reserved for cryptographically separated refresh-token operations.
-- On logout or suspicious activity, call `DELETE /api/auth/logout` to revoke the refresh token.
+- Ordinary logout revokes only the refresh token supplied by that client. Password changes and
+  logout-all increment the user's session version and revoke every refresh token atomically.
+
+## Authentication API contracts
+
+All request and response bodies are JSON. Protected endpoints require
+`Authorization: Bearer <accessToken>`. Authentication failures use a generic `401` response and
+clients must return the user to login; they should not attempt to distinguish a deleted account,
+disabled account, expired token, or invalidated session.
+
+### `POST /api/auth/change-password`
+
+Protected; available to patients, caregivers, pharmacists, and admins.
+
+Request:
+
+```json
+{
+  "current_password": "the current password",
+  "new_password": "a new password"
+}
+```
+
+The new password must contain at least 12 characters, must fit within bcrypt's 72-byte UTF-8 input
+limit, and must differ from the current password. No character-class combination is required.
+Success returns `200` with `{ "message": "Password changed successfully" }` and no tokens. All
+existing access and refresh sessions become invalid immediately. Missing or policy-invalid fields
+return `400`; an incorrect current password returns generic `401`.
+
+### `POST /api/auth/logout-all`
+
+Protected and takes no request fields. Success returns `200` with
+`{ "message": "Logged out from all sessions" }` and no tokens. Every existing access and refresh
+session, including the caller's, becomes invalid immediately.
+
+### `POST /api/auth/logout`
+
+Protected. Send `{ "refreshToken": "the current device refresh token" }`. Only that supplied token
+is revoked; other devices remain signed in. Success returns `200` with
+`{ "message": "Logged out" }`.
 
 ## API boundary controls
 
