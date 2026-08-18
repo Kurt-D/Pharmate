@@ -10,8 +10,8 @@ import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 
 function getKey() {
   const hex = process.env.AES_KEY;
-  if (!hex || hex.length !== 64) {
-    throw new Error('AES_KEY must be 64 hex chars (32 bytes). Generate: openssl rand -hex 32');
+  if (!hex || !/^[a-fA-F0-9]{64}$/.test(hex)) {
+    throw new Error('AES_KEY must be exactly 64 hexadecimal characters');
   }
   return Buffer.from(hex, 'hex');
 }

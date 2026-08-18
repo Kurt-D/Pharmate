@@ -6,8 +6,16 @@ import { requireRole } from '../middleware/role.js';
 import { caregiverAlerts } from '../services/alerts.js';
 import { createRefill, createDelivery, listOrders } from '../services/orders.js';
 import { openThread } from '../services/inquiry.js';
+import { failedAttemptLimit, rateLimit } from '../middleware/rateLimit.js';
 
 const router = Router();
+
+const inviteLimit = rateLimit({ windowMs: 15 * 60 * 1000, max: 10 });
+const failedInviteLimit = failedAttemptLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  keyGenerator: (req) => `${req.ip}:${req.user?.sub || 'anonymous'}`,
+});
 
 router.use(requireAuth, requireRole('caregiver'));
 
@@ -145,7 +153,7 @@ router.post('/patients/:code/inquiries', async (req, res) => {
 
 // ── POST /api/caregiver/link ──────────────────────────────────────────────────
 // Caregiver submits a patient's invite code to link accounts
-router.post('/link', async (req, res) => {
+router.post('/link', inviteLimit, failedInviteLimit, async (req, res) => {
   const { code } = req.body;
   if (!code) return res.status(400).json({ error: 'code is required' });
 

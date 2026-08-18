@@ -29,8 +29,20 @@ The pilot runs a single key epoch. A rotation only applies if the key is suspect
 ## JWT Tokens (D-G)
 
 - Access tokens: 15-minute TTL, signed with `JWT_SECRET`.
-- Refresh tokens: 30-day TTL, signed with `JWT_REFRESH_SECRET` (separate secret), hashed and stored in `refresh_tokens`.
+- Refresh tokens: opaque 80-character random values with a 30-day TTL; only their SHA-256 hashes are stored in `refresh_tokens`.
+- `JWT_SECRET` and `JWT_REFRESH_SECRET` are required to be different and at least 64 characters. The refresh secret is reserved for cryptographically separated refresh-token operations.
 - On logout or suspicious activity, call `DELETE /api/auth/logout` to revoke the refresh token.
+
+## API boundary controls
+
+- Browser origins are read from the comma-separated `CORS_ORIGINS` environment variable. In non-production environments, `http://localhost:5173` and `http://127.0.0.1:5173` are additionally allowed. Requests without an `Origin` header, such as native apps and server-to-server clients, remain allowed.
+- JSON request bodies default to a `32kb` maximum, configurable with `JSON_BODY_LIMIT`.
+- Registration is limited to 5 requests per IP per hour. Login is limited to 20 requests per IP per 15 minutes, with a stricter 5-failure limit per IP and normalized email. Refresh is limited to 30 requests per IP per 15 minutes. Caregiver invite redemption is limited to 10 requests per IP per 15 minutes, with a 5-failure limit per IP and caregiver account.
+- Limited responses use HTTP `429`, include `Retry-After` and rate-limit headers, and return a generic JSON error.
+
+## Startup configuration validation
+
+The server refuses to start unless `DB_HOST`, `DB_NAME`, `DB_USER`, `JWT_SECRET`, `JWT_REFRESH_SECRET`, and `AES_KEY` are present. JWT secrets must be separate and at least 64 characters. `AES_KEY` must be exactly 64 hexadecimal characters. Validation errors name invalid settings but never include their values.
 
 ## Prescription Photo Lifecycle (D-K)
 

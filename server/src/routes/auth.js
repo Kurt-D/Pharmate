@@ -7,6 +7,7 @@ import { pool } from '../db/connection.js';
 import { encrypt } from '../utils/crypto.js';
 import { generatePatientCode } from '../utils/patientCode.js';
 import { requireAuth } from '../middleware/auth.js';
+import { failedAttemptLimit, rateLimit } from '../middleware/rateLimit.js';
 
 const router = Router();
 
@@ -15,6 +16,16 @@ const REFRESH_DAYS = Number(process.env.JWT_REFRESH_EXPIRES_DAYS) || 30;
 // bcrypt cost is 12 in production (D-G). Overridable so CI/tests aren't dominated
 // by intentionally-slow hashing; production must leave BCRYPT_COST unset.
 const BCRYPT_COST = Number(process.env.BCRYPT_COST) || 12;
+const FIFTEEN_MINUTES = 15 * 60 * 1000;
+
+const registerLimit = rateLimit({ windowMs: 60 * 60 * 1000, max: 5 });
+const loginLimit = rateLimit({ windowMs: FIFTEEN_MINUTES, max: 20 });
+const failedLoginLimit = failedAttemptLimit({
+  windowMs: FIFTEEN_MINUTES,
+  max: 5,
+  keyGenerator: (req) => `${req.ip}:${String(req.body?.email || '').trim().toLowerCase()}`,
+});
+const refreshLimit = rateLimit({ windowMs: FIFTEEN_MINUTES, max: 30 });
 
 function signAccess(payload) {
   return jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: ACCESS_EXPIRES });
@@ -31,7 +42,7 @@ function refreshExpiresAt() {
 }
 
 // ── POST /api/auth/register ───────────────────────────────────────────────────
-router.post('/register', async (req, res) => {
+router.post('/register', registerLimit, async (req, res) => {
   const { email, password, role, full_name, contact_num, address, medical_condition } = req.body;
 
   if (!email || !password || !role) {
@@ -92,7 +103,7 @@ router.post('/register', async (req, res) => {
 });
 
 // ── POST /api/auth/login ──────────────────────────────────────────────────────
-router.post('/login', async (req, res) => {
+router.post('/login', loginLimit, failedLoginLimit, async (req, res) => {
   const { email, password } = req.body;
   if (!email || !password) {
     return res.status(400).json({ error: 'email and password are required' });
@@ -137,7 +148,7 @@ router.post('/login', async (req, res) => {
 });
 
 // ── POST /api/auth/refresh ────────────────────────────────────────────────────
-router.post('/refresh', async (req, res) => {
+router.post('/refresh', refreshLimit, async (req, res) => {
   const { refreshToken } = req.body;
   if (!refreshToken) return res.status(400).json({ error: 'refreshToken required' });
 
