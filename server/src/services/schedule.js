@@ -12,6 +12,7 @@
  */
 import { v4 as uuidv4 } from 'uuid';
 import { pool } from '../db/connection.js';
+import { createPatientNotification } from './patientNotifications.js';
 import { generateSchedule } from '../../engine/index.js';
 import { buildInteractionMap, checkDose } from '../../engine/constraints.js';
 
@@ -264,6 +265,15 @@ export async function confirmForPatient(patientId, adjusted) {
         [uuidv4(), s.medication_id, patientId, s.scheduled_time, s.generated_reason, version]
       );
     }
+
+    const notificationType = Number(version) === 1 ? 'schedule_confirmed' : 'schedule_changed';
+    await createPatientNotification({
+      patientId,
+      type: notificationType,
+      eventKey: `schedule:${patientId}:version:${version}`,
+      metadata: { schedule_version: Number(version) },
+      executor: conn,
+    });
 
     await conn.commit();
     return { version, count: slots.length, generation_date: generationDate };

@@ -14,6 +14,7 @@ import path from 'node:path';
 import { v4 as uuidv4 } from 'uuid';
 import { pool } from '../db/connection.js';
 import { UPLOADS_DIR } from '../middleware/upload.js';
+import { createPatientNotification } from './patientNotifications.js';
 
 const PURGE_DAYS = 7;
 
@@ -94,8 +95,10 @@ export async function decideValidation(pharmacistId, photoId, action, reason) {
   }
 
   const [rows] = await pool.execute(
-    `SELECT pp.id, pp.status, pp.medication_id
-     FROM prescription_photos pp WHERE pp.id = ?`,
+    `SELECT pp.id, pp.status, pp.medication_id, m.patient_id, m.drug_name_raw
+     FROM prescription_photos pp
+     JOIN medications m ON m.id = pp.medication_id
+     WHERE pp.id = ?`,
     [photoId]
   );
   const photo = rows[0];
@@ -137,6 +140,20 @@ export async function decideValidation(pharmacistId, photoId, action, reason) {
     }
     // reject / needs_clearer: medication stays 'pending_validation' so the
     // patient can upload a clearer photo (TC-04 resubmission path).
+
+    const notificationType = {
+      approve: 'prescription_approved',
+      reject: 'prescription_rejected',
+      needs_clearer: 'prescription_needs_clearer',
+    }[action];
+    await createPatientNotification({
+      patientId: photo.patient_id,
+      type: notificationType,
+      eventKey: `prescription:${photo.id}:${photoStatus}`,
+      medicineName: photo.drug_name_raw,
+      metadata: { prescription_id: photo.id, medication_id: photo.medication_id },
+      executor: conn,
+    });
 
     await conn.commit();
   } catch (err) {

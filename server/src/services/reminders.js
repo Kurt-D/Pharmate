@@ -1,6 +1,7 @@
 /** Preference-aware, privacy-safe online reminder dispatch. */
 import { pool } from '../db/connection.js';
 import { sendPush } from './notifications.js';
+import { createPatientNotification } from './patientNotifications.js';
 
 const MAX_LEAD_MIN = 60;
 const GRACE_MIN = 15;
@@ -91,6 +92,13 @@ export async function dispatchReminders(now = new Date()) {
   const doses = await dueReminders(now);
   const summary = { due: doses.length, sent: 0, no_token: 0, skipped: 0, stale: 0 };
   for (const dose of doses) {
+    await createPatientNotification({
+      patientId: dose.patient_id,
+      type: 'dose_reminder',
+      eventKey: `dose-reminder:${dose.schedule_id}`,
+      medicineName: dose.drug_name,
+      metadata: { schedule_id: dose.schedule_id },
+    });
     if (dose.fcm_token) {
       const result = await sendPush(dose.fcm_token, buildReminderPayload(dose));
       if (result.ok) summary.sent++;

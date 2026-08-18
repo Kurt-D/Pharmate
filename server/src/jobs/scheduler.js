@@ -4,7 +4,7 @@
  *
  *   every minute      → dispatchReminders()  push due-dose reminders (online layer)
  *   every 5 minutes   → sweepMissed()        mark >30-min-overdue doses missed (D-C)
- *   daily 03:15 Manila→ purgePhotos()        retention purge of prescription photos
+ *   daily 03:15 Manila→ purge retained read notifications and prescription photos
  *
  * Ticks are serialized per job (a slow run skips its next overlap) and never
  * throw out — a failure is logged and the next tick tries again. Disable entirely
@@ -15,6 +15,7 @@ import { dispatchReminders } from '../services/reminders.js';
 import { pushConfigured } from '../services/notifications.js';
 import { sweepMissed } from '../services/doses.js';
 import { purgeExpiredPhotos } from '../services/prescription.js';
+import { purgeReadNotifications } from '../services/patientNotifications.js';
 
 const MANILA_TZ = 'Asia/Manila';
 
@@ -66,7 +67,10 @@ export function startScheduler() {
     ),
     cron.schedule(
       '15 3 * * *',
-      guard('purge-photos', () => purgeExpiredPhotos()),
+      guard('purge-retained-data', async () => {
+        await purgeExpiredPhotos();
+        await purgeReadNotifications();
+      }),
       {
         timezone: MANILA_TZ,
       }

@@ -28,11 +28,38 @@ import {
   updatePreferences,
   validatePreferencePatch,
 } from '../services/preferences.js';
+import {
+  listNotifications,
+  markAllNotificationsRead,
+  markNotificationRead,
+  parseNotificationQuery,
+  unreadCount,
+} from '../services/patientNotifications.js';
 
 const router = Router();
 
 // All patient routes require authentication + patient role
 router.use(requireAuth, requireRole('patient'));
+
+router.get('/notifications', async (req, res) => {
+  const parsed = parseNotificationQuery(req.query);
+  if (parsed.error) return res.status(400).json({ error: parsed.error });
+  res.json(await listNotifications(req.user.sub, parsed.value));
+});
+
+router.get('/notifications/unread-count', async (req, res) => {
+  res.json({ unread_count: await unreadCount(req.user.sub) });
+});
+
+router.patch('/notifications/:id/read', async (req, res) => {
+  const notification = await markNotificationRead(req.user.sub, req.params.id);
+  if (!notification) return res.status(404).json({ error: 'Notification not found' });
+  res.json(notification);
+});
+
+router.post('/notifications/read-all', async (req, res) => {
+  res.json({ marked_read: await markAllNotificationsRead(req.user.sub) });
+});
 
 router.get('/preferences', async (req, res) => {
   res.json(await getPreferences(req.user.sub));
