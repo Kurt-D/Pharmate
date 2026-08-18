@@ -34,6 +34,32 @@ export function validateEnvironment(env = process.env) {
     errors.push('AES_KEY must be exactly 64 hexadecimal characters');
   }
 
+  if (env.PASSWORD_RESET_EMAIL_ENABLED === 'true' && env.NODE_ENV !== 'test') {
+    const smtpRequired = [
+      'SMTP_HOST',
+      'SMTP_PORT',
+      'SMTP_USERNAME',
+      'SMTP_PASSWORD',
+      'SMTP_SENDER',
+      'PUBLIC_APP_URL',
+    ];
+    const missingSmtp = smtpRequired.filter((name) => !env[name]?.trim());
+    if (missingSmtp.length) {
+      errors.push(`Missing password-reset email variables: ${missingSmtp.join(', ')}`);
+    }
+    if (env.SMTP_PORT && !/^\d+$/.test(env.SMTP_PORT)) errors.push('SMTP_PORT must be numeric');
+    if (env.PUBLIC_APP_URL) {
+      try {
+        new URL(env.PUBLIC_APP_URL);
+      } catch {
+        errors.push('PUBLIC_APP_URL must be a valid URL');
+      }
+    }
+  }
+  if (env.PASSWORD_RESET_DEV_LOG_TOKEN === 'true' && env.NODE_ENV !== 'development') {
+    errors.push('PASSWORD_RESET_DEV_LOG_TOKEN is allowed only when NODE_ENV=development');
+  }
+
   if (errors.length > 0) {
     const error = new Error(`Invalid server configuration: ${errors.join('; ')}`);
     error.code = 'INVALID_SERVER_CONFIGURATION';

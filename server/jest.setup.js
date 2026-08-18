@@ -12,3 +12,4 @@ process.env.DB_USER ||= 'pharmate';
 process.env.JWT_SECRET = 'test-access-secret-'.padEnd(64, 'a');
 process.env.JWT_REFRESH_SECRET = 'test-refresh-secret-'.padEnd(64, 'b');
 process.env.AES_KEY = 'a'.repeat(64);
+process.env.PUBLIC_APP_URL = 'https://test.pharmate.example';

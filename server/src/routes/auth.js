@@ -9,6 +9,8 @@ import { generatePatientCode } from '../utils/patientCode.js';
 import { requireAuth } from '../middleware/auth.js';
 import { failedAttemptLimit, rateLimit } from '../middleware/rateLimit.js';
 import { validatePassword } from '../utils/passwordPolicy.js';
+import { normalizeEmail } from '../utils/email.js';
+import { deliverPasswordReset } from '../services/passwordResetDelivery.js';
 
 const router = Router();
 
@@ -18,6 +20,9 @@ const REFRESH_DAYS = Number(process.env.JWT_REFRESH_EXPIRES_DAYS) || 30;
 // by intentionally-slow hashing; production must leave BCRYPT_COST unset.
 const BCRYPT_COST = Number(process.env.BCRYPT_COST) || 12;
 const FIFTEEN_MINUTES = 15 * 60 * 1000;
+const RESET_TOKEN_TTL_MS = 30 * 60 * 1000;
+const FORGOT_RESPONSE = { message: 'If the account is eligible, a password reset link will be sent' };
+const INVALID_RESET_RESPONSE = { error: 'Invalid or expired reset token' };
 
 const registerLimit = rateLimit({ windowMs: 60 * 60 * 1000, max: 5 });
 const loginLimit = rateLimit({ windowMs: FIFTEEN_MINUTES, max: 20 });
@@ -30,6 +35,16 @@ const failedLoginLimit = failedAttemptLimit({
       .toLowerCase()}`,
 });
 const refreshLimit = rateLimit({ windowMs: FIFTEEN_MINUTES, max: 30 });
+const forgotIpLimit = rateLimit({
+  windowMs: FIFTEEN_MINUTES,
+  max: process.env.NODE_ENV === 'test' ? 1000 : 5,
+});
+const forgotEmailLimit = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: process.env.NODE_ENV === 'test' ? 1000 : 3,
+  keyGenerator: (req) => normalizeEmail(req.body?.email) || 'invalid-email',
+});
+const resetLimit = rateLimit({ windowMs: FIFTEEN_MINUTES, max: 10 });
 
 function signAccess(payload) {
   return jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: ACCESS_EXPIRES });
@@ -47,7 +62,8 @@ function refreshExpiresAt() {
 
 // ── POST /api/auth/register ───────────────────────────────────────────────────
 router.post('/register', registerLimit, async (req, res) => {
-  const { email, password, role, full_name, contact_num, address, medical_condition } = req.body;
+  const { password, role, full_name, contact_num, address, medical_condition } = req.body;
+  const email = normalizeEmail(req.body.email);
 
   if (!email || !password || !role) {
     return res.status(400).json({ error: 'email, password, and role are required' });
@@ -108,7 +124,8 @@ router.post('/register', registerLimit, async (req, res) => {
 
 // ── POST /api/auth/login ──────────────────────────────────────────────────────
 router.post('/login', loginLimit, failedLoginLimit, async (req, res) => {
-  const { email, password } = req.body;
+  const { password } = req.body;
+  const email = normalizeEmail(req.body.email);
   if (!email || !password) {
     return res.status(400).json({ error: 'email and password are required' });
   }
@@ -149,6 +166,105 @@ router.post('/login', loginLimit, failedLoginLimit, async (req, res) => {
     refreshToken: rawRefresh,
     user: { id: user.id, role: user.role, ...extra },
   });
+});
+
+// ── POST /api/auth/forgot-password ───────────────────────────────────────────
+router.post('/forgot-password', forgotIpLimit, forgotEmailLimit, async (req, res) => {
+  const email = normalizeEmail(req.body?.email);
+  let delivery = null;
+
+  if (email) {
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+      const [rows] = await conn.execute(
+        'SELECT id, email FROM users WHERE email = ? AND is_active = 1 FOR UPDATE',
+        [email]
+      );
+      const user = rows[0];
+      if (user) {
+        const rawToken = randomBytes(32).toString('hex');
+        await conn.execute(
+          'UPDATE password_reset_tokens SET used_at = NOW(3) WHERE user_id = ? AND used_at IS NULL',
+          [user.id]
+        );
+        await conn.execute(
+          `INSERT INTO password_reset_tokens (id, user_id, token_hash, expires_at)
+           VALUES (?, ?, ?, ?)`,
+          [uuidv4(), user.id, hashToken(rawToken), new Date(Date.now() + RESET_TOKEN_TTL_MS)]
+        );
+        delivery = { email: user.email, rawToken };
+      }
+      await conn.commit();
+    } catch (error) {
+      await conn.rollback();
+      throw error;
+    } finally {
+      conn.release();
+    }
+  }
+
+  // Delivery happens after persistence. Failure is deliberately hidden so this endpoint's
+  // status and body cannot disclose whether an eligible account was found.
+  if (delivery) {
+    try {
+      await deliverPasswordReset(delivery);
+    } catch {
+      console.error('Password-reset email delivery failed');
+    }
+  }
+  res.status(202).json(FORGOT_RESPONSE);
+});
+
+// ── POST /api/auth/reset-password ────────────────────────────────────────────
+router.post('/reset-password', resetLimit, async (req, res) => {
+  const { token, new_password: newPassword } = req.body || {};
+  const passwordError = validatePassword(newPassword);
+  if (passwordError) return res.status(400).json({ error: passwordError });
+  if (typeof token !== 'string' || !/^[a-f0-9]{64}$/.test(token)) {
+    return res.status(400).json(INVALID_RESET_RESPONSE);
+  }
+
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const [rows] = await conn.execute(
+      `SELECT prt.id, prt.user_id, prt.expires_at, prt.used_at, u.is_active
+       FROM password_reset_tokens prt
+       JOIN users u ON u.id = prt.user_id
+       WHERE prt.token_hash = ?
+       FOR UPDATE`,
+      [hashToken(token)]
+    );
+    const record = rows[0];
+    if (!record || record.used_at || !record.is_active || new Date(record.expires_at) <= new Date()) {
+      await conn.rollback();
+      return res.status(400).json(INVALID_RESET_RESPONSE);
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, BCRYPT_COST);
+    await conn.execute(
+      `UPDATE users
+       SET password_hash = ?, session_version = session_version + 1
+       WHERE id = ?`,
+      [passwordHash, record.user_id]
+    );
+    await conn.execute(
+      'UPDATE password_reset_tokens SET used_at = NOW(3) WHERE id = ? AND used_at IS NULL',
+      [record.id]
+    );
+    await conn.execute(
+      'UPDATE refresh_tokens SET revoked = 1, revoked_at = NOW(3) WHERE user_id = ? AND revoked = 0',
+      [record.user_id]
+    );
+    await conn.commit();
+    return res.json({ message: 'Password reset successfully' });
+  } catch (error) {
+    await conn.rollback();
+    throw error;
+  } finally {
+    conn.release();
+  }
 });
 
 // ── POST /api/auth/refresh ────────────────────────────────────────────────────

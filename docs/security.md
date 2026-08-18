@@ -74,6 +74,32 @@ Protected. Send `{ "refreshToken": "the current device refresh token" }`. Only t
 is revoked; other devices remain signed in. Success returns `200` with
 `{ "message": "Logged out" }`.
 
+### Password reset
+
+`POST /api/auth/forgot-password` accepts `{ "email": "user@example.com" }` and always returns
+`202` with the same generic body for missing, inactive, and eligible accounts. Requests are limited
+per IP (5 per 15 minutes) and normalized email (3 per hour). Email addresses are trimmed and
+lowercased consistently by registration, login, and password reset.
+
+Eligible accounts receive a link in the form
+`PUBLIC_APP_URL/reset-password?token=<raw-token>`. The raw 256-bit random token is sent only through
+the configured delivery service; MySQL stores its SHA-256 digest. Tokens expire after 30 minutes,
+are single-use, and a new request supersedes all older tokens for that user.
+
+`POST /api/auth/reset-password` accepts `{ "token": "...", "new_password": "..." }`. The new
+password uses the centralized password policy. Invalid, expired, used, and superseded tokens all
+return the same `400` response. A successful reset changes the password and, in one transaction,
+consumes the token, increments `session_version`, and revokes every refresh token.
+
+To enable SMTP delivery set `PASSWORD_RESET_EMAIL_ENABLED=true` and configure `PUBLIC_APP_URL`,
+`SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, and `SMTP_SENDER`. Startup validation
+requires all six values outside tests. Port 465 uses implicit TLS; other ports use Nodemailer's
+STARTTLS negotiation. Tests replace the delivery service and require no SMTP server.
+
+For local development only, `PASSWORD_RESET_DEV_LOG_TOKEN=true` may be used instead of SMTP. It is
+disabled by default, rejected outside `NODE_ENV=development`, and prints a prominent warning because
+the resulting console link is a live credential. Never enable this setting in shared environments.
+
 ## API boundary controls
 
 - Browser origins are read from the comma-separated `CORS_ORIGINS` environment variable. In non-production environments, `http://localhost:5173` and `http://127.0.0.1:5173` are additionally allowed. Requests without an `Origin` header, such as native apps and server-to-server clients, remain allowed.

@@ -120,4 +120,39 @@ describe('startup environment validation', () => {
       /AES_KEY must be exactly 64 hexadecimal characters/
     );
   });
+
+  test('requires complete SMTP configuration only when reset email is enabled', () => {
+    expect(() =>
+      validateEnvironment({
+        ...validEnvironment,
+        NODE_ENV: 'production',
+        PASSWORD_RESET_EMAIL_ENABLED: 'true',
+      })
+    ).toThrow(/SMTP_HOST.*SMTP_PORT.*SMTP_USERNAME.*SMTP_PASSWORD.*SMTP_SENDER.*PUBLIC_APP_URL/);
+
+    expect(() =>
+      validateEnvironment({
+        ...validEnvironment,
+        NODE_ENV: 'test',
+        PASSWORD_RESET_EMAIL_ENABLED: 'true',
+      })
+    ).not.toThrow();
+  });
+
+  test('allows development token logging only with explicit local opt-in', () => {
+    expect(() =>
+      validateEnvironment({
+        ...validEnvironment,
+        NODE_ENV: 'production',
+        PASSWORD_RESET_DEV_LOG_TOKEN: 'true',
+      })
+    ).toThrow(/allowed only when NODE_ENV=development/);
+    expect(() =>
+      validateEnvironment({
+        ...validEnvironment,
+        NODE_ENV: 'development',
+        PASSWORD_RESET_DEV_LOG_TOKEN: 'true',
+      })
+    ).not.toThrow();
+  });
 });
