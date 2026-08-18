@@ -4,7 +4,14 @@ import { pool } from '../db/connection.js';
 import { requireAuth } from '../middleware/auth.js';
 import { requireRole } from '../middleware/role.js';
 import { canonicalName } from '../services/formulary.js';
-import { pendingValidations, photoFilePath, decideValidation } from '../services/prescription.js';
+import {
+  claimValidation,
+  decideValidation,
+  pendingValidations,
+  photoFilePath,
+  releaseValidation,
+  validationHistory,
+} from '../services/prescription.js';
 import { pharmacistFollowups } from '../services/alerts.js';
 import { pharmacistQueue, postMessage, getMessages, closeThread } from '../services/inquiry.js';
 import { orderQueue, updateOrderStatus } from '../services/orders.js';
@@ -126,16 +133,45 @@ router.post('/orders/:kind/:id/status', async (req, res) => {
 
 // ── GET /api/pharmacist/validations ──────────────────────────────────────────
 // Prescription validation queue (UC-03). Patients shown by patient_code only.
-router.get('/validations', async (_req, res) => {
-  res.json(await pendingValidations());
+router.get('/validations', async (req, res) => {
+  res.json(await pendingValidations(req.user.sub));
+});
+
+function claimError(res, result) {
+  if (result.error === 'not_found') return res.status(404).json({ error: 'Validation not found' });
+  if (result.error === 'already_decided') {
+    return res.status(409).json({ error: 'This prescription has already been decided' });
+  }
+  return res.status(409).json({ error: 'Validation is not available' });
+}
+
+router.post('/validations/:id/claim', async (req, res) => {
+  const result = await claimValidation(req.user.sub, req.params.id);
+  if (result.error) return claimError(res, result);
+  res.json(result);
+});
+
+router.delete('/validations/:id/claim', async (req, res) => {
+  const result = await releaseValidation(req.user.sub, req.params.id);
+  if (result.error) return claimError(res, result);
+  res.json(result);
+});
+
+router.get('/validations/:id/history', async (req, res) => {
+  const history = await validationHistory(req.user.sub, req.params.id);
+  if (!history) return res.status(404).json({ error: 'Validation not found' });
+  res.json({ history });
 });
 
 // ── GET /api/pharmacist/validations/:id/photo ────────────────────────────────
 // Serve the redacted prescription image for review. 404 once purged (D-K).
 router.get('/validations/:id/photo', async (req, res) => {
-  const abs = await photoFilePath(req.params.id);
-  if (!abs) return res.status(404).json({ error: 'Photo not available' });
-  res.sendFile(abs);
+  const result = await photoFilePath(req.user.sub, req.params.id);
+  if (result.error === 'not_found' || result.error === 'not_available') {
+    return res.status(404).json({ error: 'Photo not available' });
+  }
+  if (result.error) return res.status(409).json({ error: 'Validation is not available' });
+  res.sendFile(result.path);
 });
 
 // ── POST /api/pharmacist/validate ────────────────────────────────────────────
@@ -157,9 +193,15 @@ router.post('/validate', async (req, res) => {
       .status(400)
       .json({ error: 'A reason is required to reject or request a clearer photo' });
   }
+  if (result.error === 'reason_too_long') {
+    return res.status(400).json({ error: 'reason must not exceed 500 characters' });
+  }
   if (result.error === 'not_found') return res.status(404).json({ error: 'Validation not found' });
   if (result.error === 'already_decided') {
     return res.status(409).json({ error: 'This prescription has already been decided' });
+  }
+  if (result.error === 'claimed') {
+    return res.status(409).json({ error: 'Validation is not available' });
   }
   res.json(result);
 });

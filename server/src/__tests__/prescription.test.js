@@ -103,6 +103,11 @@ describe('Pharmacist validation queue + decision', () => {
     expect(item.patient_code).toMatch(/^PM-[A-Z0-9]{6}$/);
     expect(JSON.stringify(queue.body)).not.toContain('S5 Tester');
 
+    const claim = await request(app)
+      .post(`/api/pharmacist/validations/${photoId}/claim`)
+      .set('Authorization', `Bearer ${pharmToken}`);
+    expect(claim.status).toBe(200);
+
     // The redacted image is served for review.
     const photo = await request(app)
       .get(`/api/pharmacist/validations/${photoId}/photo`)
