@@ -22,11 +22,17 @@ import { verifyLabel } from '../services/labelScan.js';
 import { loyaltyFor } from '../services/adherence.js';
 import { encrypt } from '../utils/crypto.js';
 import { serializePatient } from '../utils/serializer.js';
+import { getPatientDashboard } from '../services/patientDashboard.js';
 
 const router = Router();
 
 // All patient routes require authentication + patient role
 router.use(requireAuth, requireRole('patient'));
+
+// A compact, PII-free summary for the signed-in patient's home screen.
+router.get('/dashboard', async (req, res) => {
+  res.json(await getPatientDashboard(req.user.sub));
+});
 
 // ── GET /api/patient/anchors ──────────────────────────────────────────────────
 router.get('/anchors', async (req, res) => {
