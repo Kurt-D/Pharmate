@@ -12,7 +12,7 @@ import { pool } from '../db/connection.js';
 /** Raise alerts for a newly-missed dose. Caregivers if linked, else pharmacist flag. */
 export async function raiseMissedAlerts(patientId, scheduleId) {
   const [cgs] = await pool.execute(
-    'SELECT caregiver_id FROM caregiver_patients WHERE patient_id = ?',
+    "SELECT caregiver_id FROM caregiver_patients WHERE patient_id = ? AND status = 'active'",
     [patientId]
   );
 
@@ -39,10 +39,12 @@ export async function caregiverAlerts(caregiverId) {
     `SELECT ca.id, ca.status, ca.created_at, p.patient_code,
             m.drug_name_raw AS drug_name, ms.scheduled_time
      FROM caregiver_alerts ca
+     JOIN caregiver_patients cp
+       ON cp.patient_id = ca.patient_id AND cp.caregiver_id = ca.caregiver_id
      JOIN patients p ON p.id = ca.patient_id
      LEFT JOIN medication_schedules ms ON ms.id = ca.schedule_id
      LEFT JOIN medications m ON m.id = ms.medication_id
-     WHERE ca.caregiver_id = ? AND ca.channel = 'caregiver'
+     WHERE ca.caregiver_id = ? AND ca.channel = 'caregiver' AND cp.status = 'active'
      ORDER BY ca.created_at DESC`,
     [caregiverId]
   );

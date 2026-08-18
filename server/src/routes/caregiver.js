@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { createHash } from 'node:crypto';
 import { v4 as uuidv4 } from 'uuid';
 import { pool } from '../db/connection.js';
 import { requireAuth } from '../middleware/auth.js';
@@ -27,7 +28,7 @@ async function linkedPatientId(caregiverId, patientCode) {
     `SELECT p.id
      FROM caregiver_patients cp
      JOIN patients p ON p.id = cp.patient_id
-     WHERE cp.caregiver_id = ? AND p.patient_code = ?`,
+     WHERE cp.caregiver_id = ? AND cp.status = 'active' AND p.patient_code = ?`,
     [caregiverId, String(patientCode ?? '').toUpperCase()]
   );
   return row?.id ?? null;
@@ -75,7 +76,7 @@ router.get('/patients', async (req, res) => {
     `SELECT p.patient_code, cp.linked_at
      FROM caregiver_patients cp
      JOIN patients p ON p.id = cp.patient_id
-     WHERE cp.caregiver_id = ?
+     WHERE cp.caregiver_id = ? AND cp.status = 'active'
      ORDER BY p.patient_code`,
     [req.user.sub]
   );
@@ -154,42 +155,76 @@ router.post('/patients/:code/inquiries', async (req, res) => {
 // ── POST /api/caregiver/link ──────────────────────────────────────────────────
 // Caregiver submits a patient's invite code to link accounts
 router.post('/link', inviteLimit, failedInviteLimit, async (req, res) => {
-  const { code } = req.body;
+  const code = typeof req.body?.code === 'string' ? req.body.code.trim() : '';
   if (!code) return res.status(400).json({ error: 'code is required' });
-
-  const [rows] = await pool.execute(
-    `SELECT ic.id, ic.patient_id, ic.expires_at, ic.used
-     FROM invite_codes ic
-     WHERE ic.code = ?`,
-    [String(code).toUpperCase()]
-  );
-  const invite = rows[0];
-
-  if (!invite) return res.status(404).json({ error: 'Invalid invite code' });
-  if (invite.used) return res.status(409).json({ error: 'Invite code already used' });
-  if (new Date(invite.expires_at) < new Date()) {
-    return res.status(410).json({ error: 'Invite code has expired' });
-  }
-
-  // Check for existing link
-  const [existing] = await pool.execute(
-    'SELECT id FROM caregiver_patients WHERE caregiver_id = ? AND patient_id = ?',
-    [req.user.sub, invite.patient_id]
-  );
-  if (existing.length > 0) {
-    return res.status(409).json({ error: 'Already linked to this patient' });
-  }
+  const tokenHash = createHash('sha256').update(code).digest('hex');
 
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
-    await conn.execute(
-      'INSERT INTO caregiver_patients (id, caregiver_id, patient_id) VALUES (?, ?, ?)',
-      [uuidv4(), req.user.sub, invite.patient_id]
+    const [[invite]] = await conn.execute(
+      `SELECT id, patient_id, expires_at, used, revoked_at
+       FROM invite_codes WHERE token_hash = ? FOR UPDATE`,
+      [tokenHash]
     );
-    await conn.execute('UPDATE invite_codes SET used = 1, used_at = NOW(3) WHERE id = ?', [
-      invite.id,
-    ]);
+    if (!invite) {
+      await conn.rollback();
+      return res.status(404).json({ error: 'Invalid invite code' });
+    }
+    if (invite.revoked_at) {
+      await conn.rollback();
+      return res.status(404).json({ error: 'Invalid invite code' });
+    }
+    if (invite.used) {
+      await conn.rollback();
+      return res.status(409).json({ error: 'Invite code already used' });
+    }
+    if (new Date(invite.expires_at) <= new Date()) {
+      await conn.rollback();
+      return res.status(410).json({ error: 'Invite code has expired' });
+    }
+
+    const [[existing]] = await conn.execute(
+      `SELECT id, status FROM caregiver_patients
+       WHERE caregiver_id = ? AND patient_id = ? FOR UPDATE`,
+      [req.user.sub, invite.patient_id]
+    );
+    if (existing?.status === 'active') {
+      await conn.rollback();
+      return res.status(409).json({ error: 'Already linked to this patient' });
+    }
+
+    const [claimed] = await conn.execute(
+      `UPDATE invite_codes SET used = 1, used_at = NOW(3)
+       WHERE id = ? AND used = 0 AND revoked_at IS NULL AND expires_at > NOW(3)`,
+      [invite.id]
+    );
+    if (claimed.affectedRows !== 1) {
+      await conn.rollback();
+      return res.status(409).json({ error: 'Invite code already used' });
+    }
+
+    const linkId = existing?.id ?? uuidv4();
+    const eventType = existing ? 'relinked' : 'linked';
+    if (existing) {
+      await conn.execute(
+        `UPDATE caregiver_patients
+         SET status = 'active', linked_at = NOW(3), revoked_at = NULL,
+             revoked_by_patient_id = NULL WHERE id = ?`,
+        [linkId]
+      );
+    } else {
+      await conn.execute(
+        'INSERT INTO caregiver_patients (id, caregiver_id, patient_id) VALUES (?, ?, ?)',
+        [linkId, req.user.sub, invite.patient_id]
+      );
+    }
+    await conn.execute(
+      `INSERT INTO caregiver_link_audit
+         (id, link_id, caregiver_id, patient_id, event_type, actor_user_id, invite_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [uuidv4(), linkId, req.user.sub, invite.patient_id, eventType, req.user.sub, invite.id]
+    );
     await conn.commit();
   } catch (err) {
     await conn.rollback();
@@ -198,7 +233,7 @@ router.post('/link', inviteLimit, failedInviteLimit, async (req, res) => {
     conn.release();
   }
 
-  res.status(201).json({ message: 'Linked to patient', patient_id: invite.patient_id });
+  res.status(201).json({ message: 'Linked to patient' });
 });
 
 export default router;

@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { v4 as uuidv4 } from 'uuid';
 import { pool } from '../db/connection.js';
 import { requireAuth } from '../middleware/auth.js';
@@ -150,22 +150,91 @@ router.delete('/device-token', async (req, res) => {
 });
 
 // ── POST /api/patient/invite ──────────────────────────────────────────────────
-// Generate a single-use 8-char invite code for a caregiver to link with (D-G)
+// Generate a cryptographically random, single-use caregiver invite. Only its
+// SHA-256 digest is persisted; the raw code is returned exactly once.
 router.post('/invite', async (req, res) => {
-  // Invalidate any existing unused codes for this patient first
-  await pool.execute('UPDATE invite_codes SET used = 1 WHERE patient_id = ? AND used = 0', [
-    req.user.sub,
-  ]);
-
-  const code = randomBytes(4).toString('hex').toUpperCase(); // 8 hex chars
-  const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 h
+  const code = randomBytes(16).toString('base64url');
+  const tokenHash = createHash('sha256').update(code).digest('hex');
+  const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+  const id = uuidv4();
 
   await pool.execute(
-    'INSERT INTO invite_codes (id, patient_id, code, expires_at) VALUES (?, ?, ?, ?)',
-    [uuidv4(), req.user.sub, code, expiresAt]
+    `INSERT INTO invite_codes (id, patient_id, code, token_hash, expires_at)
+     VALUES (?, ?, NULL, ?, ?)`,
+    [id, req.user.sub, tokenHash, expiresAt]
   );
 
-  res.status(201).json({ code, expires_at: expiresAt });
+  res.status(201).json({ id, code, expires_at: expiresAt });
+});
+
+// Only active, unused and unexpired invites are visible. The raw code cannot be
+// listed because it is never stored.
+router.get('/invites', async (req, res) => {
+  const [rows] = await pool.execute(
+    `SELECT id, created_at, expires_at
+     FROM invite_codes
+     WHERE patient_id = ? AND used = 0 AND revoked_at IS NULL AND expires_at > NOW(3)
+     ORDER BY created_at DESC`,
+    [req.user.sub]
+  );
+  res.json(rows.map((row) => ({ ...row, status: 'active' })));
+});
+
+router.delete('/invites/:id', async (req, res) => {
+  const [result] = await pool.execute(
+    `UPDATE invite_codes SET revoked_at = NOW(3)
+     WHERE id = ? AND patient_id = ? AND used = 0 AND revoked_at IS NULL`,
+    [req.params.id, req.user.sub]
+  );
+  if (result.affectedRows === 0) return res.status(404).json({ error: 'Invite not found' });
+  res.status(204).end();
+});
+
+router.get('/caregivers', async (req, res) => {
+  const [rows] = await pool.execute(
+    `SELECT cp.id, u.email, cp.linked_at, cp.status
+     FROM caregiver_patients cp
+     JOIN users u ON u.id = cp.caregiver_id
+     WHERE cp.patient_id = ? AND cp.status = 'active'
+     ORDER BY cp.linked_at DESC`,
+    [req.user.sub]
+  );
+  res.json(rows);
+});
+
+router.delete('/caregivers/:linkId', async (req, res) => {
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const [[link]] = await conn.execute(
+      `SELECT id, caregiver_id, patient_id FROM caregiver_patients
+       WHERE id = ? AND patient_id = ? AND status = 'active' FOR UPDATE`,
+      [req.params.linkId, req.user.sub]
+    );
+    if (!link) {
+      await conn.rollback();
+      return res.status(404).json({ error: 'Caregiver link not found' });
+    }
+    await conn.execute(
+      `UPDATE caregiver_patients
+       SET status = 'revoked', revoked_at = NOW(3), revoked_by_patient_id = ?
+       WHERE id = ? AND status = 'active'`,
+      [req.user.sub, link.id]
+    );
+    await conn.execute(
+      `INSERT INTO caregiver_link_audit
+         (id, link_id, caregiver_id, patient_id, event_type, actor_user_id)
+       VALUES (?, ?, ?, ?, 'revoked', ?)`,
+      [uuidv4(), link.id, link.caregiver_id, link.patient_id, req.user.sub]
+    );
+    await conn.commit();
+    return res.status(204).end();
+  } catch (error) {
+    await conn.rollback();
+    throw error;
+  } finally {
+    conn.release();
+  }
 });
 
 // ── GET /api/patient/drugs?q= ─────────────────────────────────────────────────
