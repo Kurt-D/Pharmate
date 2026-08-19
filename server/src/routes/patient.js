@@ -301,7 +301,7 @@ router.get('/drugs', async (req, res) => {
 // ── POST /api/patient/medications ─────────────────────────────────────────────
 // Encode a medication. Handles three outcomes:
 //   1. Restricted substance  → 403 + "visit nearest branch" redirect (TC-11)
-//   2. Unknown/unverified drug → pending_drug_request, med not schedulable (D-D)
+//   2. Unknown drug → pending_drug_request, med not schedulable (D-D)
 //   3. Verified OTC drug      → active immediately; verified Rx → prescription validation
 router.post('/medications', async (req, res) => {
   const {
@@ -346,7 +346,7 @@ router.post('/medications', async (req, res) => {
   try {
     await conn.beginTransaction();
 
-    if (drug && !drug.is_provisional) {
+    if (drug) {
       // The verified formulary classification is authoritative. A known OTC drug
       // is active immediately regardless of where the patient obtained it; a
       // known Rx drug must always go through prescription validation.
@@ -390,8 +390,8 @@ router.post('/medications', async (req, res) => {
       });
     }
 
-    // Unknown or provisional (not pharmacist-verified) drug: create the med as
-    // pending_drug and raise a curation request. It cannot be scheduled yet.
+    // Unknown drug: create the med as pending_drug and raise a curation request.
+    // It cannot be scheduled yet.
     await conn.execute(
       `INSERT INTO medications
          (id, patient_id, drug_id, drug_name_raw, source, is_prn, frequency,
