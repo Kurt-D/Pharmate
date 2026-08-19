@@ -96,7 +96,7 @@ export async function postMessage(threadId, senderRole, senderId, message) {
   try {
     await conn.beginTransaction();
     const [[thread]] = await conn.execute(
-      `SELECT patient_id, pharmacist_id, status FROM inquiry_threads
+      `SELECT patient_id, pharmacist_id, requested_pharmacist_id, status FROM inquiry_threads
        WHERE id = ? FOR UPDATE`,
       [threadId]
     );
@@ -105,9 +105,16 @@ export async function postMessage(threadId, senderRole, senderId, message) {
       return { error: 'not_found' };
     }
     if (senderRole === 'pharmacist') {
-      if (!thread.pharmacist_id || thread.pharmacist_id !== senderId) {
+      if (thread.requested_pharmacist_id && thread.requested_pharmacist_id !== senderId) {
         await conn.rollback();
-        return { error: 'not_accepted' };
+        return { error: 'not_found' };
+      }
+      if (thread.pharmacist_id && thread.pharmacist_id !== senderId) {
+        await conn.rollback();
+        return { error: 'not_found' };
+      }
+      if (!thread.pharmacist_id) {
+        await conn.execute('UPDATE inquiry_threads SET pharmacist_id=? WHERE id=?', [senderId, threadId]);
       }
     }
     if (thread.status !== 'open') {
@@ -136,7 +143,8 @@ export async function getMessages(threadId, viewerRole, viewerId) {
   try {
     await conn.beginTransaction();
     const [[thread]] = await conn.execute(
-      `SELECT patient_id, pharmacist_id FROM inquiry_threads WHERE id = ? FOR UPDATE`,
+      `SELECT patient_id, pharmacist_id, requested_pharmacist_id, status
+       FROM inquiry_threads WHERE id = ? FOR UPDATE`,
       [threadId]
     );
     if (!thread || (viewerRole === 'patient' && thread.patient_id !== viewerId)) {
@@ -144,9 +152,20 @@ export async function getMessages(threadId, viewerRole, viewerId) {
       return { error: 'not_found' };
     }
     if (viewerRole === 'pharmacist') {
-      if (!thread.pharmacist_id || thread.pharmacist_id !== viewerId) {
+      if (thread.requested_pharmacist_id && thread.requested_pharmacist_id !== viewerId) {
         await conn.rollback();
-        return { error: 'not_accepted' };
+        return { error: 'not_found' };
+      }
+      if (thread.pharmacist_id && thread.pharmacist_id !== viewerId) {
+        await conn.rollback();
+        return { error: 'not_found' };
+      }
+      if (!thread.pharmacist_id) {
+        if (thread.status !== 'open') {
+          await conn.rollback();
+          return { error: 'not_found' };
+        }
+        await conn.execute('UPDATE inquiry_threads SET pharmacist_id=? WHERE id=?', [viewerId, threadId]);
       }
     }
     const [rows] = await conn.execute(

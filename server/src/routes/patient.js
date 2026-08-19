@@ -203,11 +203,9 @@ router.delete('/device-token', async (req, res) => {
 // Generate a cryptographically random, single-use caregiver invite. Only its
 // SHA-256 digest is persisted; the raw code is returned exactly once.
 router.post('/invite', async (req, res) => {
-  // 60 bits of entropy in a short, readable code. The alphabet omits easily
-  // confused characters (0/O and 1/I), and the code remains single-use/24-hour.
-  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  const compactCode = Array.from(randomBytes(12), (byte) => alphabet[byte & 31]).join('');
-  const code = compactCode.match(/.{1,4}/g).join('-');
+  // 128 bits of entropy encoded as unpadded base64url (22 chars), matching the
+  // existing invite-code contract used by tests and clients.
+  const code = randomBytes(16).toString('base64url');
   const tokenHash = createHash('sha256').update(code).digest('hex');
   const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
   const id = uuidv4();

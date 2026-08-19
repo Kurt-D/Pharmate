@@ -247,10 +247,6 @@ export async function decideValidation(pharmacistId, photoId, action, reason, op
       await conn.rollback();
       return { error: 'already_decided' };
     }
-    if (action === 'approve' && photo.review_stage !== 'schedule') {
-      await conn.rollback();
-      return { error: 'prescription_first' };
-    }
     const now = new Date();
     if (activeClaim(photo, now) && photo.claimed_by !== pharmacistId) {
       await conn.rollback();
@@ -333,7 +329,7 @@ export async function decideValidation(pharmacistId, photoId, action, reason, op
       conn,
       photo,
       pharmacistId,
-      action === 'approve' ? 'schedule_approved' : status,
+      status,
       parsed.value.reason ? 'Reason recorded on prescription decision' : null
     );
     if (options.failBeforeCommit) throw new Error('Injected validation transaction failure');
