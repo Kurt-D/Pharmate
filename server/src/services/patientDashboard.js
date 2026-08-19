@@ -25,8 +25,7 @@ function summarize(rows) {
     taken,
     taken_late: takenLate,
     missed,
-    adherence_percentage:
-      eligibleDoses === 0 ? null : ((taken + takenLate) / eligibleDoses) * 100,
+    adherence_percentage: eligibleDoses === 0 ? null : ((taken + takenLate) / eligibleDoses) * 100,
   };
 }
 
@@ -63,9 +62,7 @@ export function calculatePatientDashboard(rows, now = new Date()) {
         new Date(dose.scheduled_time).getTime() > nowMs &&
         ['scheduled', 'snoozed'].includes(dose.status)
     )
-    .sort(
-      (a, b) => new Date(a.scheduled_time).getTime() - new Date(b.scheduled_time).getTime()
-    );
+    .sort((a, b) => new Date(a.scheduled_time).getTime() - new Date(b.scheduled_time).getTime());
 
   const newestFirst = [...arrived].sort(
     (a, b) => new Date(b.scheduled_time).getTime() - new Date(a.scheduled_time).getTime()

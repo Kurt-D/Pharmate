@@ -13,10 +13,13 @@ const FREQ_OPTIONS = [
 ];
 
 export default function AddMedicine() {
-  const { language } = useLanguage(); const tr = (english, filipino) => language === 'fil' ? filipino : english;
+  const { language } = useLanguage();
+  const tr = (english, filipino) => (language === 'fil' ? filipino : english);
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const [entryMode, setEntryMode] = useState(searchParams.get('mode') === 'manual' ? 'manual' : null);
+  const [entryMode, setEntryMode] = useState(
+    searchParams.get('mode') === 'manual' ? 'manual' : null
+  );
 
   const [name, setName] = useState('');
   const [strength, setStrength] = useState('');
@@ -59,7 +62,11 @@ export default function AddMedicine() {
   async function handleSubmit(e) {
     e.preventDefault();
     setResult(null);
-    const frequency = isPrn ? 'as needed' : freqChoice === '__custom__' ? customFreq.trim() : freqChoice;
+    const frequency = isPrn
+      ? 'as needed'
+      : freqChoice === '__custom__'
+        ? customFreq.trim()
+        : freqChoice;
     const missing = [
       !name.trim() && 'medicine name',
       !strength.trim() && 'strength (dose)',
@@ -128,22 +135,52 @@ export default function AddMedicine() {
     return (
       <>
         <div className="d-flex align-items-center gap-2 mb-3">
-          <button className="pm-link" onClick={() => navigate('/patient/medications')}>←</button>
-          <h1 className="pm-title" style={{ fontSize: '1.3rem' }}>{tr('Add Medicine', 'Magdagdag ng Gamot')}</h1>
+          <button className="pm-link" onClick={() => navigate('/patient/medications')}>
+            ←
+          </button>
+          <h1 className="pm-title" style={{ fontSize: '1.3rem' }}>
+            {tr('Add Medicine', 'Magdagdag ng Gamot')}
+          </h1>
         </div>
         <div className="pm-banner pm-banner--info mb-3">
           Choose how you want to add your medicine.
         </div>
         <div className="d-grid gap-3">
-          <button type="button" className="pm-card p-4 text-start" onClick={() => setEntryMode('manual')}>
-            <div className="fs-2 mb-2" aria-hidden="true">⌨️</div>
-            <strong className="d-block fs-5 text-primary">{tr('Enter Medicine Manually', 'Manu-manong Ilagay ang Gamot')}</strong>
-            <span className="text-muted">{tr('Type the medicine name, dose, form, and frequency.', 'I-type ang pangalan, dosis, uri, at dalas ng gamot.')}</span>
+          <button
+            type="button"
+            className="pm-card p-4 text-start"
+            onClick={() => setEntryMode('manual')}
+          >
+            <div className="fs-2 mb-2" aria-hidden="true">
+              ⌨️
+            </div>
+            <strong className="d-block fs-5 text-primary">
+              {tr('Enter Medicine Manually', 'Manu-manong Ilagay ang Gamot')}
+            </strong>
+            <span className="text-muted">
+              {tr(
+                'Type the medicine name, dose, form, and frequency.',
+                'I-type ang pangalan, dosis, uri, at dalas ng gamot.'
+              )}
+            </span>
           </button>
-          <button type="button" className="pm-card p-4 text-start border-primary" onClick={() => navigate('/patient/medications/prescription')}>
-            <div className="fs-2 mb-2" aria-hidden="true">📷</div>
-            <strong className="d-block fs-5 text-primary">{tr('Scan Prescription with OCR', 'I-scan ang Reseta gamit ang OCR')}</strong>
-            <span className="text-muted">{tr('Upload or photograph a prescription. OCR will read it before pharmacist review.', 'I-upload o kunan ng larawan ang reseta. Babasahin ito ng OCR bago suriin ng parmasyutiko.')}</span>
+          <button
+            type="button"
+            className="pm-card p-4 text-start border-primary"
+            onClick={() => navigate('/patient/medications/prescription')}
+          >
+            <div className="fs-2 mb-2" aria-hidden="true">
+              📷
+            </div>
+            <strong className="d-block fs-5 text-primary">
+              {tr('Scan Prescription with OCR', 'I-scan ang Reseta gamit ang OCR')}
+            </strong>
+            <span className="text-muted">
+              {tr(
+                'Upload or photograph a prescription. OCR will read it before pharmacist review.',
+                'I-upload o kunan ng larawan ang reseta. Babasahin ito ng OCR bago suriin ng parmasyutiko.'
+              )}
+            </span>
           </button>
         </div>
       </>
@@ -205,9 +242,13 @@ export default function AddMedicine() {
               className="pm-card position-absolute w-100 mt-1 p-1"
               style={{ zIndex: 5, maxHeight: 200, overflowY: 'auto' }}
             >
-              {searchingDrugs && <div className="small text-muted p-2">Searching verified medicines…</div>}
+              {searchingDrugs && (
+                <div className="small text-muted p-2">Searching verified medicines…</div>
+              )}
               {!searchingDrugs && suggestions.length === 0 && (
-                <div className="small text-muted p-2">No verified medicine matches “{name.trim()}”.</div>
+                <div className="small text-muted p-2">
+                  No verified medicine matches “{name.trim()}”.
+                </div>
               )}
               {suggestions.map((s) => (
                 <button
@@ -265,7 +306,9 @@ export default function AddMedicine() {
         </select>
 
         {/* Frequency */}
-        <label className="form-label fw-semibold">{tr('How often do you take it?', 'Gaano kadalas ito iniinom?')}</label>
+        <label className="form-label fw-semibold">
+          {tr('How often do you take it?', 'Gaano kadalas ito iniinom?')}
+        </label>
         <div className="d-flex flex-wrap gap-2 mb-2">
           {FREQ_OPTIONS.map((o) => (
             <button
@@ -322,8 +365,8 @@ export default function AddMedicine() {
         </select>
         {rxClass === 'RX' ? (
           <div className="form-text mb-4">
-            This is a prescription-only medicine. After adding it, upload a prescription photo.
-            The medicine becomes active only after a pharmacist approves it.
+            This is a prescription-only medicine. After adding it, upload a prescription photo. The
+            medicine becomes active only after a pharmacist approves it.
           </div>
         ) : (
           <div className="mb-4" />

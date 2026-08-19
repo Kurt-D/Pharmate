@@ -23,11 +23,7 @@ export function validateEnvironment(env = process.env) {
   if (env.JWT_REFRESH_SECRET && env.JWT_REFRESH_SECRET.length < MIN_JWT_SECRET_LENGTH) {
     errors.push(`JWT_REFRESH_SECRET must be at least ${MIN_JWT_SECRET_LENGTH} characters`);
   }
-  if (
-    env.JWT_SECRET &&
-    env.JWT_REFRESH_SECRET &&
-    env.JWT_SECRET === env.JWT_REFRESH_SECRET
-  ) {
+  if (env.JWT_SECRET && env.JWT_REFRESH_SECRET && env.JWT_SECRET === env.JWT_REFRESH_SECRET) {
     errors.push('JWT_SECRET and JWT_REFRESH_SECRET must be different');
   }
   if (env.AES_KEY && !/^[a-fA-F0-9]{64}$/.test(env.AES_KEY)) {
@@ -73,9 +69,7 @@ export function trustedOrigins(env = process.env) {
     .map((origin) => origin.trim())
     .filter(Boolean);
   const localDevelopment =
-    env.NODE_ENV === 'production'
-      ? []
-      : ['http://localhost:5173', 'http://127.0.0.1:5173'];
+    env.NODE_ENV === 'production' ? [] : ['http://localhost:5173', 'http://127.0.0.1:5173'];
 
   return new Set([...configured, ...localDevelopment]);
 }

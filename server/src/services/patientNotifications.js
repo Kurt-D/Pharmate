@@ -159,8 +159,14 @@ export async function createPatientNotification({
     dose_missed: ['Dose update', `A dose of ${medicine} was marked missed.`],
     schedule_confirmed: ['Schedule confirmed', 'Your medication schedule has been confirmed.'],
     schedule_changed: ['Schedule changed', 'Your medication schedule has been updated.'],
-    prescription_approved: ['Prescription update', `The prescription for ${medicine} was approved.`],
-    prescription_rejected: ['Prescription update', `The prescription for ${medicine} was not approved.`],
+    prescription_approved: [
+      'Prescription update',
+      `The prescription for ${medicine} was approved.`,
+    ],
+    prescription_rejected: [
+      'Prescription update',
+      `The prescription for ${medicine} was not approved.`,
+    ],
     prescription_needs_clearer: [
       'Prescription update',
       `A clearer prescription image is needed for ${medicine}.`,

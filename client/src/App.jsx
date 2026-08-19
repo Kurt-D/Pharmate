@@ -36,87 +36,89 @@ import './App.css';
 
 export default function App() {
   return (
-    <LanguageProvider><AuthProvider>
-      <BrowserRouter>
-        <Routes>
-          <Route path="/login" element={<Login />} />
-          <Route path="/signup" element={<Signup />} />
-          <Route path="/identify" element={<IdentifyUser />} />
+    <LanguageProvider>
+      <AuthProvider>
+        <BrowserRouter>
+          <Routes>
+            <Route path="/login" element={<Login />} />
+            <Route path="/signup" element={<Signup />} />
+            <Route path="/identify" element={<IdentifyUser />} />
 
-          <Route
-            path="/patient/onboarding"
-            element={
-              <ProtectedRoute role="patient">
-                <AnchorOnboarding />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/patient"
-            element={
-              <ProtectedRoute role="patient">
-                <PatientLayout />
-              </ProtectedRoute>
-            }
-          >
-            <Route index element={<Navigate to="/patient/home" replace />} />
-            <Route path="home" element={<Today />} />
-            <Route path="medications" element={<Medications />} />
-            <Route path="medications/add" element={<AddMedicine />} />
-            <Route path="medications/prescription" element={<PrescriptionUpload />} />
-            <Route path="schedule" element={<Schedule />} />
-            <Route path="medications/:id/prescription" element={<PrescriptionUpload />} />
-            <Route path="ask" element={<Ask />} />
-            <Route path="orders" element={<Orders />} />
-            <Route path="profile" element={<Profile />} />
-          </Route>
-          <Route
-            path="/pharmacist"
-            element={
-              <ProtectedRoute role="pharmacist">
-                <PharmacistLayout />
-              </ProtectedRoute>
-            }
-          >
-            <Route index element={<Navigate to="/pharmacist/dashboard" replace />} />
-            <Route path="dashboard" element={<PharmacistDashboard />} />
-            <Route path="curation" element={<DrugCuration />} />
-            <Route path="validation" element={<Validation />} />
-            <Route path="inquiries" element={<Inquiries />} />
-            <Route path="orders" element={<OrdersQueue />} />
-            <Route path="patients" element={<Patients />} />
-            <Route path="alerts" element={<PharmacistAlerts />} />
-          </Route>
-          <Route
-            path="/admin"
-            element={
-              <ProtectedRoute role="admin">
-                <AdminLayout />
-              </ProtectedRoute>
-            }
-          >
-            <Route index element={<Navigate to="/admin/dashboard" replace />} />
-            <Route path="dashboard" element={<AdminDashboard />} />
-            <Route path="users" element={<AdminUsers />} />
-            <Route path="medicines" element={<AdminMedicines />} />
-            <Route path="orders" element={<AdminOrders />} />
-            <Route path="priority" element={<AdminPriority />} />
-            <Route path="alerts" element={<AdminAlerts />} />
-            <Route path="reports" element={<AdminReports />} />
-          </Route>
-          <Route
-            path="/caregiver/*"
-            element={
-              <ProtectedRoute role="caregiver">
-                <CaregiverDashboard />
-              </ProtectedRoute>
-            }
-          />
+            <Route
+              path="/patient/onboarding"
+              element={
+                <ProtectedRoute role="patient">
+                  <AnchorOnboarding />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/patient"
+              element={
+                <ProtectedRoute role="patient">
+                  <PatientLayout />
+                </ProtectedRoute>
+              }
+            >
+              <Route index element={<Navigate to="/patient/home" replace />} />
+              <Route path="home" element={<Today />} />
+              <Route path="medications" element={<Medications />} />
+              <Route path="medications/add" element={<AddMedicine />} />
+              <Route path="medications/prescription" element={<PrescriptionUpload />} />
+              <Route path="schedule" element={<Schedule />} />
+              <Route path="medications/:id/prescription" element={<PrescriptionUpload />} />
+              <Route path="ask" element={<Ask />} />
+              <Route path="orders" element={<Orders />} />
+              <Route path="profile" element={<Profile />} />
+            </Route>
+            <Route
+              path="/pharmacist"
+              element={
+                <ProtectedRoute role="pharmacist">
+                  <PharmacistLayout />
+                </ProtectedRoute>
+              }
+            >
+              <Route index element={<Navigate to="/pharmacist/dashboard" replace />} />
+              <Route path="dashboard" element={<PharmacistDashboard />} />
+              <Route path="curation" element={<DrugCuration />} />
+              <Route path="validation" element={<Validation />} />
+              <Route path="inquiries" element={<Inquiries />} />
+              <Route path="orders" element={<OrdersQueue />} />
+              <Route path="patients" element={<Patients />} />
+              <Route path="alerts" element={<PharmacistAlerts />} />
+            </Route>
+            <Route
+              path="/admin"
+              element={
+                <ProtectedRoute role="admin">
+                  <AdminLayout />
+                </ProtectedRoute>
+              }
+            >
+              <Route index element={<Navigate to="/admin/dashboard" replace />} />
+              <Route path="dashboard" element={<AdminDashboard />} />
+              <Route path="users" element={<AdminUsers />} />
+              <Route path="medicines" element={<AdminMedicines />} />
+              <Route path="orders" element={<AdminOrders />} />
+              <Route path="priority" element={<AdminPriority />} />
+              <Route path="alerts" element={<AdminAlerts />} />
+              <Route path="reports" element={<AdminReports />} />
+            </Route>
+            <Route
+              path="/caregiver/*"
+              element={
+                <ProtectedRoute role="caregiver">
+                  <CaregiverDashboard />
+                </ProtectedRoute>
+              }
+            />
 
-          <Route path="/" element={<Navigate to="/login" replace />} />
-          <Route path="*" element={<Navigate to="/login" replace />} />
-        </Routes>
-      </BrowserRouter>
-    </AuthProvider></LanguageProvider>
+            <Route path="/" element={<Navigate to="/login" replace />} />
+            <Route path="*" element={<Navigate to="/login" replace />} />
+          </Routes>
+        </BrowserRouter>
+      </AuthProvider>
+    </LanguageProvider>
   );
 }

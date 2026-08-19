@@ -17,7 +17,9 @@ let pharmacistToken;
 
 async function patient(label) {
   const email = `${label}.notifications.${stamp}@test.pharmate`;
-  await request(app).post('/api/auth/register').send({ email, password: PASSWORD, role: 'patient' });
+  await request(app)
+    .post('/api/auth/register')
+    .send({ email, password: PASSWORD, role: 'patient' });
   const login = await request(app).post('/api/auth/login').send({ email, password: PASSWORD });
   return { id: login.body.user.id, token: login.body.accessToken };
 }
@@ -110,18 +112,21 @@ describe('patient notification authorization and event contracts', () => {
 
 describe('listing, isolation, filters, and read state', () => {
   test('validates pagination and filters', async () => {
-    for (const query of ['limit=0', 'limit=101', 'limit=nope', 'type=unknown', 'unread_only=1', 'cursor=bad']) {
-      const res = await request(app)
-        .get(`/api/patient/notifications?${query}`)
-        .set(auth(a.token));
+    for (const query of [
+      'limit=0',
+      'limit=101',
+      'limit=nope',
+      'type=unknown',
+      'unread_only=1',
+      'cursor=bad',
+    ]) {
+      const res = await request(app).get(`/api/patient/notifications?${query}`).set(auth(a.token));
       expect(res.status).toBe(400);
     }
   });
 
   test('paginates newest-first with opaque cursors and filters', async () => {
-    const first = await request(app)
-      .get('/api/patient/notifications?limit=2')
-      .set(auth(a.token));
+    const first = await request(app).get('/api/patient/notifications?limit=2').set(auth(a.token));
     expect(first.status).toBe(200);
     expect(first.body.notifications).toHaveLength(2);
     expect(first.body.pagination.has_more).toBe(true);
@@ -129,7 +134,9 @@ describe('listing, isolation, filters, and read state', () => {
       .get(`/api/patient/notifications?limit=2&cursor=${first.body.pagination.next_cursor}`)
       .set(auth(a.token));
     expect(second.status).toBe(200);
-    expect(second.body.notifications.map((n) => n.id)).not.toContain(first.body.notifications[0].id);
+    expect(second.body.notifications.map((n) => n.id)).not.toContain(
+      first.body.notifications[0].id
+    );
     const filtered = await request(app)
       .get('/api/patient/notifications?type=prescription_approved&unread_only=true')
       .set(auth(a.token));
@@ -139,8 +146,12 @@ describe('listing, isolation, filters, and read state', () => {
   test('mark-one is idempotent; foreign notification modification is hidden as 404', async () => {
     const list = await request(app).get('/api/patient/notifications').set(auth(a.token));
     const id = list.body.notifications[0].id;
-    const one = await request(app).patch(`/api/patient/notifications/${id}/read`).set(auth(a.token));
-    const two = await request(app).patch(`/api/patient/notifications/${id}/read`).set(auth(a.token));
+    const one = await request(app)
+      .patch(`/api/patient/notifications/${id}/read`)
+      .set(auth(a.token));
+    const two = await request(app)
+      .patch(`/api/patient/notifications/${id}/read`)
+      .set(auth(a.token));
     expect(one.status).toBe(200);
     expect(two.status).toBe(200);
     expect(two.body.read_at).toEqual(one.body.read_at);
@@ -188,9 +199,9 @@ test('retention purges only old read notifications', async () => {
     ]
   );
   expect(await purgeReadNotifications(new Date(), 90)).toBeGreaterThanOrEqual(1);
-  const [rows] = await pool.execute(
-    'SELECT id FROM patient_notifications WHERE id IN (?, ?)',
-    [`old-read-${stamp}`, `old-unread-${stamp}`]
-  );
+  const [rows] = await pool.execute('SELECT id FROM patient_notifications WHERE id IN (?, ?)', [
+    `old-read-${stamp}`,
+    `old-unread-${stamp}`,
+  ]);
   expect(rows.map((row) => row.id)).toEqual([`old-unread-${stamp}`]);
 });

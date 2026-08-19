@@ -14,7 +14,13 @@ import {
   validationHistory,
 } from '../services/prescription.js';
 import { pharmacistFollowups } from '../services/alerts.js';
-import { acceptInquiry, pharmacistQueue, postMessage, getMessages, closeThread } from '../services/inquiry.js';
+import {
+  acceptInquiry,
+  pharmacistQueue,
+  postMessage,
+  getMessages,
+  closeThread,
+} from '../services/inquiry.js';
 import { orderQueue, updateOrderStatus } from '../services/orders.js';
 import { createPatientNotification } from '../services/patientNotifications.js';
 
@@ -66,10 +72,16 @@ router.post('/followups/:id/remind', async (req, res) => {
     `SELECT ca.patient_id,m.drug_name_raw FROM caregiver_alerts ca
      LEFT JOIN medication_schedules ms ON ms.id=ca.schedule_id
      LEFT JOIN medications m ON m.id=ms.medication_id
-     WHERE ca.id=? AND ca.channel='pharmacist' AND ca.status='unseen'`, [req.params.id]
+     WHERE ca.id=? AND ca.channel='pharmacist' AND ca.status='unseen'`,
+    [req.params.id]
   );
   if (!alert) return res.status(404).json({ error: 'Alert not found' });
-  await createPatientNotification({ patientId: alert.patient_id, type: 'dose_reminder', medicineName: alert.drug_name_raw, eventKey: `pharmacist-alert:${req.params.id}:${uuidv4()}` });
+  await createPatientNotification({
+    patientId: alert.patient_id,
+    type: 'dose_reminder',
+    medicineName: alert.drug_name_raw,
+    eventKey: `pharmacist-alert:${req.params.id}:${uuidv4()}`,
+  });
   res.status(201).json({ reminded: true });
 });
 
@@ -129,7 +141,8 @@ router.post('/inquiries/:id/accept', async (req, res) => {
 router.get('/inquiries/:id/messages', async (req, res) => {
   const result = await getMessages(req.params.id, 'pharmacist', req.user.sub);
   if (result.error === 'not_found') return res.status(404).json({ error: 'Thread not found' });
-  if (result.error === 'not_accepted') return res.status(409).json({ error: 'Accept this inquiry before opening the conversation' });
+  if (result.error === 'not_accepted')
+    return res.status(409).json({ error: 'Accept this inquiry before opening the conversation' });
   res.json(result.messages);
 });
 
@@ -138,7 +151,8 @@ router.post('/inquiries/:id/reply', async (req, res) => {
   if (!message) return res.status(400).json({ error: 'message is required' });
   const result = await postMessage(req.params.id, 'pharmacist', req.user.sub, message);
   if (result.error === 'not_found') return res.status(404).json({ error: 'Thread not found' });
-  if (result.error === 'not_accepted') return res.status(409).json({ error: 'Accept this inquiry before replying' });
+  if (result.error === 'not_accepted')
+    return res.status(409).json({ error: 'Accept this inquiry before replying' });
   if (result.error === 'closed') return res.status(409).json({ error: 'This inquiry is closed' });
   res.status(201).json(result);
 });
@@ -250,7 +264,9 @@ router.post('/validate', async (req, res) => {
     return res.status(409).json({ error: 'Validation is not available' });
   }
   if (result.error === 'prescription_first') {
-    return res.status(409).json({ error: 'Approve the prescription before approving its schedule' });
+    return res
+      .status(409)
+      .json({ error: 'Approve the prescription before approving its schedule' });
   }
   if (result.error === 'no_schedule') {
     return res.status(409).json({ error: 'No safe schedule is available to approve' });

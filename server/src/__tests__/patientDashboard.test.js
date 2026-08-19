@@ -57,9 +57,7 @@ beforeAll(async () => {
     fullName: 'Dashboard Pharmacist',
   });
   pharmacistToken = (
-    await request(app)
-      .post('/api/auth/login')
-      .send({ email: pharmacistEmail, password: PASSWORD })
+    await request(app).post('/api/auth/login').send({ email: pharmacistEmail, password: PASSWORD })
   ).body.accessToken;
 });
 

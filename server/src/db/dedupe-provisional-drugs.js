@@ -21,13 +21,21 @@ try {
     await conn.execute('DELETE FROM drug_reference WHERE id=? AND is_provisional=1', [row.id]);
   }
   await conn.commit();
-  console.log(JSON.stringify({
-    provisional_duplicates_found: duplicates.length,
-    removed_unreferenced: removable.length,
-    preserved_referenced: duplicates.length - removable.length,
-  }, null, 2));
+  console.log(
+    JSON.stringify(
+      {
+        provisional_duplicates_found: duplicates.length,
+        removed_unreferenced: removable.length,
+        preserved_referenced: duplicates.length - removable.length,
+      },
+      null,
+      2
+    )
+  );
 } catch (error) {
-  await conn.rollback(); throw error;
+  await conn.rollback();
+  throw error;
 } finally {
-  conn.release(); await pool.end();
+  conn.release();
+  await pool.end();
 }

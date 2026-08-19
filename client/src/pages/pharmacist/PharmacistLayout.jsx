@@ -10,11 +10,24 @@ const MENU = [
   { to: '/pharmacist/validation', label: 'Prescription Verification' },
   { to: '/pharmacist/alerts', label: 'Alerts' },
 ];
-const TITLES={dashboard:['Dashboard','Manage medicine operations efficiently'],patients:['Patients','Manage linked patient records'],inquiries:['Counseling','Manage and communicate with patients'],validation:['Prescription Verification','Review and verify prescriptions before dispensing medications.'],alerts:['Alerts','Manage medication and inquiry alerts'],orders:['Orders','Manage refill and delivery requests'],curation:['Drug Database','Review and curate medicine records']};
+const TITLES = {
+  dashboard: ['Dashboard', 'Manage medicine operations efficiently'],
+  patients: ['Patients', 'Manage linked patient records'],
+  inquiries: ['Counseling', 'Manage and communicate with patients'],
+  validation: [
+    'Prescription Verification',
+    'Review and verify prescriptions before dispensing medications.',
+  ],
+  alerts: ['Alerts', 'Manage medication and inquiry alerts'],
+  orders: ['Orders', 'Manage refill and delivery requests'],
+  curation: ['Drug Database', 'Review and curate medicine records'],
+};
 
 export default function PharmacistLayout() {
   const navigate = useNavigate();
-  const location = useLocation(); const page=location.pathname.split('/').pop(); const title=TITLES[page]||['Pharmacist Console','Manage pharmacy operations'];
+  const location = useLocation();
+  const page = location.pathname.split('/').pop();
+  const title = TITLES[page] || ['Pharmacist Console', 'Manage pharmacy operations'];
   const { user, logout } = useAuth();
 
   async function handleLogout() {
@@ -39,8 +52,18 @@ export default function PharmacistLayout() {
           </NavLink>
         ))}
         <div className="pw-menu-label pw-operations-label">OPERATIONS</div>
-        <NavLink to="/pharmacist/orders" className={({isActive})=>'pw-navlink'+(isActive?' active':'')}>Orders</NavLink>
-        <NavLink to="/pharmacist/curation" className={({isActive})=>'pw-navlink'+(isActive?' active':'')}>Drug Database</NavLink>
+        <NavLink
+          to="/pharmacist/orders"
+          className={({ isActive }) => 'pw-navlink' + (isActive ? ' active' : '')}
+        >
+          Orders
+        </NavLink>
+        <NavLink
+          to="/pharmacist/curation"
+          className={({ isActive }) => 'pw-navlink' + (isActive ? ' active' : '')}
+        >
+          Drug Database
+        </NavLink>
         <button className="pw-logout" onClick={handleLogout}>
           Log out
         </button>
@@ -53,7 +76,14 @@ export default function PharmacistLayout() {
             <div className="pw-sub">{title[1]}</div>
           </div>
           <div className="text-end">
-            <div className="pw-user-badge"><i>●</i><span><strong>{user?.email || 'Pharmacist'}</strong><small>Pharmacist</small></span><b>⌄</b></div>
+            <div className="pw-user-badge">
+              <i>●</i>
+              <span>
+                <strong>{user?.email || 'Pharmacist'}</strong>
+                <small>Pharmacist</small>
+              </span>
+              <b>⌄</b>
+            </div>
           </div>
         </header>
         <div className="pw-content">

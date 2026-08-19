@@ -4,14 +4,21 @@ import { api, apiBlobUrl } from '../../api.js';
 function parseDraft(value) {
   if (!value) return { slots: [], unresolved: [] };
   if (typeof value === 'object') return value;
-  try { return JSON.parse(value); } catch { return { slots: [], unresolved: [] }; }
+  try {
+    return JSON.parse(value);
+  } catch {
+    return { slots: [], unresolved: [] };
+  }
 }
 
 function formatTime(value) {
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleString([], {
-    dateStyle: 'medium', timeStyle: 'short',
-  });
+  return Number.isNaN(date.getTime())
+    ? String(value)
+    : date.toLocaleString([], {
+        dateStyle: 'medium',
+        timeStyle: 'short',
+      });
 }
 
 export default function Validation() {
@@ -57,10 +64,15 @@ export default function Validation() {
     setBusy(true);
     setError('');
     try {
-      await api(`/api/pharmacist/validations/${selected.id}/approve-prescription`, { method: 'POST' });
+      await api(`/api/pharmacist/validations/${selected.id}/approve-prescription`, {
+        method: 'POST',
+      });
       setSelected((current) => ({ ...current, review_stage: 'schedule' }));
-      setQueue((current) => current?.map((item) => item.id === selected.id
-        ? { ...item, review_stage: 'schedule' } : item));
+      setQueue((current) =>
+        current?.map((item) =>
+          item.id === selected.id ? { ...item, review_stage: 'schedule' } : item
+        )
+      );
       setFlash('Prescription approved. Now independently validate the suggested schedule.');
     } catch (requestError) {
       setError(requestError.message);
@@ -140,7 +152,8 @@ export default function Validation() {
                     <span className="pw-code">{item.patient_code}</span>
                   </div>
                   <div className="small opacity-75">
-                    Stage {item.review_stage === 'schedule' ? '2: schedule' : '1: prescription'} · {item.frequency || '—'}
+                    Stage {item.review_stage === 'schedule' ? '2: schedule' : '1: prescription'} ·{' '}
+                    {item.frequency || '—'}
                   </div>
                 </button>
               ))}
@@ -166,7 +179,9 @@ export default function Validation() {
                 </div>
 
                 <div className="mb-2">
-                  <span className="badge bg-primary">Stage {selected.review_stage === 'schedule' ? '2 of 2' : '1 of 2'}</span>
+                  <span className="badge bg-primary">
+                    Stage {selected.review_stage === 'schedule' ? '2 of 2' : '1 of 2'}
+                  </span>
                 </div>
 
                 <div
@@ -187,23 +202,42 @@ export default function Validation() {
                 <section className="border rounded p-3 mb-3">
                   <div className="d-flex justify-content-between">
                     <strong>OCR transcription</strong>
-                    {selected.ocr_confidence != null && <span className="small text-muted">Confidence {Math.round(Number(selected.ocr_confidence))}%</span>}
+                    {selected.ocr_confidence != null && (
+                      <span className="small text-muted">
+                        Confidence {Math.round(Number(selected.ocr_confidence))}%
+                      </span>
+                    )}
                   </div>
                   <div className="small mt-2" style={{ whiteSpace: 'pre-wrap' }}>
-                    {selected.ocr_text || 'No OCR text was captured. Compare the entered medicine details with the image.'}
+                    {selected.ocr_text ||
+                      'No OCR text was captured. Compare the entered medicine details with the image.'}
                   </div>
                 </section>
 
                 <section className="border rounded p-3 mb-3">
                   <strong>System-suggested schedule</strong>
                   <div className="small text-muted mb-2">Not active until the second approval.</div>
-                  {draft.slots?.length ? draft.slots.map((slot, index) => (
-                    <div key={`${slot.scheduled_time}-${index}`} className="border-top py-2">
-                      <strong>{formatTime(slot.scheduled_time)}</strong>
-                      <div className="small text-muted">{slot.generated_reason || 'Generated from the prescription frequency and patient routine'}</div>
+                  {draft.slots?.length ? (
+                    draft.slots.map((slot, index) => (
+                      <div key={`${slot.scheduled_time}-${index}`} className="border-top py-2">
+                        <strong>{formatTime(slot.scheduled_time)}</strong>
+                        <div className="small text-muted">
+                          {slot.generated_reason ||
+                            'Generated from the prescription frequency and patient routine'}
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="alert alert-warning py-2 mb-0">
+                      No safe schedule was generated. Do not approve until the medicine details are
+                      corrected.
                     </div>
-                  )) : <div className="alert alert-warning py-2 mb-0">No safe schedule was generated. Do not approve until the medicine details are corrected.</div>}
-                  {draft.unresolved?.length > 0 && <div className="alert alert-warning py-2 mt-2 mb-0">Unresolved checks: {draft.unresolved.join(', ')}</div>}
+                  )}
+                  {draft.unresolved?.length > 0 && (
+                    <div className="alert alert-warning py-2 mt-2 mb-0">
+                      Unresolved checks: {draft.unresolved.join(', ')}
+                    </div>
+                  )}
                 </section>
 
                 <label className="form-label small fw-semibold">
@@ -219,11 +253,19 @@ export default function Validation() {
 
                 <div className="d-flex gap-2">
                   {selected.review_stage === 'prescription' ? (
-                    <button className="btn btn-success" disabled={busy} onClick={approvePrescription}>
+                    <button
+                      className="btn btn-success"
+                      disabled={busy}
+                      onClick={approvePrescription}
+                    >
                       {busy ? 'Saving…' : 'Approve Prescription & Review Schedule'}
                     </button>
                   ) : (
-                    <button className="btn btn-success" disabled={busy || !draft.slots?.length} onClick={() => decide('approve')}>
+                    <button
+                      className="btn btn-success"
+                      disabled={busy || !draft.slots?.length}
+                      onClick={() => decide('approve')}
+                    >
                       {busy ? 'Publishing…' : 'Approve Schedule & Publish'}
                     </button>
                   )}

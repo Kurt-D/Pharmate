@@ -59,21 +59,35 @@ export async function acceptInquiry(threadId, pharmacistId) {
     await conn.beginTransaction();
     const [[thread]] = await conn.execute(
       `SELECT id,status,pharmacist_id,requested_pharmacist_id
-       FROM inquiry_threads WHERE id=? FOR UPDATE`, [threadId]
+       FROM inquiry_threads WHERE id=? FOR UPDATE`,
+      [threadId]
     );
-    if (!thread || thread.status !== 'open') { await conn.rollback(); return { error: 'not_found' }; }
+    if (!thread || thread.status !== 'open') {
+      await conn.rollback();
+      return { error: 'not_found' };
+    }
     if (thread.requested_pharmacist_id && thread.requested_pharmacist_id !== pharmacistId) {
-      await conn.rollback(); return { error: 'not_requested' };
+      await conn.rollback();
+      return { error: 'not_requested' };
     }
     if (thread.pharmacist_id && thread.pharmacist_id !== pharmacistId) {
-      await conn.rollback(); return { error: 'claimed' };
+      await conn.rollback();
+      return { error: 'claimed' };
     }
     if (!thread.pharmacist_id) {
-      await conn.execute('UPDATE inquiry_threads SET pharmacist_id=? WHERE id=?', [pharmacistId, threadId]);
+      await conn.execute('UPDATE inquiry_threads SET pharmacist_id=? WHERE id=?', [
+        pharmacistId,
+        threadId,
+      ]);
     }
     await conn.commit();
     return { validation_status: 'accepted', idempotent: Boolean(thread.pharmacist_id) };
-  } catch (error) { await conn.rollback(); throw error; } finally { conn.release(); }
+  } catch (error) {
+    await conn.rollback();
+    throw error;
+  } finally {
+    conn.release();
+  }
 }
 
 /** Append a message. Only the thread's patient (or the assigned pharmacist) may post. */

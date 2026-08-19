@@ -27,9 +27,8 @@ beforeAll(async () => {
   patientB = await patient('b');
   const email = `caregiver.prefs.${stamp}@test.pharmate`;
   caregiverId = await createPrivilegedTestUser({ email, password: PASSWORD, role: 'caregiver' });
-  caregiverToken = (
-    await request(app).post('/api/auth/login').send({ email, password: PASSWORD })
-  ).body.accessToken;
+  caregiverToken = (await request(app).post('/api/auth/login').send({ email, password: PASSWORD }))
+    .body.accessToken;
 });
 
 afterAll(async () => {
@@ -40,11 +39,7 @@ describe('patient preference authorization and defaults', () => {
   test('authentication and patient role are required', async () => {
     expect((await request(app).get('/api/patient/preferences')).status).toBe(401);
     expect(
-      (
-        await request(app)
-          .get('/api/patient/preferences')
-          .set(auth(caregiverToken))
-      ).status
+      (await request(app).get('/api/patient/preferences').set(auth(caregiverToken))).status
     ).toBe(403);
   });
 

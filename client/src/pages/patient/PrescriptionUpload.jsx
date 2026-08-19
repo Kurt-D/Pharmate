@@ -10,7 +10,8 @@ import { useLanguage } from '../../context/LanguageContext.jsx';
 const MAX_W = 1000; // cap export width to keep uploads small while legible
 
 export default function PrescriptionUpload() {
-  const { language } = useLanguage(); const tr = (english, filipino) => language === 'fil' ? filipino : english;
+  const { language } = useLanguage();
+  const tr = (english, filipino) => (language === 'fil' ? filipino : english);
   const { id } = useParams();
   const navigate = useNavigate();
   const canvasRef = useRef(null);
@@ -39,14 +40,22 @@ export default function PrescriptionUpload() {
   const [selectedDrug, setSelectedDrug] = useState(null);
 
   useEffect(() => {
-    if (!ocrFirst || selectedDrug?.generic_name === medicineName || medicineName.trim().length < 2) {
+    if (
+      !ocrFirst ||
+      selectedDrug?.generic_name === medicineName ||
+      medicineName.trim().length < 2
+    ) {
       if (medicineName.trim().length < 2) setDrugMatches([]);
       return undefined;
     }
     const timer = setTimeout(async () => {
       try {
-        const response = await api(`/api/patient/drugs?q=${encodeURIComponent(medicineName.trim())}`);
-        const verified = response.data.filter((drug) => !drug.is_provisional && !drug.is_restricted);
+        const response = await api(
+          `/api/patient/drugs?q=${encodeURIComponent(medicineName.trim())}`
+        );
+        const verified = response.data.filter(
+          (drug) => !drug.is_provisional && !drug.is_restricted
+        );
         setDrugMatches(verified.slice(0, 6));
       } catch {
         setDrugMatches([]);
@@ -58,15 +67,20 @@ export default function PrescriptionUpload() {
   function suggestFields(text) {
     const clean = String(text || '').trim();
     if (!clean) return;
-    const lines = clean.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+    const lines = clean
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean);
     const dose = clean.match(/\b\d+(?:\.\d+)?\s*(?:mg|mcg|g|ml)\b/i)?.[0];
     const formMatch = clean.match(/\b(tablet|capsule|syrup|injection)\b/i)?.[1];
     let detectedFrequency = '';
     if (/three times|3\s*(?:x|times)|tid/i.test(clean)) detectedFrequency = 'three times daily';
     else if (/twice|two times|2\s*(?:x|times)|bid/i.test(clean)) detectedFrequency = 'twice daily';
     else if (/once|one time|1\s*(?:x|time)|daily|qd/i.test(clean)) detectedFrequency = 'once daily';
-    const candidate = lines.find((line) => /[a-z]{4}/i.test(line))
-      ?.replace(/\b\d+(?:\.\d+)?\s*(?:mg|mcg|g|ml).*$/i, '').trim();
+    const candidate = lines
+      .find((line) => /[a-z]{4}/i.test(line))
+      ?.replace(/\b\d+(?:\.\d+)?\s*(?:mg|mcg|g|ml).*$/i, '')
+      .trim();
     if (candidate && !medicineName) setMedicineName(candidate);
     if (dose && !strength) setStrength(dose);
     if (formMatch) setMedicineForm(formMatch[0].toUpperCase() + formMatch.slice(1).toLowerCase());
@@ -103,7 +117,8 @@ export default function PrescriptionUpload() {
       const { createWorker } = await import('tesseract.js');
       const worker = await createWorker('eng', 1, {
         logger: (message) => {
-          if (message.status === 'recognizing text') setOcrProgress(Math.round(message.progress * 100));
+          if (message.status === 'recognizing text')
+            setOcrProgress(Math.round(message.progress * 100));
         },
       });
       const recognized = await worker.recognize(imageSource, { rotateAuto: true });
@@ -112,7 +127,9 @@ export default function PrescriptionUpload() {
       setOcrConfidence(Number(recognized.data.confidence || 0));
       suggestFields(recognized.data.text);
     } catch {
-      setOcrError('Automatic reading could not finish. You can type or correct the extracted text below.');
+      setOcrError(
+        'Automatic reading could not finish. You can type or correct the extracted text below.'
+      );
     } finally {
       setOcrBusy(false);
     }
@@ -141,7 +158,9 @@ export default function PrescriptionUpload() {
     setCameraError('');
     setResult(null);
     if (!navigator.mediaDevices?.getUserMedia) {
-      setCameraError('Camera access is not supported in this browser. Choose an image from your gallery instead.');
+      setCameraError(
+        'Camera access is not supported in this browser. Choose an image from your gallery instead.'
+      );
       return;
     }
     try {
@@ -152,7 +171,9 @@ export default function PrescriptionUpload() {
       streamRef.current = stream;
       setCameraOpen(true);
     } catch {
-      setCameraError('Camera access was denied or unavailable. Check your browser permission, then try again.');
+      setCameraError(
+        'Camera access was denied or unavailable. Check your browser permission, then try again.'
+      );
     }
   }
 
@@ -243,7 +264,9 @@ export default function PrescriptionUpload() {
           throw new Error('Review and complete the medicine name, strength, form, and frequency.');
         }
         if (!selectedDrug) {
-          throw new Error('Select the matching verified medicine from the suggestions before submitting.');
+          throw new Error(
+            'Select the matching verified medicine from the suggestions before submitting.'
+          );
         }
         const created = await api('/api/patient/medications', {
           method: 'POST',
@@ -256,7 +279,9 @@ export default function PrescriptionUpload() {
           },
         });
         if (created.data.status !== 'pending_validation') {
-          throw new Error('This OCR medicine name is not yet verified. Select or enter its full generic name before submitting.');
+          throw new Error(
+            'This OCR medicine name is not yet verified. Select or enter its full generic name before submitting.'
+          );
         }
         medicationId = created.data.id;
       }
@@ -280,7 +305,9 @@ export default function PrescriptionUpload() {
           ←
         </button>
         <h1 className="pm-title" style={{ fontSize: '1.3rem' }}>
-          {ocrFirst ? tr('Scan Prescription with OCR', 'I-scan ang Reseta gamit ang OCR') : tr('Upload Prescription', 'Mag-upload ng Reseta')}
+          {ocrFirst
+            ? tr('Scan Prescription with OCR', 'I-scan ang Reseta gamit ang OCR')
+            : tr('Upload Prescription', 'Mag-upload ng Reseta')}
         </h1>
       </div>
       <p className="pm-subtitle">
@@ -305,7 +332,10 @@ export default function PrescriptionUpload() {
             <button type="button" className="pm-btn-primary" onClick={openCamera}>
               📷 Take Photo
             </button>
-            <label className="btn btn-outline-secondary d-block text-center" style={{ cursor: 'pointer' }}>
+            <label
+              className="btn btn-outline-secondary d-block text-center"
+              style={{ cursor: 'pointer' }}
+            >
               🖼️ Choose from Gallery
               <input type="file" accept="image/*" hidden onChange={onFile} />
             </label>
@@ -378,7 +408,9 @@ export default function PrescriptionUpload() {
             </div>
             <div className="pm-ocr-review mt-3">
               <div className="d-flex justify-content-between align-items-center mb-1">
-                <strong>{tr('Prescription text detected by OCR', 'Teksto ng reseta na nakita ng OCR')}</strong>
+                <strong>
+                  {tr('Prescription text detected by OCR', 'Teksto ng reseta na nakita ng OCR')}
+                </strong>
                 {ocrConfidence !== null && <span>{Math.round(ocrConfidence)}% confidence</span>}
               </div>
               {ocrBusy && (
@@ -396,47 +428,109 @@ export default function PrescriptionUpload() {
                 aria-label="OCR-detected prescription text"
               />
               <div className="form-text">
-                This text helps create a provisional schedule. A pharmacist must review the prescription and schedule before activation.
+                This text helps create a provisional schedule. A pharmacist must review the
+                prescription and schedule before activation.
               </div>
             </div>
             {ocrFirst && (
               <div className="border rounded p-3 mt-3 mb-3">
-                <strong className="d-block mb-2">{tr('Confirm the OCR medicine details', 'Kumpirmahin ang detalye ng gamot mula sa OCR')}</strong>
-                <label className="form-label">{tr('Verified medicine', 'Beripikadong gamot')}</label>
+                <strong className="d-block mb-2">
+                  {tr(
+                    'Confirm the OCR medicine details',
+                    'Kumpirmahin ang detalye ng gamot mula sa OCR'
+                  )}
+                </strong>
+                <label className="form-label">
+                  {tr('Verified medicine', 'Beripikadong gamot')}
+                </label>
                 <div className="position-relative mb-2">
-                  <input className="form-control" value={medicineName}
-                    onChange={(event) => { setMedicineName(event.target.value); setSelectedDrug(null); }}
-                    placeholder="Search the verified medicine list" autoComplete="off" />
+                  <input
+                    className="form-control"
+                    value={medicineName}
+                    onChange={(event) => {
+                      setMedicineName(event.target.value);
+                      setSelectedDrug(null);
+                    }}
+                    placeholder="Search the verified medicine list"
+                    autoComplete="off"
+                  />
                   {!selectedDrug && drugMatches.length > 0 && (
-                    <div className="pm-card position-absolute w-100 mt-1 p-1" style={{ zIndex: 10, maxHeight: 220, overflowY: 'auto' }}>
+                    <div
+                      className="pm-card position-absolute w-100 mt-1 p-1"
+                      style={{ zIndex: 10, maxHeight: 220, overflowY: 'auto' }}
+                    >
                       {drugMatches.map((drug) => (
-                        <button type="button" key={drug.id} className="btn btn-sm w-100 text-start py-2"
-                          onClick={() => { setMedicineName(drug.generic_name); setSelectedDrug(drug); setDrugMatches([]); }}>
+                        <button
+                          type="button"
+                          key={drug.id}
+                          className="btn btn-sm w-100 text-start py-2"
+                          onClick={() => {
+                            setMedicineName(drug.generic_name);
+                            setSelectedDrug(drug);
+                            setDrugMatches([]);
+                          }}
+                        >
                           <strong>{drug.generic_name}</strong>
-                          <span className="pm-pill pm-pill--pending ms-2">{drug.rx_class || 'Verified'}</span>
+                          <span className="pm-pill pm-pill--pending ms-2">
+                            {drug.rx_class || 'Verified'}
+                          </span>
                         </button>
                       ))}
                     </div>
                   )}
                 </div>
                 {selectedDrug ? (
-                  <div className="pm-banner pm-banner--success py-2 mb-2">✓ Verified match selected: <strong>{selectedDrug.generic_name}</strong></div>
+                  <div className="pm-banner pm-banner--success py-2 mb-2">
+                    ✓ Verified match selected: <strong>{selectedDrug.generic_name}</strong>
+                  </div>
                 ) : (
-                  <div className="form-text mb-2">Choose a result from the verified list. OCR text alone cannot activate a medicine.</div>
+                  <div className="form-text mb-2">
+                    Choose a result from the verified list. OCR text alone cannot activate a
+                    medicine.
+                  </div>
                 )}
                 <label className="form-label">{tr('Strength', 'Lakas')}</label>
-                <input className="form-control mb-2" value={strength} onChange={(event) => setStrength(event.target.value)} placeholder="e.g., 500 mg" />
+                <input
+                  className="form-control mb-2"
+                  value={strength}
+                  onChange={(event) => setStrength(event.target.value)}
+                  placeholder="e.g., 500 mg"
+                />
                 <label className="form-label">{tr('Form', 'Uri')}</label>
-                <select className="form-select mb-2" value={medicineForm} onChange={(event) => setMedicineForm(event.target.value)}>
-                  <option>Tablet</option><option>Capsule</option><option>Syrup</option><option>Injection</option>
+                <select
+                  className="form-select mb-2"
+                  value={medicineForm}
+                  onChange={(event) => setMedicineForm(event.target.value)}
+                >
+                  <option>Tablet</option>
+                  <option>Capsule</option>
+                  <option>Syrup</option>
+                  <option>Injection</option>
                 </select>
-                <label className="form-label">{tr('Prescription frequency', 'Dalas ayon sa reseta')}</label>
-                <input className="form-control" value={frequency} onChange={(event) => setFrequency(event.target.value)} placeholder="e.g., three times daily" />
-                <div className="form-text">OCR suggestions must be checked against the prescription. The pharmacist will validate them again.</div>
+                <label className="form-label">
+                  {tr('Prescription frequency', 'Dalas ayon sa reseta')}
+                </label>
+                <input
+                  className="form-control"
+                  value={frequency}
+                  onChange={(event) => setFrequency(event.target.value)}
+                  placeholder="e.g., three times daily"
+                />
+                <div className="form-text">
+                  OCR suggestions must be checked against the prescription. The pharmacist will
+                  validate them again.
+                </div>
               </div>
             )}
             <button className="pm-btn-primary" disabled={submitting} onClick={submit}>
-              {submitting ? tr('Submitting…', 'Ipinapadala…') : ocrFirst ? tr('Submit Prescription & Suggested Schedule', 'Ipadala ang Reseta at Iminungkahing Iskedyul') : tr('Submit for verification', 'Ipadala para sa beripikasyon')}
+              {submitting
+                ? tr('Submitting…', 'Ipinapadala…')
+                : ocrFirst
+                  ? tr(
+                      'Submit Prescription & Suggested Schedule',
+                      'Ipadala ang Reseta at Iminungkahing Iskedyul'
+                    )
+                  : tr('Submit for verification', 'Ipadala para sa beripikasyon')}
             </button>
           </>
         )}

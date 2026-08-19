@@ -37,7 +37,14 @@ the invite does not exist, is no longer revocable, or belongs to another patient
 Lists active links only. Response `200`:
 
 ```json
-[{ "id": "link-uuid", "email": "caregiver@example.com", "linked_at": "timestamp", "status": "active" }]
+[
+  {
+    "id": "link-uuid",
+    "email": "caregiver@example.com",
+    "linked_at": "timestamp",
+    "status": "active"
+  }
+]
 ```
 
 ### `DELETE /api/patient/caregivers/:linkId`

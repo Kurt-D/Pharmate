@@ -18,9 +18,7 @@ export default function Login() {
   const { login } = useAuth();
   const staffMode = searchParams.get('mode') === 'staff';
   const requestedRole = searchParams.get('role');
-  const selectedRole = ['patient', 'caregiver'].includes(requestedRole)
-    ? requestedRole
-    : 'patient';
+  const selectedRole = ['patient', 'caregiver'].includes(requestedRole) ? requestedRole : 'patient';
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -133,7 +131,9 @@ export default function Login() {
 
           <p className="text-center small text-muted mt-3 mb-0">
             {!staffMode && selectedRole === 'patient' ? (
-              <>New patient? <Link to="/signup">Create an account</Link></>
+              <>
+                New patient? <Link to="/signup">Create an account</Link>
+              </>
             ) : !staffMode ? (
               <>Caregiver accounts are provided by an administrator.</>
             ) : null}

@@ -11,15 +11,17 @@ Returns newest first:
 
 ```json
 {
-  "notifications": [{
-    "id": "uuid",
-    "type": "dose_reminder",
-    "title": "Medication reminder",
-    "message": "It is time to take your medicine.",
-    "metadata": { "schedule_id": "uuid" },
-    "created_at": "2026-08-18T12:00:00.000Z",
-    "read_at": null
-  }],
+  "notifications": [
+    {
+      "id": "uuid",
+      "type": "dose_reminder",
+      "title": "Medication reminder",
+      "message": "It is time to take your medicine.",
+      "metadata": { "schedule_id": "uuid" },
+      "created_at": "2026-08-18T12:00:00.000Z",
+      "read_at": null
+    }
+  ],
   "pagination": { "limit": 20, "has_more": false, "next_cursor": null },
   "unread_count": 1
 }

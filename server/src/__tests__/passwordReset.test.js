@@ -60,7 +60,11 @@ describe('forgot-password', () => {
     const user = rows[0];
     expect(user.email).toBe(canonical);
     expect(
-      (await request(app).post('/api/auth/login').send({ email: ` ${canonical.toUpperCase()} `, password: OLD_PASSWORD })).status
+      (
+        await request(app)
+          .post('/api/auth/login')
+          .send({ email: ` ${canonical.toUpperCase()} `, password: OLD_PASSWORD })
+      ).status
     ).toBe(200);
     const delivery = await requestToken(` ${canonical.toUpperCase()} `);
     expect(delivery.email).toBe(canonical);
@@ -108,9 +112,10 @@ describe('reset-password', () => {
     const user = await register(email);
     const first = await requestToken(email);
     const second = await requestToken(email);
-    await pool.execute('UPDATE password_reset_tokens SET expires_at = DATE_SUB(NOW(3), INTERVAL 1 SECOND) WHERE token_hash = ?', [
-      createHash('sha256').update(second.rawToken).digest('hex'),
-    ]);
+    await pool.execute(
+      'UPDATE password_reset_tokens SET expires_at = DATE_SUB(NOW(3), INTERVAL 1 SECOND) WHERE token_hash = ?',
+      [createHash('sha256').update(second.rawToken).digest('hex')]
+    );
     const attempts = [first.rawToken, second.rawToken, 'malformed-token'];
     const responses = await Promise.all(
       attempts.map((token) =>
@@ -133,7 +138,11 @@ describe('reset-password', () => {
       .send({ token: rawToken, new_password: 'short' });
     expect(rejected.status).toBe(400);
     expect(
-      (await request(app).post('/api/auth/reset-password').send({ token: rawToken, new_password: NEW_PASSWORD })).status
+      (
+        await request(app)
+          .post('/api/auth/reset-password')
+          .send({ token: rawToken, new_password: NEW_PASSWORD })
+      ).status
     ).toBe(200);
   });
 
@@ -156,20 +165,39 @@ describe('reset-password', () => {
   test('changes login credentials and invalidates all access and refresh sessions', async () => {
     const email = `reset.sessions.${Date.now()}@test.pharmate`;
     await register(email);
-    const login = await request(app).post('/api/auth/login').send({ email, password: OLD_PASSWORD });
-    const secondLogin = await request(app).post('/api/auth/login').send({ email, password: OLD_PASSWORD });
+    const login = await request(app)
+      .post('/api/auth/login')
+      .send({ email, password: OLD_PASSWORD });
+    const secondLogin = await request(app)
+      .post('/api/auth/login')
+      .send({ email, password: OLD_PASSWORD });
     const { rawToken, url } = await requestToken(email);
     expect(url).toBe(`https://test.pharmate.example/reset-password?token=${rawToken}`);
     expect(
-      (await request(app).post('/api/auth/reset-password').send({ token: rawToken, new_password: NEW_PASSWORD })).status
+      (
+        await request(app)
+          .post('/api/auth/reset-password')
+          .send({ token: rawToken, new_password: NEW_PASSWORD })
+      ).status
     ).toBe(200);
-    expect((await request(app).post('/api/auth/login').send({ email, password: OLD_PASSWORD })).status).toBe(401);
-    expect((await request(app).post('/api/auth/login').send({ email, password: NEW_PASSWORD })).status).toBe(200);
     expect(
-      (await request(app).post('/api/auth/logout').set('Authorization', `Bearer ${login.body.accessToken}`).send({})).status
+      (await request(app).post('/api/auth/login').send({ email, password: OLD_PASSWORD })).status
+    ).toBe(401);
+    expect(
+      (await request(app).post('/api/auth/login').send({ email, password: NEW_PASSWORD })).status
+    ).toBe(200);
+    expect(
+      (
+        await request(app)
+          .post('/api/auth/logout')
+          .set('Authorization', `Bearer ${login.body.accessToken}`)
+          .send({})
+      ).status
     ).toBe(401);
     for (const refreshToken of [login.body.refreshToken, secondLogin.body.refreshToken]) {
-      expect((await request(app).post('/api/auth/refresh').send({ refreshToken })).status).toBe(401);
+      expect((await request(app).post('/api/auth/refresh').send({ refreshToken })).status).toBe(
+        401
+      );
     }
   });
 });

@@ -32,8 +32,7 @@ function normalize(row = {}) {
       row.reminder_lead_minutes ?? PREFERENCE_DEFAULTS.reminder_lead_minutes
     ),
     caregiver_missed_alerts_enabled: Boolean(
-      row.caregiver_missed_alerts_enabled ??
-        PREFERENCE_DEFAULTS.caregiver_missed_alerts_enabled
+      row.caregiver_missed_alerts_enabled ?? PREFERENCE_DEFAULTS.caregiver_missed_alerts_enabled
     ),
     lock_screen_detail: row.lock_screen_detail ?? PREFERENCE_DEFAULTS.lock_screen_detail,
     timezone: row.timezone ?? PREFERENCE_DEFAULTS.timezone,
@@ -57,10 +56,7 @@ export function validatePreferencePatch(body) {
     if (DETAIL_FIELDS.has(key) && !['private', 'medicine_name'].includes(value)) {
       return { error: `${key} must be private or medicine_name` };
     }
-    if (
-      key === 'reminder_lead_minutes' &&
-      (!Number.isInteger(value) || value < 0 || value > 60)
-    ) {
+    if (key === 'reminder_lead_minutes' && (!Number.isInteger(value) || value < 0 || value > 60)) {
       return { error: 'reminder_lead_minutes must be an integer from 0 through 60' };
     }
     if (key === 'timezone' && (typeof value !== 'string' || !TIMEZONES.has(value))) {

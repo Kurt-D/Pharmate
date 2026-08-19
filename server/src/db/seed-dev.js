@@ -40,30 +40,29 @@ async function seed() {
     [adminUserId, 'admin@dev.pharmate', hash, 'admin'],
   ];
 
-for (const [id, email, pw, role] of users) {
-  const [existing] = await conn.execute(
-    'SELECT id FROM users WHERE email = ?',
-    [email]
-  );
+  for (const [id, email, pw, role] of users) {
+    const [existing] = await conn.execute('SELECT id FROM users WHERE email = ?', [email]);
 
-  if (existing.length === 0) {
-    await conn.execute(
-      'INSERT INTO users (id, email, password_hash, role) VALUES (?, ?, ?, ?)',
-      [id, email, pw, role]
-    );
-  } else {
-    // Reuse the existing user's ID
-    if (email === 'patient@dev.pharmate') {
-      patientUserId = existing[0].id;
-    } else if (email === 'pharmacist@dev.pharmate') {
-      pharmacistUserId = existing[0].id;
-    } else if (email === 'caregiver@dev.pharmate') {
-      caregiverUserId = existing[0].id;
-    } else if (email === 'admin@dev.pharmate') {
-      adminUserId = existing[0].id;
+    if (existing.length === 0) {
+      await conn.execute('INSERT INTO users (id, email, password_hash, role) VALUES (?, ?, ?, ?)', [
+        id,
+        email,
+        pw,
+        role,
+      ]);
+    } else {
+      // Reuse the existing user's ID
+      if (email === 'patient@dev.pharmate') {
+        patientUserId = existing[0].id;
+      } else if (email === 'pharmacist@dev.pharmate') {
+        pharmacistUserId = existing[0].id;
+      } else if (email === 'caregiver@dev.pharmate') {
+        caregiverUserId = existing[0].id;
+      } else if (email === 'admin@dev.pharmate') {
+        adminUserId = existing[0].id;
+      }
     }
   }
-}
 
   // A repeated run generates fresh candidate UUIDs above, but existing users keep
   // their original IDs. Resolve those persisted IDs before inserting child rows;

@@ -142,7 +142,8 @@ export async function proposeForPrescription(patientId, medicationId) {
       [...drugIds, ...drugIds]
     );
     interactions = pairs.map((p) => ({
-      drugAId: p.drug_a_id, drugBId: p.drug_b_id,
+      drugAId: p.drug_a_id,
+      drugBId: p.drug_b_id,
       minGapHours: p.min_gap_hours != null ? Number(p.min_gap_hours) : null,
       type: p.interaction_type,
     }));
@@ -151,12 +152,14 @@ export async function proposeForPrescription(patientId, medicationId) {
   const result = generateSchedule({ anchors, medications, interactions, version: 1 });
   return {
     generation_date: generationDate,
-    slots: result.slots.filter((slot) => slot.medicationId === medicationId).map((slot) => ({
-      medication_id: slot.medicationId,
-      drug_name: slot.drugName,
-      scheduled_time: wallClock(generationDate, slot.minuteOfDay),
-      generated_reason: slot.reason,
-    })),
+    slots: result.slots
+      .filter((slot) => slot.medicationId === medicationId)
+      .map((slot) => ({
+        medication_id: slot.medicationId,
+        drug_name: slot.drugName,
+        scheduled_time: wallClock(generationDate, slot.minuteOfDay),
+        generated_reason: slot.reason,
+      })),
     unresolved: result.unresolved.filter((item) => item.medicationId === medicationId),
   };
 }

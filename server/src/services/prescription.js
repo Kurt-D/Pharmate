@@ -56,11 +56,19 @@ export async function attachPhoto(patientId, medicationId, storedFilename, ocr =
          (id, medication_id, redacted_path, ocr_text, ocr_confidence,
           schedule_draft_json, review_stage, status)
        VALUES (?, ?, ?, ?, ?, ?, 'prescription', 'pending')`,
-      [photoId, medicationId, storedFilename, ocr.text || null,
+      [
+        photoId,
+        medicationId,
+        storedFilename,
+        ocr.text || null,
         Number.isFinite(Number(ocr.confidence)) ? Number(ocr.confidence) : null,
-        JSON.stringify(draft)]
+        JSON.stringify(draft),
+      ]
     );
-    await conn.execute('UPDATE medications SET prescription_photo_id=? WHERE id=?', [photoId, medicationId]);
+    await conn.execute('UPDATE medications SET prescription_photo_id=? WHERE id=?', [
+      photoId,
+      medicationId,
+    ]);
     await conn.commit();
   } catch (error) {
     await conn.rollback();
@@ -95,10 +103,22 @@ export async function approvePrescriptionForSchedule(pharmacistId, photoId) {
   try {
     await conn.beginTransaction();
     const photo = await lockedPhoto(conn, photoId);
-    if (!photo) { await conn.rollback(); return { error: 'not_found' }; }
-    if (photo.status !== 'pending') { await conn.rollback(); return { error: 'already_decided' }; }
-    const [[stage]] = await conn.execute('SELECT review_stage FROM prescription_photos WHERE id=? FOR UPDATE', [photoId]);
-    if (stage.review_stage !== 'prescription') { await conn.rollback(); return { error: 'wrong_stage' }; }
+    if (!photo) {
+      await conn.rollback();
+      return { error: 'not_found' };
+    }
+    if (photo.status !== 'pending') {
+      await conn.rollback();
+      return { error: 'already_decided' };
+    }
+    const [[stage]] = await conn.execute(
+      'SELECT review_stage FROM prescription_photos WHERE id=? FOR UPDATE',
+      [photoId]
+    );
+    if (stage.review_stage !== 'prescription') {
+      await conn.rollback();
+      return { error: 'wrong_stage' };
+    }
     await conn.execute(
       `UPDATE prescription_photos SET review_stage='schedule', claimed_by=?,
        claim_expires_at=DATE_ADD(NOW(3), INTERVAL ? MINUTE) WHERE id=?`,
@@ -120,8 +140,14 @@ export async function claimValidation(pharmacistId, photoId) {
   try {
     await conn.beginTransaction();
     const photo = await lockedPhoto(conn, photoId);
-    if (!photo) { await conn.rollback(); return { error: 'not_found' }; }
-    if (photo.status !== 'pending') { await conn.rollback(); return { error: 'already_decided' }; }
+    if (!photo) {
+      await conn.rollback();
+      return { error: 'not_found' };
+    }
+    if (photo.status !== 'pending') {
+      await conn.rollback();
+      return { error: 'already_decided' };
+    }
     const now = new Date();
     if (activeClaim(photo, now) && photo.claimed_by !== pharmacistId) {
       await conn.rollback();
@@ -129,12 +155,19 @@ export async function claimValidation(pharmacistId, photoId) {
     }
     if (activeClaim(photo, now)) {
       await conn.commit();
-      return { claim_status: 'claimed_by_you', claim_expires_at: photo.claim_expires_at, idempotent: true };
+      return {
+        claim_status: 'claimed_by_you',
+        claim_expires_at: photo.claim_expires_at,
+        idempotent: true,
+      };
     }
     const priorOwner = photo.claimed_by;
     const expiresAt = new Date(now.getTime() + claimLeaseMinutes() * 60000);
     if (priorOwner) await audit(conn, photo, priorOwner, 'claim_expired');
-    await conn.execute('UPDATE prescription_photos SET claimed_by=?, claim_expires_at=? WHERE id=?', [pharmacistId, expiresAt, photoId]);
+    await conn.execute(
+      'UPDATE prescription_photos SET claimed_by=?, claim_expires_at=? WHERE id=?',
+      [pharmacistId, expiresAt, photoId]
+    );
     await audit(conn, photo, pharmacistId, priorOwner ? 'reclaimed' : 'claimed');
     await conn.commit();
     return { claim_status: 'claimed_by_you', claim_expires_at: expiresAt, idempotent: false };
@@ -151,13 +184,22 @@ export async function releaseValidation(pharmacistId, photoId) {
   try {
     await conn.beginTransaction();
     const photo = await lockedPhoto(conn, photoId);
-    if (!photo) { await conn.rollback(); return { error: 'not_found' }; }
-    if (photo.status !== 'pending') { await conn.rollback(); return { error: 'already_decided' }; }
+    if (!photo) {
+      await conn.rollback();
+      return { error: 'not_found' };
+    }
+    if (photo.status !== 'pending') {
+      await conn.rollback();
+      return { error: 'already_decided' };
+    }
     if (!activeClaim(photo) || photo.claimed_by !== pharmacistId) {
       await conn.rollback();
       return { error: 'not_owner' };
     }
-    await conn.execute('UPDATE prescription_photos SET claimed_by=NULL, claim_expires_at=NULL WHERE id=?', [photoId]);
+    await conn.execute(
+      'UPDATE prescription_photos SET claimed_by=NULL, claim_expires_at=NULL WHERE id=?',
+      [photoId]
+    );
     await audit(conn, photo, pharmacistId, 'released');
     await conn.commit();
     return { claim_status: 'unclaimed' };
@@ -184,7 +226,8 @@ export async function photoFilePath(pharmacistId, photoId) {
 export function validateDecision(action, reason) {
   if (!['approve', 'reject', 'needs_clearer'].includes(action)) return { error: 'bad_action' };
   const cleanReason = typeof reason === 'string' ? reason.trim() : '';
-  if (['reject', 'needs_clearer'].includes(action) && !cleanReason) return { error: 'reason_required' };
+  if (['reject', 'needs_clearer'].includes(action) && !cleanReason)
+    return { error: 'reason_required' };
   if (cleanReason.length > 500) return { error: 'reason_too_long' };
   return { value: { action, reason: cleanReason || null } };
 }
@@ -196,8 +239,14 @@ export async function decideValidation(pharmacistId, photoId, action, reason, op
   try {
     await conn.beginTransaction();
     const photo = await lockedPhoto(conn, photoId);
-    if (!photo) { await conn.rollback(); return { error: 'not_found' }; }
-    if (photo.status !== 'pending') { await conn.rollback(); return { error: 'already_decided' }; }
+    if (!photo) {
+      await conn.rollback();
+      return { error: 'not_found' };
+    }
+    if (photo.status !== 'pending') {
+      await conn.rollback();
+      return { error: 'already_decided' };
+    }
     if (action === 'approve' && photo.review_stage !== 'schedule') {
       await conn.rollback();
       return { error: 'prescription_first' };
@@ -210,20 +259,29 @@ export async function decideValidation(pharmacistId, photoId, action, reason, op
     if (!activeClaim(photo, now)) {
       if (photo.claimed_by) await audit(conn, photo, photo.claimed_by, 'claim_expired');
       const expiresAt = new Date(now.getTime() + claimLeaseMinutes() * 60000);
-      await conn.execute('UPDATE prescription_photos SET claimed_by=?, claim_expires_at=? WHERE id=?', [pharmacistId, expiresAt, photoId]);
+      await conn.execute(
+        'UPDATE prescription_photos SET claimed_by=?, claim_expires_at=? WHERE id=?',
+        [pharmacistId, expiresAt, photoId]
+      );
       await audit(conn, photo, pharmacistId, photo.claimed_by ? 'reclaimed' : 'claimed');
     }
-    const status = { approve: 'approved', reject: 'rejected', needs_clearer: 'needs_clearer' }[action];
+    const status = { approve: 'approved', reject: 'rejected', needs_clearer: 'needs_clearer' }[
+      action
+    ];
     await conn.execute(
       `UPDATE prescription_photos SET status=?, decision_reason=?, pharmacist_id=?, decision_at=NOW(3),
        purge_at=DATE_ADD(NOW(3), INTERVAL ? DAY), claimed_by=NULL, claim_expires_at=NULL WHERE id=?`,
       [status, parsed.value.reason, pharmacistId, PURGE_DAYS, photoId]
     );
     if (action === 'approve') {
-      await conn.execute("UPDATE medications SET status='active', pharmacist_id=?, validated_at=NOW(3) WHERE id=?", [pharmacistId, photo.medication_id]);
-      const draft = typeof photo.schedule_draft_json === 'string'
-        ? JSON.parse(photo.schedule_draft_json)
-        : photo.schedule_draft_json;
+      await conn.execute(
+        "UPDATE medications SET status='active', pharmacist_id=?, validated_at=NOW(3) WHERE id=?",
+        [pharmacistId, photo.medication_id]
+      );
+      const draft =
+        typeof photo.schedule_draft_json === 'string'
+          ? JSON.parse(photo.schedule_draft_json)
+          : photo.schedule_draft_json;
       const slots = Array.isArray(draft?.slots) ? draft.slots : [];
       if (!slots.length) {
         await conn.rollback();
@@ -240,11 +298,19 @@ export async function decideValidation(pharmacistId, photoId, action, reason, op
              (id, medication_id, patient_id, scheduled_time, generated_reason,
               is_confirmed, is_prn_slot, schedule_version, status)
            VALUES (?, ?, ?, ?, ?, 1, 0, ?, 'scheduled')`,
-          [uuidv4(), photo.medication_id, photo.patient_id, slot.scheduled_time,
-            slot.generated_reason || 'pharmacist-approved generated schedule', versionRow.next]
+          [
+            uuidv4(),
+            photo.medication_id,
+            photo.patient_id,
+            slot.scheduled_time,
+            slot.generated_reason || 'pharmacist-approved generated schedule',
+            versionRow.next,
+          ]
         );
       }
-      await conn.execute("UPDATE prescription_photos SET review_stage='complete' WHERE id=?", [photoId]);
+      await conn.execute("UPDATE prescription_photos SET review_stage='complete' WHERE id=?", [
+        photoId,
+      ]);
       await conn.execute(
         `UPDATE patients p JOIN medications m ON m.patient_id=p.id SET p.priority_flag=1
          WHERE m.id=? AND p.medical_condition_enc IS NOT NULL`,
@@ -253,7 +319,11 @@ export async function decideValidation(pharmacistId, photoId, action, reason, op
     }
     await createPatientNotification({
       patientId: photo.patient_id,
-      type: { approve: 'prescription_approved', reject: 'prescription_rejected', needs_clearer: 'prescription_needs_clearer' }[action],
+      type: {
+        approve: 'prescription_approved',
+        reject: 'prescription_rejected',
+        needs_clearer: 'prescription_needs_clearer',
+      }[action],
       eventKey: `prescription:${photo.id}:${status}`,
       medicineName: photo.drug_name_raw,
       metadata: { prescription_id: photo.id, medication_id: photo.medication_id },
@@ -292,7 +362,8 @@ export async function validationHistory(pharmacistId, photoId) {
 export async function purgeExpiredPhotos(now = new Date()) {
   const [rows] = await pool.execute(
     `SELECT id, redacted_path FROM prescription_photos
-     WHERE redacted_path IS NOT NULL AND purge_at IS NOT NULL AND purge_at < ?`, [now]
+     WHERE redacted_path IS NOT NULL AND purge_at IS NOT NULL AND purge_at < ?`,
+    [now]
   );
   let purged = 0;
   for (const row of rows) {

@@ -26,10 +26,15 @@ router.get('/profile', async (req, res) => {
   const [[row]] = await pool.execute(
     `SELECT u.email, u.created_at, cp.display_name_enc
      FROM users u LEFT JOIN caregiver_profiles cp ON cp.caregiver_id=u.id
-     WHERE u.id=?`, [req.user.sub]
+     WHERE u.id=?`,
+    [req.user.sub]
   );
   if (!row) return res.status(404).json({ error: 'Caregiver not found' });
-  res.json({ email: row.email, created_at: row.created_at, display_name: row.display_name_enc ? decrypt(row.display_name_enc) : '' });
+  res.json({
+    email: row.email,
+    created_at: row.created_at,
+    display_name: row.display_name_enc ? decrypt(row.display_name_enc) : '',
+  });
 });
 
 router.put('/profile', async (req, res) => {

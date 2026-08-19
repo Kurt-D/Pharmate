@@ -38,7 +38,9 @@ export default function AdminLayout() {
     <div className="admin-shell">
       <nav className="admin-sidebar">
         <div className="admin-brand">
-          <span className="admin-brand-mark">P</span><span>HAR</span><b>MATE</b>
+          <span className="admin-brand-mark">P</span>
+          <span>HAR</span>
+          <b>MATE</b>
         </div>
         <div className="admin-menu-label">MENU</div>
         {MENU.map((m) => (
@@ -51,8 +53,12 @@ export default function AdminLayout() {
           </NavLink>
         ))}
         <div className="admin-preferences">PREFERENCES</div>
-        <button className="admin-minor" type="button">Settings</button>
-        <button className="admin-minor" type="button">Help</button>
+        <button className="admin-minor" type="button">
+          Settings
+        </button>
+        <button className="admin-minor" type="button">
+          Help
+        </button>
         <button className="admin-logout" onClick={handleLogout}>
           ⇥ &nbsp; Log out
         </button>
@@ -63,11 +69,16 @@ export default function AdminLayout() {
           <div>
             <div className="admin-kicker">ADMIN DASHBOARD</div>
             <h1>{current?.label || 'Dashboard'}</h1>
-            <div className="admin-sub">{descriptions[current?.label] || descriptions.Dashboard}</div>
+            <div className="admin-sub">
+              {descriptions[current?.label] || descriptions.Dashboard}
+            </div>
           </div>
           <div className="admin-account">
             <span className="admin-avatar">A</span>
-            <span><b>Admin</b><small>Administrator</small></span>
+            <span>
+              <b>Admin</b>
+              <small>Administrator</small>
+            </span>
           </div>
         </header>
         <main className="admin-content">

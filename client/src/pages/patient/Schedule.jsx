@@ -22,7 +22,8 @@ function label(minute) {
 }
 
 export default function Schedule() {
-  const { language } = useLanguage(); const tr = (english, filipino) => language === 'fil' ? filipino : english;
+  const { language } = useLanguage();
+  const tr = (english, filipino) => (language === 'fil' ? filipino : english);
   const navigate = useNavigate();
   const [proposal, setProposal] = useState(null); // null = loading
   const [doses, setDoses] = useState([]); // editable, one per scheduled slot
@@ -133,7 +134,9 @@ export default function Schedule() {
       )}
 
       {proposal === null && !error && (
-        <div className="text-center text-muted py-5">{tr('Building your schedule…', 'Ginagawa ang iyong iskedyul…')}</div>
+        <div className="text-center text-muted py-5">
+          {tr('Building your schedule…', 'Ginagawa ang iyong iskedyul…')}
+        </div>
       )}
 
       {proposal && (
@@ -233,7 +236,11 @@ export default function Schedule() {
 
           {doses.length > 0 && (
             <button className="pm-btn-primary" disabled={confirming || confirmed} onClick={confirm}>
-              {confirming ? tr('Confirming…', 'Kinukumpirma…') : confirmed ? tr('Confirmed ✓', 'Nakumpirma ✓') : tr('Confirm Schedule', 'Kumpirmahin ang Iskedyul')}
+              {confirming
+                ? tr('Confirming…', 'Kinukumpirma…')
+                : confirmed
+                  ? tr('Confirmed ✓', 'Nakumpirma ✓')
+                  : tr('Confirm Schedule', 'Kumpirmahin ang Iskedyul')}
             </button>
           )}
         </>

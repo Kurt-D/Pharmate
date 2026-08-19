@@ -63,10 +63,9 @@ test('patient creates a hashed, 24-hour invite and lists its safe metadata', asy
     23 * 60 * 60 * 1000
   );
 
-  const [[stored]] = await pool.execute(
-    'SELECT code, token_hash FROM invite_codes WHERE id = ?',
-    [created.body.id]
-  );
+  const [[stored]] = await pool.execute('SELECT code, token_hash FROM invite_codes WHERE id = ?', [
+    created.body.id,
+  ]);
   expect(stored.code).toBeNull();
   expect(stored.token_hash).toMatch(/^[a-f0-9]{64}$/);
   expect(stored.token_hash).not.toBe(created.body.code);
@@ -81,9 +80,10 @@ test('patient creates a hashed, 24-hour invite and lists its safe metadata', asy
 
 test('expired invite is not listed and cannot be redeemed', async () => {
   const created = await request(app).post('/api/patient/invite').set(auth(patientA.token));
-  await pool.execute('UPDATE invite_codes SET expires_at = DATE_SUB(NOW(3), INTERVAL 1 SECOND) WHERE id = ?', [
-    created.body.id,
-  ]);
+  await pool.execute(
+    'UPDATE invite_codes SET expires_at = DATE_SUB(NOW(3), INTERVAL 1 SECOND) WHERE id = ?',
+    [created.body.id]
+  );
 
   const listed = await request(app).get('/api/patient/invites').set(auth(patientA.token));
   expect(listed.body.some((invite) => invite.id === created.body.id)).toBe(false);
@@ -139,7 +139,7 @@ test('two concurrent caregivers cannot redeem the same invite', async () => {
   expect(results.map((result) => result.status).sort()).toEqual([201, 409]);
 
   const [[count]] = await pool.execute(
-    'SELECT COUNT(*) AS total FROM caregiver_patients WHERE patient_id = ? AND status = \'active\'',
+    "SELECT COUNT(*) AS total FROM caregiver_patients WHERE patient_id = ? AND status = 'active'",
     [patientB.id]
   );
   expect(count.total).toBe(1);
@@ -189,9 +189,7 @@ test('revocation immediately removes every caregiver patient-scoped permission a
     request(app)
       .get(`/api/caregiver/patients/${patientCodeA}/medications`)
       .set(auth(caregiverA.token)),
-    request(app)
-      .get(`/api/caregiver/patients/${patientCodeA}/orders`)
-      .set(auth(caregiverA.token)),
+    request(app).get(`/api/caregiver/patients/${patientCodeA}/orders`).set(auth(caregiverA.token)),
     request(app)
       .post(`/api/caregiver/patients/${patientCodeA}/refills`)
       .set(auth(caregiverA.token))

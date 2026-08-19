@@ -38,7 +38,9 @@ export function speak(text) {
     u.volume = 1;
     const preferredVoice = window.speechSynthesis
       .getVoices()
-      .find((voice) => /^en(-|_)/i.test(voice.lang) && /female|zira|samantha|aria/i.test(voice.name));
+      .find(
+        (voice) => /^en(-|_)/i.test(voice.lang) && /female|zira|samantha|aria/i.test(voice.name)
+      );
     if (preferredVoice) u.voice = preferredVoice;
     window.speechSynthesis.cancel(); // never stack utterances
     window.speechSynthesis.speak(u);

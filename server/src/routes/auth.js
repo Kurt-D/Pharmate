@@ -21,7 +21,9 @@ const REFRESH_DAYS = Number(process.env.JWT_REFRESH_EXPIRES_DAYS) || 30;
 const BCRYPT_COST = Number(process.env.BCRYPT_COST) || 12;
 const FIFTEEN_MINUTES = 15 * 60 * 1000;
 const RESET_TOKEN_TTL_MS = 30 * 60 * 1000;
-const FORGOT_RESPONSE = { message: 'If the account is eligible, a password reset link will be sent' };
+const FORGOT_RESPONSE = {
+  message: 'If the account is eligible, a password reset link will be sent',
+};
 const INVALID_RESET_RESPONSE = { error: 'Invalid or expired reset token' };
 
 const registerLimit = rateLimit({ windowMs: 60 * 60 * 1000, max: 5 });
@@ -252,7 +254,12 @@ router.post('/reset-password', resetLimit, async (req, res) => {
       [hashToken(token)]
     );
     const record = rows[0];
-    if (!record || record.used_at || !record.is_active || new Date(record.expires_at) <= new Date()) {
+    if (
+      !record ||
+      record.used_at ||
+      !record.is_active ||
+      new Date(record.expires_at) <= new Date()
+    ) {
       await conn.rollback();
       return res.status(400).json(INVALID_RESET_RESPONSE);
     }
