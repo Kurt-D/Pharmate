@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import { apiUrl } from '../config.js';
 
@@ -14,7 +14,13 @@ const ROLE_ROUTES = {
 
 export default function Login() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { login } = useAuth();
+  const staffMode = searchParams.get('mode') === 'staff';
+  const requestedRole = searchParams.get('role');
+  const selectedRole = ['patient', 'caregiver'].includes(requestedRole)
+    ? requestedRole
+    : 'patient';
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -29,7 +35,11 @@ export default function Login() {
       const res = await fetch(apiUrl('/api/auth/login'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({
+          email,
+          password,
+          ...(staffMode ? { accountGroup: 'staff' } : { role: selectedRole }),
+        }),
       });
       const data = await res.json();
 
@@ -52,7 +62,25 @@ export default function Login() {
       <div className="card shadow-sm" style={{ width: '100%', maxWidth: 420 }}>
         <div className="card-body p-4">
           <h4 className="mb-1 fw-bold text-primary">PharMate</h4>
-          <p className="text-muted small mb-4">Community telepharmacy platform</p>
+          <p className="text-muted small mb-3">
+            {staffMode ? 'Staff portal' : 'Are you a patient or caregiver?'}
+          </p>
+
+          {!staffMode && (
+            <div className="login-role-picker mb-4" aria-label="Choose account type">
+              {['patient', 'caregiver'].map((role) => (
+                <button
+                  key={role}
+                  type="button"
+                  className={`btn ${selectedRole === role ? 'btn-primary' : 'btn-outline-primary'}`}
+                  aria-pressed={selectedRole === role}
+                  onClick={() => setSearchParams({ role })}
+                >
+                  {role === 'patient' ? 'I am a Patient' : 'I am a Caregiver'}
+                </button>
+              ))}
+            </div>
+          )}
 
           {error && (
             <div className="alert alert-danger py-2" role="alert">
@@ -104,7 +132,16 @@ export default function Login() {
           </form>
 
           <p className="text-center small text-muted mt-3 mb-0">
-            New patient? <Link to="/signup">Create an account</Link>
+            {!staffMode && selectedRole === 'patient' ? (
+              <>New patient? <Link to="/signup">Create an account</Link></>
+            ) : !staffMode ? (
+              <>Caregiver accounts are provided by an administrator.</>
+            ) : null}
+          </p>
+          <p className="text-center small mt-2 mb-0">
+            <Link to={staffMode ? '/login?role=patient' : '/login?mode=staff'}>
+              {staffMode ? 'Patient or caregiver sign in' : 'Pharmacist or admin sign in'}
+            </Link>
           </p>
         </div>
       </div>

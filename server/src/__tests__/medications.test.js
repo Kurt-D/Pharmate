@@ -10,6 +10,7 @@
  */
 import request from 'supertest';
 import app from '../index.js';
+import { createPrivilegedTestUser } from './helpers/testUsers.js';
 
 const PATIENT_EMAIL = `patient.s3.${Date.now()}@test.pharmate`;
 const PHARM_EMAIL = `pharm.s3.${Date.now()}@test.pharmate`;
@@ -29,11 +30,11 @@ beforeAll(async () => {
     await request(app).post('/api/auth/login').send({ email: PATIENT_EMAIL, password: PASSWORD })
   ).body.accessToken;
 
-  await request(app).post('/api/auth/register').send({
+  await createPrivilegedTestUser({
     email: PHARM_EMAIL,
     password: PASSWORD,
     role: 'pharmacist',
-    full_name: 'Dr S3',
+    fullName: 'Dr S3',
   });
   pharmToken = (
     await request(app).post('/api/auth/login').send({ email: PHARM_EMAIL, password: PASSWORD })
@@ -82,14 +83,14 @@ describe('Encode — curated drug', () => {
     expect(res.body.requires_prescription).toBe(false);
   });
 
-  test('a verified OTC drug stays active even when the patient marks its source as prescription', async () => {
+  test('a verified OTC drug sourced from a prescription waits for pharmacist validation', async () => {
     const res = await request(app)
       .post('/api/patient/medications')
       .set('Authorization', `Bearer ${patientToken}`)
       .send({ drug_name: 'paracetamol', frequency: 'BID', source: 'RX_VALIDATED' });
     expect(res.status).toBe(201);
-    expect(res.body.status).toBe('active');
-    expect(res.body.source).toBe('OTC_SELF');
+    expect(res.body.status).toBe('pending_validation');
+    expect(res.body.source).toBe('RX_VALIDATED');
     expect(res.body.requires_prescription).toBe(false);
   });
 
@@ -99,8 +100,9 @@ describe('Encode — curated drug', () => {
       .set('Authorization', `Bearer ${patientToken}`)
       .send({ drug_name: 'amoxicillin', frequency: 'TID', source: 'OTC_SELF' });
     expect(res.status).toBe(201);
-    expect(res.body.source).toBe('RX_VALIDATED'); // overridden by the drug's class
-    expect(res.body.status).toBe('pending_validation'); // not active — needs validation
+    expect(res.body.status).toBe('pending_validation');
+    expect(res.body.source).toBe('RX_VALIDATED');
+    expect(res.body.rx_class).toBe('RX');
     expect(res.body.requires_prescription).toBe(true);
   });
 });

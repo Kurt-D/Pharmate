@@ -14,14 +14,27 @@ import pharmacistRouter from './routes/pharmacist.js';
 import adminRouter from './routes/admin.js';
 import surveysRouter from './routes/surveys.js';
 import directoryRouter from './routes/directory.js';
+import { trustedOrigins, validateEnvironment } from './config/environment.js';
+
+validateEnvironment();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(helmet());
-app.use(cors());
+const allowedOrigins = trustedOrigins();
+app.use(
+  cors({
+    origin(origin, callback) {
+      if (!origin || allowedOrigins.has(origin)) return callback(null, true);
+      const error = new Error('Origin not allowed');
+      error.status = 403;
+      return callback(error);
+    },
+  })
+);
 app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
-app.use(express.json());
+app.use(express.json({ limit: process.env.JSON_BODY_LIMIT || '32kb' }));
 
 app.use('/api', healthRouter);
 app.use('/api/auth', authRouter);
@@ -41,8 +54,7 @@ app.use((_req, res) => {
 // The unused _next arg is required for Express to treat this as an error handler.
 app.use((err, _req, res, _next) => {
   const status = err.status || err.statusCode || 500;
-  const message =
-    process.env.NODE_ENV === 'production' && status === 500 ? 'Internal server error' : err.message;
+  const message = status >= 500 ? 'Internal server error' : err.message;
   res.status(status).json({ error: message });
 });
 

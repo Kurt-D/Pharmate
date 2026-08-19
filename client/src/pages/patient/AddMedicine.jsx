@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../../api.js';
+import { useLanguage } from '../../context/LanguageContext.jsx';
 
 // "How often do you take it?" chips → a frequency string the engine parser understands.
 const FREQ_OPTIONS = [
@@ -12,7 +13,10 @@ const FREQ_OPTIONS = [
 ];
 
 export default function AddMedicine() {
+  const { language } = useLanguage(); const tr = (english, filipino) => language === 'fil' ? filipino : english;
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const [entryMode, setEntryMode] = useState(searchParams.get('mode') === 'manual' ? 'manual' : null);
 
   const [name, setName] = useState('');
   const [strength, setStrength] = useState('');
@@ -25,6 +29,7 @@ export default function AddMedicine() {
 
   const [suggestions, setSuggestions] = useState([]);
   const [showSuggest, setShowSuggest] = useState(false);
+  const [searchingDrugs, setSearchingDrugs] = useState(false);
 
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState(null); // { kind, message }
@@ -37,12 +42,15 @@ export default function AddMedicine() {
       return;
     }
     clearTimeout(debounce.current);
+    setSearchingDrugs(true);
     debounce.current = setTimeout(async () => {
       try {
         const r = await api(`/api/patient/drugs?q=${encodeURIComponent(name.trim())}`);
         setSuggestions(r.data);
       } catch {
         setSuggestions([]);
+      } finally {
+        setSearchingDrugs(false);
       }
     }, 250);
     return () => clearTimeout(debounce.current);
@@ -116,6 +124,32 @@ export default function AddMedicine() {
     }
   }
 
+  if (!entryMode) {
+    return (
+      <>
+        <div className="d-flex align-items-center gap-2 mb-3">
+          <button className="pm-link" onClick={() => navigate('/patient/medications')}>←</button>
+          <h1 className="pm-title" style={{ fontSize: '1.3rem' }}>{tr('Add Medicine', 'Magdagdag ng Gamot')}</h1>
+        </div>
+        <div className="pm-banner pm-banner--info mb-3">
+          Choose how you want to add your medicine.
+        </div>
+        <div className="d-grid gap-3">
+          <button type="button" className="pm-card p-4 text-start" onClick={() => setEntryMode('manual')}>
+            <div className="fs-2 mb-2" aria-hidden="true">⌨️</div>
+            <strong className="d-block fs-5 text-primary">{tr('Enter Medicine Manually', 'Manu-manong Ilagay ang Gamot')}</strong>
+            <span className="text-muted">{tr('Type the medicine name, dose, form, and frequency.', 'I-type ang pangalan, dosis, uri, at dalas ng gamot.')}</span>
+          </button>
+          <button type="button" className="pm-card p-4 text-start border-primary" onClick={() => navigate('/patient/medications/prescription')}>
+            <div className="fs-2 mb-2" aria-hidden="true">📷</div>
+            <strong className="d-block fs-5 text-primary">{tr('Scan Prescription with OCR', 'I-scan ang Reseta gamit ang OCR')}</strong>
+            <span className="text-muted">{tr('Upload or photograph a prescription. OCR will read it before pharmacist review.', 'I-upload o kunan ng larawan ang reseta. Babasahin ito ng OCR bago suriin ng parmasyutiko.')}</span>
+          </button>
+        </div>
+      </>
+    );
+  }
+
   return (
     <>
       <div className="d-flex align-items-center gap-2 mb-3">
@@ -151,7 +185,7 @@ export default function AddMedicine() {
 
       <form onSubmit={handleSubmit} className="pm-card p-3">
         {/* Medicine name + picker */}
-        <label className="form-label fw-semibold">Medicine Name</label>
+        <label className="form-label fw-semibold">{tr('Medicine Name', 'Pangalan ng Gamot')}</label>
         <div className="position-relative">
           <input
             className="form-control"
@@ -166,11 +200,15 @@ export default function AddMedicine() {
             autoComplete="off"
             required
           />
-          {showSuggest && suggestions.length > 0 && (
+          {showSuggest && name.trim() && (
             <div
               className="pm-card position-absolute w-100 mt-1 p-1"
               style={{ zIndex: 5, maxHeight: 200, overflowY: 'auto' }}
             >
+              {searchingDrugs && <div className="small text-muted p-2">Searching verified medicines…</div>}
+              {!searchingDrugs && suggestions.length === 0 && (
+                <div className="small text-muted p-2">No verified medicine matches “{name.trim()}”.</div>
+              )}
               {suggestions.map((s) => (
                 <button
                   type="button"
@@ -180,7 +218,6 @@ export default function AddMedicine() {
                     setName(s.generic_name);
                     setShowSuggest(false);
                     setRxClass(s.rx_class ?? null);
-                    // An Rx drug can't be self-added as OTC — lock it.
                     if (s.rx_class === 'RX') setSource('RX_VALIDATED');
                   }}
                 >
@@ -198,10 +235,12 @@ export default function AddMedicine() {
             </div>
           )}
         </div>
-        <div className="form-text mb-3">Check the label on your medicine.</div>
+        <div className="form-text mb-3">
+          Enter one or more letters, then select a medicine from the verified database list.
+        </div>
 
         {/* Strength */}
-        <label className="form-label fw-semibold">Strength (Dose)</label>
+        <label className="form-label fw-semibold">{tr('Strength (Dose)', 'Lakas (Dosis)')}</label>
         <input
           className="form-control mb-3"
           placeholder="e.g., 500 mg"
@@ -211,7 +250,7 @@ export default function AddMedicine() {
         />
 
         {/* Form */}
-        <label className="form-label fw-semibold">Form</label>
+        <label className="form-label fw-semibold">{tr('Form', 'Uri')}</label>
         <select
           className="form-select mb-3"
           value={form}
@@ -226,7 +265,7 @@ export default function AddMedicine() {
         </select>
 
         {/* Frequency */}
-        <label className="form-label fw-semibold">How often do you take it?</label>
+        <label className="form-label fw-semibold">{tr('How often do you take it?', 'Gaano kadalas ito iniinom?')}</label>
         <div className="d-flex flex-wrap gap-2 mb-2">
           {FREQ_OPTIONS.map((o) => (
             <button
@@ -267,7 +306,7 @@ export default function AddMedicine() {
         </div>
 
         {/* Source */}
-        <label className="form-label fw-semibold">Source</label>
+        <label className="form-label fw-semibold">{tr('Source', 'Pinagmulan')}</label>
         <select
           className="form-select mb-1"
           value={source}
@@ -279,15 +318,16 @@ export default function AddMedicine() {
             Select source
           </option>
           <option value="OTC_SELF">Over-the-counter (self)</option>
-          <option value="RX_VALIDATED">From a prescription</option>
+          <option value="RX_VALIDATED">From a prescription (validate now)</option>
         </select>
-        {rxClass === 'RX' && (
-          <div className="form-text mb-4 text-warning-emphasis">
-            This is a prescription medicine — it must be validated by a pharmacist. You’ll be asked
-            to upload your prescription.
+        {rxClass === 'RX' ? (
+          <div className="form-text mb-4">
+            This is a prescription-only medicine. After adding it, upload a prescription photo.
+            The medicine becomes active only after a pharmacist approves it.
           </div>
+        ) : (
+          <div className="mb-4" />
         )}
-        {rxClass !== 'RX' && <div className="mb-4" />}
 
         <p className="form-text mb-2">
           Complete all fields above before saving. Prescription medicines will then be sent for

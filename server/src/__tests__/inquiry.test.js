@@ -6,6 +6,7 @@
 import request from 'supertest';
 import app from '../index.js';
 import { pool } from '../db/connection.js';
+import { createPrivilegedTestUser } from './helpers/testUsers.js';
 
 const PASSWORD = 'TestPass@123';
 const stamp = Date.now();
@@ -13,13 +14,24 @@ const PATIENT_PII = 'Inquiry Patient S8';
 
 let patientToken;
 let pharmToken;
+let otherPatientToken;
+let otherPharmToken;
 let branchId;
 
 async function register(role, extra = {}) {
   const email = `${role}.s8.${stamp}.${Math.random().toString(16).slice(2, 8)}@test.pharmate`;
-  await request(app)
-    .post('/api/auth/register')
-    .send({ email, password: PASSWORD, role, ...extra });
+  if (role === 'patient') {
+    await request(app)
+      .post('/api/auth/register')
+      .send({ email, password: PASSWORD, role, ...extra });
+  } else {
+    await createPrivilegedTestUser({
+      email,
+      password: PASSWORD,
+      role,
+      fullName: extra.full_name,
+    });
+  }
   const login = await request(app).post('/api/auth/login').send({ email, password: PASSWORD });
   return { token: login.body.accessToken, id: login.body.user.id };
 }
@@ -28,6 +40,8 @@ beforeAll(async () => {
   const p = await register('patient', { full_name: PATIENT_PII });
   patientToken = p.token;
   pharmToken = (await register('pharmacist', { full_name: 'Dr S8' })).token;
+  otherPatientToken = (await register('patient', { full_name: 'Other Patient S8' })).token;
+  otherPharmToken = (await register('pharmacist', { full_name: 'Dr Other S8' })).token;
 
   branchId = 'branch-s8-' + Math.random().toString(16).slice(2, 8);
   await pool.execute(
@@ -105,7 +119,7 @@ describe('Ask Your Pharmacist (D-I)', () => {
     expect(msgs.body.map((m) => m.sender_role)).toEqual(['patient', 'pharmacist']);
   });
 
-  test('closing purges the server-side messages (thread stub remains)', async () => {
+  test('closing keeps messages as read-only consultation history', async () => {
     const close = await request(app)
       .post(`/api/patient/inquiries/${threadId}/close`)
       .set(auth(patientToken));
@@ -115,11 +129,11 @@ describe('Ask Your Pharmacist (D-I)', () => {
       'SELECT COUNT(*) AS c FROM inquiry_messages WHERE thread_id = ?',
       [threadId]
     );
-    expect(msgs[0].c).toBe(0); // purged
+    expect(msgs[0].c).toBeGreaterThan(0);
     const [[thread]] = await pool.execute('SELECT status FROM inquiry_threads WHERE id = ?', [
       threadId,
     ]);
-    expect(thread.status).toBe('closed'); // stub retained, no content
+    expect(thread.status).toBe('closed');
   });
 
   test('a restricted-substance inquiry is declined with a branch-visit message', async () => {
@@ -129,6 +143,97 @@ describe('Ask Your Pharmacist (D-I)', () => {
       .send({ subject: 'dose question', drug_name: 'diazepam' });
     expect(res.status).toBe(403);
     expect(res.body.redirect).toBe('visit_nearest_branch');
+  });
+});
+
+describe('Inquiry ownership and atomic pharmacist claims', () => {
+  async function openInquiry(token, subject) {
+    const response = await request(app)
+      .post('/api/patient/inquiries')
+      .set(auth(token))
+      .send({ subject });
+    expect(response.status).toBe(201);
+    return response.body.thread_id;
+  }
+
+  test('a patient receives 404 when reading, replying to, or closing another patient’s inquiry', async () => {
+    const id = await openInquiry(patientToken, 'private patient thread');
+
+    const [read, reply, close] = await Promise.all([
+      request(app).get(`/api/patient/inquiries/${id}/messages`).set(auth(otherPatientToken)),
+      request(app)
+        .post(`/api/patient/inquiries/${id}/messages`)
+        .set(auth(otherPatientToken))
+        .send({ message: 'unauthorized reply' }),
+      request(app).post(`/api/patient/inquiries/${id}/close`).set(auth(otherPatientToken)),
+    ]);
+
+    expect([read.status, reply.status, close.status]).toEqual([404, 404, 404]);
+    const [[thread]] = await pool.execute('SELECT status FROM inquiry_threads WHERE id = ?', [id]);
+    expect(thread.status).toBe('open');
+  });
+
+  test('only the pharmacist who claimed an inquiry may read, reply to, or close it', async () => {
+    const id = await openInquiry(patientToken, 'assigned pharmacist thread');
+    const claim = await request(app)
+      .get(`/api/pharmacist/inquiries/${id}/messages`)
+      .set(auth(pharmToken));
+    expect(claim.status).toBe(200);
+
+    const [read, reply, close] = await Promise.all([
+      request(app).get(`/api/pharmacist/inquiries/${id}/messages`).set(auth(otherPharmToken)),
+      request(app)
+        .post(`/api/pharmacist/inquiries/${id}/reply`)
+        .set(auth(otherPharmToken))
+        .send({ message: 'unauthorized pharmacist reply' }),
+      request(app).post(`/api/pharmacist/inquiries/${id}/close`).set(auth(otherPharmToken)),
+    ]);
+    expect([read.status, reply.status, close.status]).toEqual([404, 404, 404]);
+  });
+
+  test('competing pharmacist replies atomically assign exactly one pharmacist', async () => {
+    const id = await openInquiry(patientToken, 'competing claim thread');
+    const replies = await Promise.all([
+      request(app)
+        .post(`/api/pharmacist/inquiries/${id}/reply`)
+        .set(auth(pharmToken))
+        .send({ message: 'reply from pharmacist one' }),
+      request(app)
+        .post(`/api/pharmacist/inquiries/${id}/reply`)
+        .set(auth(otherPharmToken))
+        .send({ message: 'reply from pharmacist two' }),
+    ]);
+
+    expect(replies.map((response) => response.status).sort()).toEqual([201, 404]);
+    const [[thread]] = await pool.execute(
+      'SELECT pharmacist_id FROM inquiry_threads WHERE id = ?',
+      [id]
+    );
+    const [[messages]] = await pool.execute(
+      'SELECT COUNT(*) AS count FROM inquiry_messages WHERE thread_id = ?',
+      [id]
+    );
+    expect(thread.pharmacist_id).toBeTruthy();
+    expect(messages.count).toBe(1);
+  });
+
+  test('an unauthorized close cannot delete existing messages', async () => {
+    const id = await openInquiry(patientToken, 'deletion protection thread');
+    await request(app)
+      .post(`/api/patient/inquiries/${id}/messages`)
+      .set(auth(patientToken))
+      .send({ message: 'must remain stored' });
+
+    const close = await request(app)
+      .post(`/api/patient/inquiries/${id}/close`)
+      .set(auth(otherPatientToken));
+    expect(close.status).toBe(404);
+
+    const [[messages]] = await pool.execute(
+      'SELECT COUNT(*) AS count FROM inquiry_messages WHERE thread_id = ?',
+      [id]
+    );
+    expect(messages.count).toBe(1);
   });
 });
 

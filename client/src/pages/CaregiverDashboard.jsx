@@ -128,7 +128,7 @@ function AlertsView({ alerts }) {
   );
 }
 
-// ── Link via a patient-generated invite code (8 chars, single-use, 24h TTL) ───
+// ── Link via a patient-generated readable code (single-use, 24h TTL) ──────────
 function LinkView({ onLinked }) {
   const [code, setCode] = useState('');
   const [msg, setMsg] = useState('');

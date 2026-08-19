@@ -36,11 +36,22 @@ export async function findRestricted(name) {
 export async function resolveDrug(name) {
   const canonical = canonicalName(name);
   if (!canonical) return null;
-  const [rows] = await pool.execute(
+  const [exactRows] = await pool.execute(
     'SELECT * FROM drug_reference WHERE generic_name = ? ORDER BY is_provisional ASC, created_at ASC LIMIT 1',
     [canonical]
   );
-  return rows[0] ?? null;
+  if (exactRows[0]) return exactRows[0];
+
+  // Accept a shortened generic name only when it identifies exactly one
+  // verified formulary entry (for example "metoprolol" → "metoprolol
+  // succinate"). Ambiguous names remain in pharmacist curation.
+  const [prefixRows] = await pool.execute(
+    `SELECT * FROM drug_reference
+     WHERE generic_name LIKE ? AND is_provisional = 0
+     ORDER BY created_at ASC LIMIT 2`,
+    [`${canonical} %`]
+  );
+  return prefixRows.length === 1 ? prefixRows[0] : null;
 }
 
 /** Type-ahead search over curated drugs (generic name or brand). */
@@ -53,9 +64,18 @@ export async function searchDrugs(query, limit = 20) {
   const safeLimit = Math.min(Math.max(parseInt(limit, 10) || 20, 1), 100);
   const [rows] = await pool.execute(
     `SELECT id, generic_name, brand_names_json, min_interval_hours, max_daily_doses,
-            is_prn_default, default_interval_hours, meal_anchor_code, is_restricted, rx_class, is_provisional
-     FROM drug_reference
-     WHERE LOWER(generic_name) LIKE ? OR LOWER(brand_names_json) LIKE ?
+            is_prn_default, default_interval_hours, meal_anchor_code, is_restricted,
+            rx_class, is_provisional
+     FROM (
+       SELECT dr.*,
+              ROW_NUMBER() OVER (
+                PARTITION BY LOWER(TRIM(dr.generic_name))
+                ORDER BY dr.is_provisional ASC, dr.created_at ASC, dr.id ASC
+              ) AS name_rank
+       FROM drug_reference dr
+       WHERE LOWER(dr.generic_name) LIKE ? OR LOWER(dr.brand_names_json) LIKE ?
+     ) ranked
+     WHERE name_rank=1
      ORDER BY generic_name
      LIMIT ${safeLimit}`,
     [q, q]

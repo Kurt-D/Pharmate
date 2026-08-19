@@ -27,7 +27,7 @@ export default function AnchorOnboarding() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    const token = localStorage.getItem('pm_token');
+    const token = sessionStorage.getItem('pm_token') || localStorage.getItem('pm_token');
     const auth = { Authorization: `Bearer ${token}` };
     Promise.all([
       fetch(apiUrl('/api/patient/anchors'), { headers: auth })
@@ -63,7 +63,7 @@ export default function AnchorOnboarding() {
     e.preventDefault();
     setSaving(true);
     setError('');
-    const token = localStorage.getItem('pm_token');
+    const token = sessionStorage.getItem('pm_token') || localStorage.getItem('pm_token');
     const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
     try {
       // Save the self-declared condition first, then the anchors.

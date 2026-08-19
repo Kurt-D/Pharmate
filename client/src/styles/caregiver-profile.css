@@ -1,0 +1,25 @@
+.cg-profile-panel {
+  background: #f5f8ff;
+  display: grid;
+  gap: 0.5rem;
+  padding: 0.7rem;
+}
+.cg-profile-panel label {
+  display: flex;
+  flex-direction: column;
+  font-size: 0.68rem;
+  font-weight: 750;
+  gap: 0.3rem;
+}
+.cg-profile-panel input,
+.cg-profile-panel select {
+  border: 1px solid #ccd7e6;
+  border-radius: 0.45rem;
+  min-height: 44px;
+  padding: 0.5rem;
+}
+.cg-profile-panel > button {
+  background: #1769f5;
+  color: #fff;
+  text-align: center;
+}

@@ -1,10 +1,19 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { api, apiBlobUrl } from '../../api.js';
 
-// Prescription Verification (UC-03, Figs 45–56). The pharmacist reviews the
-// redacted photo and approves / rejects / requests a clearer image. There are
-// deliberately NO scheduling controls here — the pharmacist's role ends at
-// validation; the patient generates and confirms the schedule.
+function parseDraft(value) {
+  if (!value) return { slots: [], unresolved: [] };
+  if (typeof value === 'object') return value;
+  try { return JSON.parse(value); } catch { return { slots: [], unresolved: [] }; }
+}
+
+function formatTime(value) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleString([], {
+    dateStyle: 'medium', timeStyle: 'short',
+  });
+}
+
 export default function Validation() {
   const [queue, setQueue] = useState(null);
   const [selected, setSelected] = useState(null);
@@ -13,6 +22,7 @@ export default function Validation() {
   const [busy, setBusy] = useState(false);
   const [flash, setFlash] = useState('');
   const [error, setError] = useState('');
+  const draft = useMemo(() => parseDraft(selected?.schedule_draft_json), [selected]);
 
   async function load() {
     try {
@@ -35,9 +45,27 @@ export default function Validation() {
     if (photoUrl) URL.revokeObjectURL(photoUrl);
     setPhotoUrl('');
     try {
+      await api(`/api/pharmacist/validations/${item.id}/claim`, { method: 'POST' });
       setPhotoUrl(await apiBlobUrl(`/api/pharmacist/validations/${item.id}/photo`));
     } catch {
       setError('Could not load the prescription image.');
+    }
+  }
+
+  async function approvePrescription() {
+    if (!selected) return;
+    setBusy(true);
+    setError('');
+    try {
+      await api(`/api/pharmacist/validations/${selected.id}/approve-prescription`, { method: 'POST' });
+      setSelected((current) => ({ ...current, review_stage: 'schedule' }));
+      setQueue((current) => current?.map((item) => item.id === selected.id
+        ? { ...item, review_stage: 'schedule' } : item));
+      setFlash('Prescription approved. Now independently validate the suggested schedule.');
+    } catch (requestError) {
+      setError(requestError.message);
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -56,7 +84,7 @@ export default function Validation() {
       });
       const verb =
         action === 'approve'
-          ? 'approved — medication is now active'
+          ? 'schedule approved and published to the patient dashboard'
           : action === 'reject'
             ? 'rejected'
             : 'flagged for a clearer photo';
@@ -74,10 +102,10 @@ export default function Validation() {
 
   return (
     <>
-      <h2 className="h4 fw-bold mb-1">Prescription Verification</h2>
+      <h2 className="h4 fw-bold mb-1">Prescription &amp; Schedule Review</h2>
       <p className="text-muted">
-        Review each patient&apos;s redacted prescription and decide. Approving activates the
-        medication so the patient can build a schedule. You never set the schedule (UC-03).
+        First verify the prescription and OCR text. Then review the system-suggested schedule.
+        Nothing reaches the patient dashboard until both approvals are complete.
       </p>
 
       {flash && <div className="alert alert-success py-2">{flash}</div>}
@@ -112,7 +140,7 @@ export default function Validation() {
                     <span className="pw-code">{item.patient_code}</span>
                   </div>
                   <div className="small opacity-75">
-                    {item.frequency || '—'} · {new Date(item.created_at).toLocaleString()}
+                    Stage {item.review_stage === 'schedule' ? '2: schedule' : '1: prescription'} · {item.frequency || '—'}
                   </div>
                 </button>
               ))}
@@ -137,6 +165,10 @@ export default function Validation() {
                   </div>
                 </div>
 
+                <div className="mb-2">
+                  <span className="badge bg-primary">Stage {selected.review_stage === 'schedule' ? '2 of 2' : '1 of 2'}</span>
+                </div>
+
                 <div
                   className="border rounded mb-3 text-center bg-light"
                   style={{ minHeight: 220 }}
@@ -152,6 +184,28 @@ export default function Validation() {
                   )}
                 </div>
 
+                <section className="border rounded p-3 mb-3">
+                  <div className="d-flex justify-content-between">
+                    <strong>OCR transcription</strong>
+                    {selected.ocr_confidence != null && <span className="small text-muted">Confidence {Math.round(Number(selected.ocr_confidence))}%</span>}
+                  </div>
+                  <div className="small mt-2" style={{ whiteSpace: 'pre-wrap' }}>
+                    {selected.ocr_text || 'No OCR text was captured. Compare the entered medicine details with the image.'}
+                  </div>
+                </section>
+
+                <section className="border rounded p-3 mb-3">
+                  <strong>System-suggested schedule</strong>
+                  <div className="small text-muted mb-2">Not active until the second approval.</div>
+                  {draft.slots?.length ? draft.slots.map((slot, index) => (
+                    <div key={`${slot.scheduled_time}-${index}`} className="border-top py-2">
+                      <strong>{formatTime(slot.scheduled_time)}</strong>
+                      <div className="small text-muted">{slot.generated_reason || 'Generated from the prescription frequency and patient routine'}</div>
+                    </div>
+                  )) : <div className="alert alert-warning py-2 mb-0">No safe schedule was generated. Do not approve until the medicine details are corrected.</div>}
+                  {draft.unresolved?.length > 0 && <div className="alert alert-warning py-2 mt-2 mb-0">Unresolved checks: {draft.unresolved.join(', ')}</div>}
+                </section>
+
                 <label className="form-label small fw-semibold">
                   Reason (required to reject or request a clearer photo)
                 </label>
@@ -164,13 +218,15 @@ export default function Validation() {
                 />
 
                 <div className="d-flex gap-2">
-                  <button
-                    className="btn btn-success"
-                    disabled={busy}
-                    onClick={() => decide('approve')}
-                  >
-                    {busy ? 'Saving…' : 'Approve'}
-                  </button>
+                  {selected.review_stage === 'prescription' ? (
+                    <button className="btn btn-success" disabled={busy} onClick={approvePrescription}>
+                      {busy ? 'Saving…' : 'Approve Prescription & Review Schedule'}
+                    </button>
+                  ) : (
+                    <button className="btn btn-success" disabled={busy || !draft.slots?.length} onClick={() => decide('approve')}>
+                      {busy ? 'Publishing…' : 'Approve Schedule & Publish'}
+                    </button>
+                  )}
                   <button
                     className="btn btn-outline-secondary"
                     disabled={busy}

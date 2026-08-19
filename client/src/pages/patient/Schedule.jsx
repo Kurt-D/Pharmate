@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../../api.js';
+import { useLanguage } from '../../context/LanguageContext.jsx';
 
 // Suggested Schedule — Review & Confirm (Figs 32–33, ENG §6 / UC-03 steps 4–6).
 // The engine proposes; the patient may nudge each dose within ±60 min (D-E) with
@@ -21,6 +22,7 @@ function label(minute) {
 }
 
 export default function Schedule() {
+  const { language } = useLanguage(); const tr = (english, filipino) => language === 'fil' ? filipino : english;
   const navigate = useNavigate();
   const [proposal, setProposal] = useState(null); // null = loading
   const [doses, setDoses] = useState([]); // editable, one per scheduled slot
@@ -115,7 +117,7 @@ export default function Schedule() {
           ←
         </button>
         <h1 className="pm-title" style={{ fontSize: '1.3rem' }}>
-          Suggested Schedule
+          {tr('Suggested Schedule', 'Iminungkahing Iskedyul')}
         </h1>
       </div>
       <p className="pm-subtitle">
@@ -131,7 +133,7 @@ export default function Schedule() {
       )}
 
       {proposal === null && !error && (
-        <div className="text-center text-muted py-5">Building your schedule…</div>
+        <div className="text-center text-muted py-5">{tr('Building your schedule…', 'Ginagawa ang iyong iskedyul…')}</div>
       )}
 
       {proposal && (
@@ -144,7 +146,7 @@ export default function Schedule() {
               >
                 📅
               </div>
-              <h5 className="mb-1">Nothing to schedule yet</h5>
+              <h5 className="mb-1">{tr('Nothing to schedule yet', 'Wala pang maiiskedyul')}</h5>
               <p className="text-muted small mb-3">
                 Add an active medicine with a recognized frequency to generate a schedule.
               </p>
@@ -231,7 +233,7 @@ export default function Schedule() {
 
           {doses.length > 0 && (
             <button className="pm-btn-primary" disabled={confirming || confirmed} onClick={confirm}>
-              {confirming ? 'Confirming…' : confirmed ? 'Confirmed ✓' : 'Confirm Schedule'}
+              {confirming ? tr('Confirming…', 'Kinukumpirma…') : confirmed ? tr('Confirmed ✓', 'Nakumpirma ✓') : tr('Confirm Schedule', 'Kumpirmahin ang Iskedyul')}
             </button>
           )}
         </>

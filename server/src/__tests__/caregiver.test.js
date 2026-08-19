@@ -9,6 +9,7 @@
 import request from 'supertest';
 import app from '../index.js';
 import { pool } from '../db/connection.js';
+import { createPrivilegedTestUser } from './helpers/testUsers.js';
 
 const PASSWORD = 'TestPass@123';
 const stamp = Date.now();
@@ -23,9 +24,18 @@ const auth = (t) => ({ Authorization: `Bearer ${t}` });
 
 async function register(role, extra = {}) {
   const email = `${role}.cg.${stamp}.${Math.random().toString(16).slice(2, 8)}@test.pharmate`;
-  await request(app)
-    .post('/api/auth/register')
-    .send({ email, password: PASSWORD, role, ...extra });
+  if (role === 'patient') {
+    await request(app)
+      .post('/api/auth/register')
+      .send({ email, password: PASSWORD, role, ...extra });
+  } else {
+    await createPrivilegedTestUser({
+      email,
+      password: PASSWORD,
+      role,
+      fullName: extra.full_name,
+    });
+  }
   const login = await request(app).post('/api/auth/login').send({ email, password: PASSWORD });
   return { token: login.body.accessToken, id: login.body.user.id };
 }
@@ -87,7 +97,8 @@ describe('UC-09 — refill / delivery on the patient’s behalf', () => {
   });
 
   test('an unvalidated Rx medicine is declined (prescription_required)', async () => {
-    // amoxicillin is Rx; self-encoding forces it to pending_validation (no photo).
+    // amoxicillin is Rx: it adds as active/schedulable, but the refill gate still
+    // requires an approved prescription (none here), so the refill is declined.
     const med = await request(app)
       .post('/api/patient/medications')
       .set(auth(patientToken))
