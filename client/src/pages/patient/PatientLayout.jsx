@@ -3,16 +3,18 @@ import { NavLink, Outlet } from 'react-router-dom';
 import '../../styles/patient.css';
 import { api } from '../../api.js';
 import { registerPush } from '../../lib/notifications.js';
+import { useLanguage } from '../../context/LanguageContext.jsx';
 
 const NAV = [
-  { to: '/patient/home', icon: '🏠', label: 'Home' },
-  { to: '/patient/medications', icon: '💊', label: 'Medications' },
-  { to: '/patient/ask', icon: '💬', label: 'Ask' },
-  { to: '/patient/orders', icon: '🚚', label: 'Orders' },
-  { to: '/patient/profile', icon: '👤', label: 'Profile' },
+  { to: '/patient/home', icon: '⌂', label: 'nav.home' },
+  { to: '/patient/medications', icon: '▣', label: 'nav.medications' },
+  { to: '/patient/ask', icon: '▤', label: 'nav.ask' },
+  { to: '/patient/orders', icon: '▱', label: 'nav.orders' },
+  { to: '/patient/profile', icon: '○', label: 'nav.profile' },
 ];
 
 export default function PatientLayout() {
+  const { t } = useLanguage();
   // Register this device for online FCM reminders once the patient is in the app
   // (no-op on web; on the APK it grabs the token and posts it to the server).
   useEffect(() => {
@@ -28,7 +30,7 @@ export default function PatientLayout() {
         {NAV.map((n) => (
           <NavLink key={n.to} to={n.to} className={({ isActive }) => (isActive ? 'active' : '')}>
             <span className="pm-navicon">{n.icon}</span>
-            <span>{n.label}</span>
+            <span>{t(n.label)}</span>
           </NavLink>
         ))}
       </nav>

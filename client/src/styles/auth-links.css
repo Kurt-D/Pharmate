@@ -1,0 +1,15 @@
+.auth-access-links {
+  display: grid;
+  gap: 0.25rem;
+  margin-top: 0.65rem;
+  text-align: center;
+}
+.auth-access-links a {
+  color: #1769f5;
+  font-size: 0.68rem;
+  text-decoration: none;
+}
+.auth-access-links a + a {
+  border-top: 1px solid #e5eaf2;
+  padding-top: 0.4rem;
+}

@@ -17,6 +17,7 @@ import { reflowRemaining } from '../../engine/index.js';
 import { idealSlots } from '../../engine/intervals.js';
 import { parseClock } from '../../engine/time.js';
 import { raiseMissedAlerts } from './alerts.js';
+import { createPatientNotification } from './patientNotifications.js';
 
 const VALID_METHODS = ['fcm', 'local', 'manual', 'ocr'];
 const MANILA_OFFSET_MS = 8 * 3600 * 1000;
@@ -27,7 +28,7 @@ function manilaMinuteOfDay(date) {
   return d.getUTCHours() * 60 + d.getUTCMinutes();
 }
 
-/** The patient's current confirmed day plan (latest schedule_version) + status. */
+/** The patient's current confirmed day plan (latest version for each medicine). */
 export async function todayDoses(patientId) {
   const [rows] = await pool.execute(
     `SELECT ms.id AS schedule_id, ms.medication_id, ms.scheduled_time, ms.status,
@@ -37,7 +38,8 @@ export async function todayDoses(patientId) {
      WHERE ms.patient_id = ?
        AND ms.schedule_version = (
          SELECT COALESCE(MAX(schedule_version), 0)
-         FROM medication_schedules WHERE patient_id = ?
+         FROM medication_schedules
+         WHERE patient_id = ? AND medication_id = ms.medication_id
        )
      ORDER BY ms.scheduled_time ASC`,
     [patientId, patientId]
@@ -136,18 +138,43 @@ async function reflowSuggestion(patientId, frequencyCode, loggedAt) {
  */
 export async function sweepMissed(now = new Date()) {
   const [rows] = await pool.execute(
-    `SELECT id, patient_id, scheduled_time FROM medication_schedules WHERE status = 'scheduled'`
+    `SELECT ms.id, ms.patient_id, ms.scheduled_time, m.drug_name_raw
+     FROM medication_schedules ms
+     JOIN medications m ON m.id = ms.medication_id
+     WHERE ms.status = 'scheduled'`
   );
   let missed = 0;
   for (const r of rows) {
     const delayMin = (now.getTime() - new Date(r.scheduled_time).getTime()) / 60000;
     if (delayMin > 30) {
-      const [res] = await pool.execute(
-        `UPDATE medication_schedules SET status = 'missed' WHERE id = ? AND status = 'scheduled'`,
-        [r.id]
-      );
-      if (res.affectedRows > 0) {
-        missed += res.affectedRows;
+      const conn = await pool.getConnection();
+      let changed = false;
+      try {
+        await conn.beginTransaction();
+        const [res] = await conn.execute(
+          `UPDATE medication_schedules SET status = 'missed' WHERE id = ? AND status = 'scheduled'`,
+          [r.id]
+        );
+        changed = res.affectedRows > 0;
+        if (changed) {
+          await createPatientNotification({
+            patientId: r.patient_id,
+            type: 'dose_missed',
+            eventKey: `dose-missed:${r.id}`,
+            medicineName: r.drug_name_raw,
+            metadata: { schedule_id: r.id },
+            executor: conn,
+          });
+        }
+        await conn.commit();
+      } catch (error) {
+        await conn.rollback();
+        throw error;
+      } finally {
+        conn.release();
+      }
+      if (changed) {
+        missed++;
         // UC-08: alert caregivers (or flag the pharmacist if none) on the missed dose.
         await raiseMissedAlerts(r.patient_id, r.id);
       }

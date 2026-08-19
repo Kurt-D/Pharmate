@@ -25,10 +25,10 @@ async function seed() {
   const hash = await bcrypt.hash(DEV_PASSWORD, 12);
 
   // ── Users ────────────────────────────────────────────────────────────────
-  const patientUserId = uuidv4();
-  const pharmacistUserId = uuidv4();
-  const caregiverUserId = uuidv4();
-  const adminUserId = uuidv4();
+  let patientUserId = uuidv4();
+  let pharmacistUserId = uuidv4();
+  let caregiverUserId = uuidv4();
+  let adminUserId = uuidv4();
   const branchId = uuidv4();
   const drugAId = uuidv4();
   const drugBId = uuidv4();
@@ -42,6 +42,7 @@ async function seed() {
 
   for (const [id, email, pw, role] of users) {
     const [existing] = await conn.execute('SELECT id FROM users WHERE email = ?', [email]);
+
     if (existing.length === 0) {
       await conn.execute('INSERT INTO users (id, email, password_hash, role) VALUES (?, ?, ?, ?)', [
         id,
@@ -49,8 +50,33 @@ async function seed() {
         pw,
         role,
       ]);
+    } else {
+      // Reuse the existing user's ID
+      if (email === 'patient@dev.pharmate') {
+        patientUserId = existing[0].id;
+      } else if (email === 'pharmacist@dev.pharmate') {
+        pharmacistUserId = existing[0].id;
+      } else if (email === 'caregiver@dev.pharmate') {
+        caregiverUserId = existing[0].id;
+      } else if (email === 'admin@dev.pharmate') {
+        adminUserId = existing[0].id;
+      }
     }
   }
+
+  // A repeated run generates fresh candidate UUIDs above, but existing users keep
+  // their original IDs. Resolve those persisted IDs before inserting child rows;
+  // otherwise the second run attempts to reference users that do not exist.
+  const [persistedUsers] = await conn.execute(
+    `SELECT id, email FROM users
+     WHERE email IN (?, ?, ?, ?)`,
+    users.map(([, email]) => email)
+  );
+  const idsByEmail = new Map(persistedUsers.map((user) => [user.email, user.id]));
+  patientUserId = idsByEmail.get('patient@dev.pharmate');
+  pharmacistUserId = idsByEmail.get('pharmacist@dev.pharmate');
+  caregiverUserId = idsByEmail.get('caregiver@dev.pharmate');
+  adminUserId = idsByEmail.get('admin@dev.pharmate');
 
   // ── Branch ───────────────────────────────────────────────────────────────
   const [existingBranch] = await conn.execute('SELECT id FROM pharmacy_branches LIMIT 1');
@@ -75,6 +101,7 @@ async function seed() {
       [patientUserId]
     );
     await conn.execute('INSERT INTO patient_anchors (patient_id) VALUES (?)', [patientUserId]);
+    await conn.execute('INSERT INTO patient_preferences (patient_id) VALUES (?)', [patientUserId]);
   }
 
   const [existingPharm] = await conn.execute('SELECT id FROM pharmacists WHERE id = ?', [

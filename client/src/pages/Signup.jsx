@@ -37,7 +37,8 @@ export default function Signup() {
         setError(regData.error || 'Could not create your account.');
         return;
       }
-      // Auto sign-in so the new patient lands straight in onboarding.
+      // Auto sign-in and show the patient dashboard first. Schedule anchors
+      // have safe defaults and are refined when the patient creates a schedule.
       const res = await fetch(apiUrl('/api/auth/login'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -50,7 +51,7 @@ export default function Signup() {
         return;
       }
       login(data.user, data.accessToken, data.refreshToken);
-      navigate('/patient/onboarding', { replace: true });
+      navigate('/patient/home', { replace: true });
     } catch {
       setError('Cannot reach the server. Please try again.');
     } finally {

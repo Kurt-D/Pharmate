@@ -31,7 +31,17 @@ export function speak(text) {
   try {
     if (typeof window === 'undefined' || !window.speechSynthesis || !text) return false;
     const u = new SpeechSynthesisUtterance(text);
-    u.rate = 0.95; // a touch slower — senior-accessible
+    // A measured pace, neutral pitch, and full volume make medicine prompts
+    // easier to understand for older adults without sounding robotic.
+    u.rate = 0.78;
+    u.pitch = 0.95;
+    u.volume = 1;
+    const preferredVoice = window.speechSynthesis
+      .getVoices()
+      .find(
+        (voice) => /^en(-|_)/i.test(voice.lang) && /female|zira|samantha|aria/i.test(voice.name)
+      );
+    if (preferredVoice) u.voice = preferredVoice;
     window.speechSynthesis.cancel(); // never stack utterances
     window.speechSynthesis.speak(u);
     return true;

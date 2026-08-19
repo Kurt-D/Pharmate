@@ -113,6 +113,18 @@ describe('Reminder dispatch', () => {
     // Second scan: the stamped dose is gone from the due set (idempotent).
     const after = await dueReminders(now);
     expect(after.some((d) => d.schedule_id === doseId)).toBe(false);
+
+    // Simulate a cron retry after its legacy dispatch marker was not persisted.
+    await pool.execute('UPDATE medication_schedules SET reminder_sent_at = NULL WHERE id = ?', [
+      doseId,
+    ]);
+    await dispatchReminders(now);
+    const [[inbox]] = await pool.execute(
+      `SELECT COUNT(*) AS count FROM patient_notifications
+       WHERE event_key = ? AND patient_id = ?`,
+      [`dose-reminder:${doseId}`, patientId]
+    );
+    expect(Number(inbox.count)).toBe(1);
   });
 
   test('a PRN slot is never reminded (no fixed time)', async () => {

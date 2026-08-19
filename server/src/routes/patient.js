@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { v4 as uuidv4 } from 'uuid';
 import { pool } from '../db/connection.js';
 import { requireAuth } from '../middleware/auth.js';
@@ -22,11 +22,67 @@ import { verifyLabel } from '../services/labelScan.js';
 import { loyaltyFor } from '../services/adherence.js';
 import { encrypt } from '../utils/crypto.js';
 import { serializePatient } from '../utils/serializer.js';
+import { getPatientDashboard } from '../services/patientDashboard.js';
+import {
+  getPreferences,
+  updatePreferences,
+  validatePreferencePatch,
+} from '../services/preferences.js';
+import {
+  listNotifications,
+  markAllNotificationsRead,
+  markNotificationRead,
+  parseNotificationQuery,
+  unreadCount,
+} from '../services/patientNotifications.js';
+import {
+  getMedication,
+  listMedicationHistory,
+  parseHistoryQuery,
+  stopMedication,
+  updateMedication,
+  validateMedicationPatch,
+} from '../services/patientMedications.js';
 
 const router = Router();
 
 // All patient routes require authentication + patient role
 router.use(requireAuth, requireRole('patient'));
+
+router.get('/notifications', async (req, res) => {
+  const parsed = parseNotificationQuery(req.query);
+  if (parsed.error) return res.status(400).json({ error: parsed.error });
+  res.json(await listNotifications(req.user.sub, parsed.value));
+});
+
+router.get('/notifications/unread-count', async (req, res) => {
+  res.json({ unread_count: await unreadCount(req.user.sub) });
+});
+
+router.patch('/notifications/:id/read', async (req, res) => {
+  const notification = await markNotificationRead(req.user.sub, req.params.id);
+  if (!notification) return res.status(404).json({ error: 'Notification not found' });
+  res.json(notification);
+});
+
+router.post('/notifications/read-all', async (req, res) => {
+  res.json({ marked_read: await markAllNotificationsRead(req.user.sub) });
+});
+
+router.get('/preferences', async (req, res) => {
+  res.json(await getPreferences(req.user.sub));
+});
+
+router.put('/preferences', async (req, res) => {
+  const parsed = validatePreferencePatch(req.body);
+  if (parsed.error) return res.status(400).json({ error: parsed.error });
+  res.json(await updatePreferences(req.user.sub, parsed.value));
+});
+
+// A compact, PII-free summary for the signed-in patient's home screen.
+router.get('/dashboard', async (req, res) => {
+  res.json(await getPatientDashboard(req.user.sub));
+});
 
 // ── GET /api/patient/anchors ──────────────────────────────────────────────────
 router.get('/anchors', async (req, res) => {
@@ -144,22 +200,93 @@ router.delete('/device-token', async (req, res) => {
 });
 
 // ── POST /api/patient/invite ──────────────────────────────────────────────────
-// Generate a single-use 8-char invite code for a caregiver to link with (D-G)
+// Generate a cryptographically random, single-use caregiver invite. Only its
+// SHA-256 digest is persisted; the raw code is returned exactly once.
 router.post('/invite', async (req, res) => {
-  // Invalidate any existing unused codes for this patient first
-  await pool.execute('UPDATE invite_codes SET used = 1 WHERE patient_id = ? AND used = 0', [
-    req.user.sub,
-  ]);
-
-  const code = randomBytes(4).toString('hex').toUpperCase(); // 8 hex chars
-  const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 h
+  // 128 bits of entropy encoded as unpadded base64url (22 chars), matching the
+  // existing invite-code contract used by tests and clients.
+  const code = randomBytes(16).toString('base64url');
+  const tokenHash = createHash('sha256').update(code).digest('hex');
+  const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+  const id = uuidv4();
 
   await pool.execute(
-    'INSERT INTO invite_codes (id, patient_id, code, expires_at) VALUES (?, ?, ?, ?)',
-    [uuidv4(), req.user.sub, code, expiresAt]
+    `INSERT INTO invite_codes (id, patient_id, code, token_hash, expires_at)
+     VALUES (?, ?, NULL, ?, ?)`,
+    [id, req.user.sub, tokenHash, expiresAt]
   );
 
-  res.status(201).json({ code, expires_at: expiresAt });
+  res.status(201).json({ id, code, expires_at: expiresAt });
+});
+
+// Only active, unused and unexpired invites are visible. The raw code cannot be
+// listed because it is never stored.
+router.get('/invites', async (req, res) => {
+  const [rows] = await pool.execute(
+    `SELECT id, created_at, expires_at
+     FROM invite_codes
+     WHERE patient_id = ? AND used = 0 AND revoked_at IS NULL AND expires_at > NOW(3)
+     ORDER BY created_at DESC`,
+    [req.user.sub]
+  );
+  res.json(rows.map((row) => ({ ...row, status: 'active' })));
+});
+
+router.delete('/invites/:id', async (req, res) => {
+  const [result] = await pool.execute(
+    `UPDATE invite_codes SET revoked_at = NOW(3)
+     WHERE id = ? AND patient_id = ? AND used = 0 AND revoked_at IS NULL`,
+    [req.params.id, req.user.sub]
+  );
+  if (result.affectedRows === 0) return res.status(404).json({ error: 'Invite not found' });
+  res.status(204).end();
+});
+
+router.get('/caregivers', async (req, res) => {
+  const [rows] = await pool.execute(
+    `SELECT cp.id, u.email, cp.linked_at, cp.status
+     FROM caregiver_patients cp
+     JOIN users u ON u.id = cp.caregiver_id
+     WHERE cp.patient_id = ? AND cp.status = 'active'
+     ORDER BY cp.linked_at DESC`,
+    [req.user.sub]
+  );
+  res.json(rows);
+});
+
+router.delete('/caregivers/:linkId', async (req, res) => {
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const [[link]] = await conn.execute(
+      `SELECT id, caregiver_id, patient_id FROM caregiver_patients
+       WHERE id = ? AND patient_id = ? AND status = 'active' FOR UPDATE`,
+      [req.params.linkId, req.user.sub]
+    );
+    if (!link) {
+      await conn.rollback();
+      return res.status(404).json({ error: 'Caregiver link not found' });
+    }
+    await conn.execute(
+      `UPDATE caregiver_patients
+       SET status = 'revoked', revoked_at = NOW(3), revoked_by_patient_id = ?
+       WHERE id = ? AND status = 'active'`,
+      [req.user.sub, link.id]
+    );
+    await conn.execute(
+      `INSERT INTO caregiver_link_audit
+         (id, link_id, caregiver_id, patient_id, event_type, actor_user_id)
+       VALUES (?, ?, ?, ?, 'revoked', ?)`,
+      [uuidv4(), link.id, link.caregiver_id, link.patient_id, req.user.sub]
+    );
+    await conn.commit();
+    return res.status(204).end();
+  } catch (error) {
+    await conn.rollback();
+    throw error;
+  } finally {
+    conn.release();
+  }
 });
 
 // ── GET /api/patient/drugs?q= ─────────────────────────────────────────────────
@@ -172,8 +299,8 @@ router.get('/drugs', async (req, res) => {
 // ── POST /api/patient/medications ─────────────────────────────────────────────
 // Encode a medication. Handles three outcomes:
 //   1. Restricted substance  → 403 + "visit nearest branch" redirect (TC-11)
-//   2. Uncurated drug        → pending_drug_request, med not schedulable (D-D)
-//   3. Curated drug          → encoded, frequency normalized via the parser
+//   2. Unknown drug → pending_drug_request, med not schedulable (D-D)
+//   3. Verified OTC drug      → active immediately; verified Rx → prescription validation
 router.post('/medications', async (req, res) => {
   const {
     drug_name,
@@ -218,21 +345,13 @@ router.post('/medications', async (req, res) => {
     await conn.beginTransaction();
 
     if (drug) {
-      // 3. Curated drug — encode as an active, schedulable medication.
-      //
-      // Encoding NEVER forces prescription validation: a patient may freely build
-      // a schedule for any (non-restricted) medicine, including prescription-only
-      // ones — they usually already have the medicine from their own pharmacy.
-      // Whether a prescription is required is enforced LATER and only at
-      // refill/delivery time (the UC-09 gate in services/orders.js), keyed on the
-      // drug's PH FDA class. Restricted substances are the sole encode-time
-      // exception and were already declined above (TC-11).
-      //
-      // A patient may still OPT IN to up-front validation by declaring the source
-      // as a prescription (RX_VALIDATED) — that routes the med through the upload
-      // + pharmacist-approval flow. The default (OTC_SELF) just adds it as active.
+      // The verified formulary classification is authoritative. A known OTC drug
+      // is active immediately regardless of where the patient obtained it; a
+      // known Rx drug must always go through prescription validation.
+      const effectiveSource =
+        drug.rx_class === 'RX' || source === 'RX_VALIDATED' ? 'RX_VALIDATED' : 'OTC_SELF';
       const prn = is_prn !== undefined ? (is_prn ? 1 : 0) : drug.is_prn_default;
-      const status = source === 'RX_VALIDATED' ? 'pending_validation' : 'active';
+      const status = effectiveSource === 'RX_VALIDATED' ? 'pending_validation' : 'active';
       await conn.execute(
         `INSERT INTO medications
            (id, patient_id, drug_id, drug_name_raw, source, is_prn, frequency,
@@ -243,7 +362,7 @@ router.post('/medications', async (req, res) => {
           req.user.sub,
           drug.id,
           drug_name,
-          source,
+          effectiveSource,
           prn,
           frequency ?? null,
           frequencyCode,
@@ -257,12 +376,11 @@ router.post('/medications', async (req, res) => {
       return res.status(201).json({
         id: medId,
         status,
-        source,
+        source: effectiveSource,
         drug_id: drug.id,
         rx_class: drug.rx_class,
-        // Informational only: an Rx-class drug will need a prescription IF the
-        // patient later requests a refill/delivery through the app. It does NOT
-        // block adding the medicine or building a schedule for it.
+        // Rx medicines and medicines explicitly sourced from a prescription stay
+        // pending until a pharmacist approves the uploaded prescription photo.
         requires_prescription: drug.rx_class === 'RX',
         frequency_code: frequencyCode,
         needs_frequency_review: frequencyCode === 'CONSULT',
@@ -270,7 +388,8 @@ router.post('/medications', async (req, res) => {
       });
     }
 
-    // Uncurated drug (D-D): create the med as pending_drug + raise a curation request.
+    // Unknown drug: create the med as pending_drug and raise a curation request.
+    // It cannot be scheduled yet.
     await conn.execute(
       `INSERT INTO medications
          (id, patient_id, drug_id, drug_name_raw, source, is_prn, frequency,
@@ -316,7 +435,8 @@ router.get('/medications', async (req, res) => {
     `SELECT m.id, m.drug_id, m.drug_name_raw, m.source, m.is_prn, m.frequency, m.frequency_code,
             m.dosage_instruction, m.start_date, m.end_date, m.status, m.created_at,
             dr.rx_class,
-            pp.status AS prescription_status, pp.decision_reason AS prescription_reason
+            pp.status AS prescription_status, pp.decision_reason AS prescription_reason,
+            pp.review_stage AS prescription_review_stage
      FROM medications m
      LEFT JOIN drug_reference dr ON dr.id = m.drug_id
      LEFT JOIN prescription_photos pp ON pp.id = m.prescription_photo_id
@@ -325,6 +445,33 @@ router.get('/medications', async (req, res) => {
     [req.user.sub]
   );
   res.json(rows);
+});
+
+// History must be declared before /:id so "history" is never interpreted as an id.
+router.get('/medications/history', async (req, res) => {
+  const parsed = parseHistoryQuery(req.query);
+  if (parsed.error) return res.status(parsed.error.status).json(parsed.error);
+  res.json(await listMedicationHistory(req.user.sub, parsed.value));
+});
+
+router.get('/medications/:id', async (req, res) => {
+  const item = await getMedication(req.user.sub, req.params.id);
+  if (!item) return res.status(404).json({ error: 'Medication not found' });
+  res.json(item);
+});
+
+router.patch('/medications/:id', async (req, res) => {
+  const parsed = validateMedicationPatch(req.body);
+  if (parsed.error) return res.status(parsed.error.status).json(parsed.error);
+  const result = await updateMedication(req.user.sub, req.params.id, parsed);
+  if (result.error) return res.status(result.error.status).json(result.error);
+  res.json(result);
+});
+
+router.post('/medications/:id/stop', async (req, res) => {
+  const result = await stopMedication(req.user.sub, req.params.id, req.body?.expected_updated_at);
+  if (result.error) return res.status(result.error.status).json(result.error);
+  res.json(result);
 });
 
 // ── POST /api/patient/medications/:id/prescription ────────────────────────────
@@ -340,7 +487,10 @@ router.post(
   },
   async (req, res) => {
     if (!req.file) return res.status(400).json({ error: 'photo file is required (field: photo)' });
-    const result = await attachPhoto(req.user.sub, req.params.id, req.file.filename);
+    const result = await attachPhoto(req.user.sub, req.params.id, req.file.filename, {
+      text: req.body?.ocr_text,
+      confidence: req.body?.ocr_confidence,
+    });
     if (result.error === 'not_found')
       return res.status(404).json({ error: 'Medication not found' });
     if (result.error === 'not_rx') {
@@ -349,7 +499,12 @@ router.post(
     if (result.error === 'not_pending') {
       return res.status(409).json({ error: 'This medication is not awaiting validation' });
     }
-    res.status(201).json({ photo_id: result.photoId, status: 'pending' });
+    res.status(201).json({
+      photo_id: result.photoId,
+      status: 'pending',
+      review_stage: result.reviewStage,
+      schedule_draft: result.draft,
+    });
   }
 );
 
@@ -422,14 +577,15 @@ router.post('/doses/sync', async (req, res) => {
 });
 
 // ── Ask Your Pharmacist (UC obj 5, D-I) ───────────────────────────────────────
-// Anonymous inquiry: pharmacist sees patient_code only; server purges on close.
+// Anonymous inquiry: pharmacist sees patient_code only; completed chats are read-only history.
 
 // Open a thread. A restricted-substance subject is declined with a branch visit.
 router.post('/inquiries', async (req, res) => {
-  const { subject, branch_id, drug_name } = req.body ?? {};
+  const { subject, branch_id, pharmacist_id, drug_name } = req.body ?? {};
   const result = await openThread(req.user.sub, {
     subject,
     branchId: branch_id ?? null,
+    pharmacistId: pharmacist_id ?? null,
     drugName: drug_name ?? null,
   });
   if (result.error === 'restricted') {
@@ -440,6 +596,9 @@ router.post('/inquiries', async (req, res) => {
         'This medication is a restricted substance — we can’t advise on it here. ' +
         'Please visit your nearest branch.',
     });
+  }
+  if (result.error === 'pharmacist_not_found') {
+    return res.status(404).json({ error: 'Selected pharmacist is not available at this branch' });
   }
   res.status(201).json(result);
 });
@@ -454,18 +613,19 @@ router.post('/inquiries/:id/messages', async (req, res) => {
   const result = await postMessage(req.params.id, 'patient', req.user.sub, message);
   if (result.error === 'not_found') return res.status(404).json({ error: 'Thread not found' });
   if (result.error === 'closed') return res.status(409).json({ error: 'This inquiry is closed' });
-  if (result.error === 'forbidden') return res.status(403).json({ error: 'Not your inquiry' });
   res.status(201).json(result);
 });
 
 router.get('/inquiries/:id/messages', async (req, res) => {
-  res.json(await getMessages(req.params.id));
+  const result = await getMessages(req.params.id, 'patient', req.user.sub);
+  if (result.error === 'not_found') return res.status(404).json({ error: 'Thread not found' });
+  res.json(result.messages);
 });
 
 router.post('/inquiries/:id/close', async (req, res) => {
-  const result = await closeThread(req.params.id);
+  const result = await closeThread(req.params.id, 'patient', req.user.sub);
   if (result.error === 'not_found') return res.status(404).json({ error: 'Thread not found' });
-  res.json({ message: 'Inquiry closed; server-side messages purged', ...result });
+  res.json({ message: 'Inquiry completed and saved to consultation history', ...result });
 });
 
 // ── Refill & delivery (Tier 2b, D-4 — request + status only, no payments) ─────

@@ -4,10 +4,25 @@ import { pool } from '../db/connection.js';
 import { requireAuth } from '../middleware/auth.js';
 import { requireRole } from '../middleware/role.js';
 import { canonicalName } from '../services/formulary.js';
-import { pendingValidations, photoFilePath, decideValidation } from '../services/prescription.js';
+import {
+  approvePrescriptionForSchedule,
+  claimValidation,
+  decideValidation,
+  pendingValidations,
+  photoFilePath,
+  releaseValidation,
+  validationHistory,
+} from '../services/prescription.js';
 import { pharmacistFollowups } from '../services/alerts.js';
-import { pharmacistQueue, postMessage, getMessages, closeThread } from '../services/inquiry.js';
+import {
+  acceptInquiry,
+  pharmacistQueue,
+  postMessage,
+  getMessages,
+  closeThread,
+} from '../services/inquiry.js';
 import { orderQueue, updateOrderStatus } from '../services/orders.js';
+import { createPatientNotification } from '../services/patientNotifications.js';
 
 const router = Router();
 
@@ -52,6 +67,33 @@ router.get('/followups', async (_req, res) => {
   res.json(await pharmacistFollowups());
 });
 
+router.post('/followups/:id/remind', async (req, res) => {
+  const [[alert]] = await pool.execute(
+    `SELECT ca.patient_id,m.drug_name_raw FROM caregiver_alerts ca
+     LEFT JOIN medication_schedules ms ON ms.id=ca.schedule_id
+     LEFT JOIN medications m ON m.id=ms.medication_id
+     WHERE ca.id=? AND ca.channel='pharmacist' AND ca.status='unseen'`,
+    [req.params.id]
+  );
+  if (!alert) return res.status(404).json({ error: 'Alert not found' });
+  await createPatientNotification({
+    patientId: alert.patient_id,
+    type: 'dose_reminder',
+    medicineName: alert.drug_name_raw,
+    eventKey: `pharmacist-alert:${req.params.id}:${uuidv4()}`,
+  });
+  res.status(201).json({ reminded: true });
+});
+
+router.post('/followups/:id/resolve', async (req, res) => {
+  const [result] = await pool.execute(
+    "UPDATE caregiver_alerts SET status='resolved' WHERE id=? AND channel='pharmacist' AND status='unseen'",
+    [req.params.id]
+  );
+  if (!result.affectedRows) return res.status(404).json({ error: 'Alert not found' });
+  res.json({ resolved: true });
+});
+
 // ── GET /api/pharmacist/patients ──────────────────────────────────────────────
 // Roster for the pharmacist console (PART 3). patient_code only, with columns:
 // priority badge (boolean), active meds, adherence. Never a name or the clinical
@@ -83,12 +125,25 @@ router.get('/patients', async (_req, res) => {
 
 // ── Ask Your Pharmacist — pharmacist side (D-I) ───────────────────────────────
 // Queue and threads show patient_code only; never a name.
-router.get('/inquiries', async (_req, res) => {
-  res.json(await pharmacistQueue());
+router.get('/inquiries', async (req, res) => {
+  res.json(await pharmacistQueue(req.user.sub));
+});
+
+router.post('/inquiries/:id/accept', async (req, res) => {
+  const result = await acceptInquiry(req.params.id, req.user.sub);
+  if (result.error === 'not_found') return res.status(404).json({ error: 'Inquiry not found' });
+  if (result.error === 'not_requested' || result.error === 'claimed') {
+    return res.status(409).json({ error: 'This inquiry is assigned to another pharmacist' });
+  }
+  res.json(result);
 });
 
 router.get('/inquiries/:id/messages', async (req, res) => {
-  res.json(await getMessages(req.params.id));
+  const result = await getMessages(req.params.id, 'pharmacist', req.user.sub);
+  if (result.error === 'not_found') return res.status(404).json({ error: 'Thread not found' });
+  if (result.error === 'not_accepted')
+    return res.status(409).json({ error: 'Accept this inquiry before opening the conversation' });
+  res.json(result.messages);
 });
 
 router.post('/inquiries/:id/reply', async (req, res) => {
@@ -96,14 +151,16 @@ router.post('/inquiries/:id/reply', async (req, res) => {
   if (!message) return res.status(400).json({ error: 'message is required' });
   const result = await postMessage(req.params.id, 'pharmacist', req.user.sub, message);
   if (result.error === 'not_found') return res.status(404).json({ error: 'Thread not found' });
+  if (result.error === 'not_accepted')
+    return res.status(409).json({ error: 'Accept this inquiry before replying' });
   if (result.error === 'closed') return res.status(409).json({ error: 'This inquiry is closed' });
   res.status(201).json(result);
 });
 
 router.post('/inquiries/:id/close', async (req, res) => {
-  const result = await closeThread(req.params.id);
+  const result = await closeThread(req.params.id, 'pharmacist', req.user.sub);
   if (result.error === 'not_found') return res.status(404).json({ error: 'Thread not found' });
-  res.json({ message: 'Inquiry closed; server-side messages purged', ...result });
+  res.json({ message: 'Inquiry completed and saved to consultation history', ...result });
 });
 
 // ── Refill & delivery queue (Tier 2b) — patient_code only, status only ────────
@@ -124,16 +181,57 @@ router.post('/orders/:kind/:id/status', async (req, res) => {
 
 // ── GET /api/pharmacist/validations ──────────────────────────────────────────
 // Prescription validation queue (UC-03). Patients shown by patient_code only.
-router.get('/validations', async (_req, res) => {
-  res.json(await pendingValidations());
+router.get('/validations', async (req, res) => {
+  res.json(await pendingValidations(req.user.sub));
+});
+
+function claimError(res, result) {
+  if (result.error === 'not_found') return res.status(404).json({ error: 'Validation not found' });
+  if (result.error === 'already_decided') {
+    return res.status(409).json({ error: 'This prescription has already been decided' });
+  }
+  return res.status(409).json({ error: 'Validation is not available' });
+}
+
+router.post('/validations/:id/claim', async (req, res) => {
+  const result = await claimValidation(req.user.sub, req.params.id);
+  if (result.error) return claimError(res, result);
+  res.json(result);
+});
+
+router.delete('/validations/:id/claim', async (req, res) => {
+  const result = await releaseValidation(req.user.sub, req.params.id);
+  if (result.error) return claimError(res, result);
+  res.json(result);
+});
+
+router.get('/validations/:id/history', async (req, res) => {
+  const history = await validationHistory(req.user.sub, req.params.id);
+  if (!history) return res.status(404).json({ error: 'Validation not found' });
+  res.json({ history });
+});
+
+router.post('/validations/:id/approve-prescription', async (req, res) => {
+  const result = await approvePrescriptionForSchedule(req.user.sub, req.params.id);
+  if (result.error === 'not_found') return res.status(404).json({ error: 'Validation not found' });
+  if (result.error === 'already_decided') {
+    return res.status(409).json({ error: 'This prescription has already been decided' });
+  }
+  if (result.error === 'wrong_stage') {
+    return res.status(409).json({ error: 'Prescription is already awaiting schedule review' });
+  }
+  res.json(result);
 });
 
 // ── GET /api/pharmacist/validations/:id/photo ────────────────────────────────
 // Serve the redacted prescription image for review. 404 once purged (D-K).
 router.get('/validations/:id/photo', async (req, res) => {
-  const abs = await photoFilePath(req.params.id);
-  if (!abs) return res.status(404).json({ error: 'Photo not available' });
-  res.sendFile(abs);
+  const result = await photoFilePath(req.user.sub, req.params.id);
+  if (result.error === 'not_found' || result.error === 'not_available') {
+    return res.status(404).json({ error: 'Photo not available' });
+  }
+  if (result.error) return res.status(409).json({ error: 'Validation is not available' });
+  res.sendFile(result.path);
 });
 
 // ── POST /api/pharmacist/validate ────────────────────────────────────────────
@@ -155,9 +253,23 @@ router.post('/validate', async (req, res) => {
       .status(400)
       .json({ error: 'A reason is required to reject or request a clearer photo' });
   }
+  if (result.error === 'reason_too_long') {
+    return res.status(400).json({ error: 'reason must not exceed 500 characters' });
+  }
   if (result.error === 'not_found') return res.status(404).json({ error: 'Validation not found' });
   if (result.error === 'already_decided') {
     return res.status(409).json({ error: 'This prescription has already been decided' });
+  }
+  if (result.error === 'claimed') {
+    return res.status(409).json({ error: 'Validation is not available' });
+  }
+  if (result.error === 'prescription_first') {
+    return res
+      .status(409)
+      .json({ error: 'Approve the prescription before approving its schedule' });
+  }
+  if (result.error === 'no_schedule') {
+    return res.status(409).json({ error: 'No safe schedule is available to approve' });
   }
   res.json(result);
 });

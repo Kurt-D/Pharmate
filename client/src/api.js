@@ -8,7 +8,7 @@ import { apiUrl } from './config.js';
 export async function api(path, { method = 'GET', body, auth = true } = {}) {
   const headers = { 'Content-Type': 'application/json' };
   if (auth) {
-    const token = localStorage.getItem('pm_token');
+    const token = sessionStorage.getItem('pm_token') || localStorage.getItem('pm_token');
     if (token) headers.Authorization = `Bearer ${token}`;
   }
 
@@ -31,7 +31,7 @@ export async function api(path, { method = 'GET', body, auth = true } = {}) {
 }
 
 function authHeaders() {
-  const token = localStorage.getItem('pm_token');
+  const token = sessionStorage.getItem('pm_token') || localStorage.getItem('pm_token');
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 

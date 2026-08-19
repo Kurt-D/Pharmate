@@ -7,6 +7,7 @@
 import request from 'supertest';
 import app from '../index.js';
 import { pool } from '../db/connection.js';
+import { createPrivilegedTestUser } from './helpers/testUsers.js';
 
 const PASSWORD = 'TestPass@123';
 const stamp = Date.now();
@@ -19,9 +20,13 @@ const auth = (t = token) => ({ Authorization: `Bearer ${t}` });
 
 async function register(role) {
   const email = `${role}.s9.${stamp}.${Math.random().toString(16).slice(2, 8)}@test.pharmate`;
-  await request(app)
-    .post('/api/auth/register')
-    .send({ email, password: PASSWORD, role, full_name: 'S9' });
+  if (role === 'patient') {
+    await request(app)
+      .post('/api/auth/register')
+      .send({ email, password: PASSWORD, role, full_name: 'S9' });
+  } else {
+    await createPrivilegedTestUser({ email, password: PASSWORD, role, fullName: 'S9' });
+  }
   const login = await request(app).post('/api/auth/login').send({ email, password: PASSWORD });
   return { token: login.body.accessToken, id: login.body.user.id };
 }

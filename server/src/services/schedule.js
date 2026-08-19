@@ -12,6 +12,7 @@
  */
 import { v4 as uuidv4 } from 'uuid';
 import { pool } from '../db/connection.js';
+import { createPatientNotification } from './patientNotifications.js';
 import { generateSchedule } from '../../engine/index.js';
 import { buildInteractionMap, checkDose } from '../../engine/constraints.js';
 
@@ -94,6 +95,73 @@ export async function loadEngineInput(patientId) {
   }
 
   return { anchors, medications, interactions };
+}
+
+/**
+ * Generate a provisional schedule for one prescription medicine while still
+ * considering the patient's active medicines and interaction rules. Nothing is
+ * persisted or exposed as a real dose until a pharmacist approves this draft.
+ */
+export async function proposeForPrescription(patientId, medicationId) {
+  const [anchorRows] = await pool.execute(
+    `SELECT wake_anchor, sleep_anchor, breakfast_anchor, lunch_anchor, dinner_anchor
+     FROM patient_anchors WHERE patient_id = ?`,
+    [patientId]
+  );
+  const a = anchorRows[0] ?? {};
+  const anchors = {
+    wake: toClock(a.wake_anchor ?? '08:00:00'),
+    sleep: toClock(a.sleep_anchor ?? '22:00:00'),
+    breakfast: toClock(a.breakfast_anchor ?? '07:30:00'),
+    lunch: toClock(a.lunch_anchor ?? '12:00:00'),
+    dinner: toClock(a.dinner_anchor ?? '19:00:00'),
+  };
+  const [meds] = await pool.execute(
+    `SELECT m.id, m.drug_id, m.drug_name_raw, m.frequency_code, m.is_prn,
+            dr.min_interval_hours, dr.max_daily_doses
+     FROM medications m LEFT JOIN drug_reference dr ON dr.id=m.drug_id
+     WHERE m.patient_id=? AND (m.status='active' OR m.id=?)`,
+    [patientId, medicationId]
+  );
+  const medications = meds.map((m) => ({
+    id: m.id,
+    drugId: m.drug_id,
+    drugName: m.drug_name_raw,
+    frequencyCode: m.frequency_code,
+    isPrn: !!m.is_prn,
+    minIntervalHours: m.min_interval_hours != null ? Number(m.min_interval_hours) : null,
+    maxDailyDoses: m.max_daily_doses != null ? Number(m.max_daily_doses) : null,
+  }));
+  const drugIds = [...new Set(meds.map((m) => m.drug_id).filter(Boolean))];
+  let interactions = [];
+  if (drugIds.length) {
+    const placeholders = drugIds.map(() => '?').join(',');
+    const [pairs] = await pool.execute(
+      `SELECT drug_a_id, drug_b_id, min_gap_hours, interaction_type
+       FROM drug_interactions WHERE drug_a_id IN (${placeholders}) AND drug_b_id IN (${placeholders})`,
+      [...drugIds, ...drugIds]
+    );
+    interactions = pairs.map((p) => ({
+      drugAId: p.drug_a_id,
+      drugBId: p.drug_b_id,
+      minGapHours: p.min_gap_hours != null ? Number(p.min_gap_hours) : null,
+      type: p.interaction_type,
+    }));
+  }
+  const generationDate = manilaToday();
+  const result = generateSchedule({ anchors, medications, interactions, version: 1 });
+  return {
+    generation_date: generationDate,
+    slots: result.slots
+      .filter((slot) => slot.medicationId === medicationId)
+      .map((slot) => ({
+        medication_id: slot.medicationId,
+        drug_name: slot.drugName,
+        scheduled_time: wallClock(generationDate, slot.minuteOfDay),
+        generated_reason: slot.reason,
+      })),
+    unresolved: result.unresolved.filter((item) => item.medicationId === medicationId),
+  };
 }
 
 /** Generate a proposal for review — pure engine output + wall-clock times. No writes. */
@@ -264,6 +332,15 @@ export async function confirmForPatient(patientId, adjusted) {
         [uuidv4(), s.medication_id, patientId, s.scheduled_time, s.generated_reason, version]
       );
     }
+
+    const notificationType = Number(version) === 1 ? 'schedule_confirmed' : 'schedule_changed';
+    await createPatientNotification({
+      patientId,
+      type: notificationType,
+      eventKey: `schedule:${patientId}:version:${version}`,
+      metadata: { schedule_version: Number(version) },
+      executor: conn,
+    });
 
     await conn.commit();
     return { version, count: slots.length, generation_date: generationDate };

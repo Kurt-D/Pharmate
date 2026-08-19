@@ -1,143 +1,287 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../../api.js';
+import { speak } from '../../lib/notifications.js';
+import { useLanguage } from '../../context/LanguageContext.jsx';
 
-const ICON_BG = ['#e0edff', '#dcfce7', '#fef3c7', '#ede9fe', '#ffe4e6'];
+const FILTERS = [
+  { id: 'all', label: 'All' },
+  { id: 'active', label: 'Active' },
+  { id: 'prescription', label: 'Needs Rx' },
+];
 
-function statusPill(status) {
-  if (status === 'pending_drug')
-    return <span className="pm-pill pm-pill--pending">Awaiting verification</span>;
-  if (status === 'pending_validation')
-    return <span className="pm-pill pm-pill--pending">Pending validation</span>;
-  return null;
+function medicationStatus(medicine) {
+  if (medicine.status === 'pending_drug') return { label: 'Needs review', tone: 'review' };
+  if (medicine.status === 'pending_validation' && medicine.prescription_status === 'pending') {
+    return medicine.prescription_review_stage === 'schedule'
+      ? { label: 'Schedule under review', tone: 'pending' }
+      : { label: 'Prescription under review', tone: 'pending' };
+  }
+  if (medicine.status === 'pending_validation')
+    return { label: 'Prescription needed', tone: 'warning' };
+  return { label: 'Active', tone: 'active' };
+}
+
+function medicineDetails(medicine) {
+  return (
+    [medicine.dosage_instruction, medicine.frequency].filter(Boolean).join(' · ') ||
+    'Instructions not added'
+  );
 }
 
 export default function Medications() {
   const navigate = useNavigate();
-  const [meds, setMeds] = useState(null); // null = loading
+  const { language } = useLanguage();
+  const tr = (english, filipino) => (language === 'fil' ? filipino : english);
+  const [meds, setMeds] = useState(null);
   const [error, setError] = useState('');
+  const [query, setQuery] = useState('');
+  const [filter, setFilter] = useState('all');
+  const [expanded, setExpanded] = useState(null);
 
   useEffect(() => {
     api('/api/patient/medications')
-      .then((r) => setMeds(r.data))
-      .catch((e) => setError(e.message));
+      .then((response) => setMeds(response.data))
+      .catch((requestError) => setError(requestError.message));
   }, []);
 
-  if (error) {
-    return (
-      <>
-        <h1 className="pm-title">Medications</h1>
-        <p className="pm-subtitle">Track your medications.</p>
-        <div className="pm-banner pm-banner--warn">{error}</div>
-      </>
-    );
-  }
-
-  if (meds === null) {
-    return (
-      <>
-        <h1 className="pm-title">Medications</h1>
-        <p className="pm-subtitle">Track your medications.</p>
-        <div className="text-center text-muted py-5">Loading…</div>
-      </>
-    );
-  }
+  const visibleMeds = useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase();
+    return (meds || []).filter((medicine) => {
+      const matchesSearch =
+        !normalizedQuery || medicine.drug_name_raw.toLowerCase().includes(normalizedQuery);
+      const matchesFilter =
+        filter === 'all' ||
+        (filter === 'active' && medicine.status === 'active') ||
+        (filter === 'prescription' && medicine.status === 'pending_validation');
+      return matchesSearch && matchesFilter;
+    });
+  }, [meds, query, filter]);
 
   return (
-    <>
-      <h1 className="pm-title">Medications</h1>
-      <p className="pm-subtitle">Track your medications.</p>
+    <main className="pm-medications-page">
+      <header className="pm-medications-header">
+        <div>
+          <h1>{tr('My Medications', 'Aking mga Gamot')}</h1>
+          <p>
+            {tr('View and manage your medicines.', 'Tingnan at pamahalaan ang iyong mga gamot.')}
+          </p>
+        </div>
+      </header>
 
-      <div className="d-flex justify-content-between align-items-center mb-3">
-        <strong>Your Medicines</strong>
-        <button className="pm-link" onClick={() => navigate('/patient/medications/add')}>
-          + Add Medicine
+      <section className="pm-med-entry-actions" aria-label="Add a medicine">
+        <button type="button" onClick={() => navigate('/patient/medications/add?mode=manual')}>
+          <span aria-hidden="true">⌨️</span>
+          <strong>{tr('Enter Manually', 'Manu-manong Ilagay')}</strong>
+          <small>{tr('Type medicine details', 'I-type ang detalye ng gamot')}</small>
         </button>
+        <button
+          type="button"
+          className="pm-med-entry-actions__scan"
+          onClick={() => navigate('/patient/medications/prescription')}
+        >
+          <span aria-hidden="true">📷</span>
+          <strong>{tr('Scan Prescription', 'I-scan ang Reseta')}</strong>
+          <small>{tr('Upload with OCR', 'I-upload gamit ang OCR')}</small>
+        </button>
+      </section>
+
+      <label className="pm-med-search">
+        <span aria-hidden="true">⌕</span>
+        <span className="visually-hidden">Search medicines</span>
+        <input
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder={tr('Search your medicines', 'Hanapin ang iyong mga gamot')}
+        />
+      </label>
+
+      <div className="pm-med-filters" aria-label="Filter medications">
+        {FILTERS.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            className={filter === item.id ? 'active' : ''}
+            onClick={() => setFilter(item.id)}
+            aria-pressed={filter === item.id}
+          >
+            {item.id === 'all'
+              ? tr('All', 'Lahat')
+              : item.id === 'active'
+                ? tr('Active', 'Aktibo')
+                : tr('Needs Rx', 'Kailangan ng Reseta')}
+          </button>
+        ))}
       </div>
 
-      {meds.length === 0 ? (
-        <div className="pm-card text-center p-4">
-          <div
-            className="pm-med-icon mx-auto mb-3"
-            style={{ background: '#e0edff', width: 64, height: 64, fontSize: '1.6rem' }}
-          >
+      {error && <div className="pm-banner pm-banner--warn">{error}</div>}
+      {meds === null && !error && (
+        <div className="pm-med-loading">
+          {tr('Loading your medicines…', 'Nilo-load ang iyong mga gamot…')}
+        </div>
+      )}
+
+      {meds?.length === 0 && (
+        <section className="pm-med-empty">
+          <div className="pm-med-empty__icon" aria-hidden="true">
             💊
           </div>
-          <h5 className="mb-1">No medicines added yet</h5>
-          <p className="text-muted small mb-4">
-            Add your medicines to get started with your schedule.
+          <h2>{tr('You have no medicines yet', 'Wala ka pang gamot')}</h2>
+          <p>
+            {tr(
+              'Add your first medicine to create a safe daily schedule and receive reminders.',
+              'Idagdag ang unang gamot upang makagawa ng ligtas na iskedyul at makatanggap ng mga paalala.'
+            )}
           </p>
-          <button className="pm-btn-primary" onClick={() => navigate('/patient/medications/add')}>
-            + Add Medicine
+          <button
+            type="button"
+            className="pm-action-button"
+            onClick={() => navigate('/patient/medications/add?mode=manual')}
+          >
+            ＋ {tr('Enter Manually', 'Manu-manong Ilagay')}
           </button>
-          <div className="pm-banner pm-banner--info mt-4 text-start">
-            <strong>Why add medicines first?</strong>
-            <div className="small mt-1">
-              Adding medicines first helps you easily create accurate schedules for the right
-              medicines.
-            </div>
+        </section>
+      )}
+
+      {meds && meds.length > 0 && (
+        <section className="pm-med-list" aria-label="Your medicines">
+          <div className="pm-med-list__heading">
+            <h2>{tr('Your Medicines', 'Iyong mga Gamot')}</h2>
+            <span>
+              {visibleMeds.length} {tr('shown', 'nakikita')}
+            </span>
           </div>
-        </div>
-      ) : (
-        <>
-          {meds.map((m, i) => {
-            // RX med awaiting a prescription: prompt upload (or re-upload if the
-            // pharmacist rejected / asked for a clearer photo).
+          {visibleMeds.length === 0 && (
+            <div className="pm-med-no-results">
+              {tr(
+                'No medicines match your search.',
+                'Walang gamot na tumutugma sa iyong paghahanap.'
+              )}
+            </div>
+          )}
+          {visibleMeds.map((medicine, index) => {
+            const status = medicationStatus(medicine);
+            const isExpanded = expanded === medicine.id;
             const needsPhoto =
-              m.status === 'pending_validation' &&
-              m.source === 'RX_VALIDATED' &&
-              m.prescription_status !== 'pending';
-            const wasRejected =
-              m.prescription_status === 'rejected' || m.prescription_status === 'needs_clearer';
+              medicine.status === 'pending_validation' &&
+              medicine.source === 'RX_VALIDATED' &&
+              medicine.prescription_status !== 'pending';
+            const wasRejected = ['rejected', 'needs_clearer'].includes(
+              medicine.prescription_status
+            );
+            const details = medicineDetails(medicine);
+
             return (
-              <div key={m.id} className="pm-card p-3 mb-3">
-                <div className="d-flex align-items-center gap-3">
-                  <div className="pm-med-icon" style={{ background: ICON_BG[i % ICON_BG.length] }}>
-                    💊
+              <article key={medicine.id} className="pm-medication-card">
+                <div className="pm-medication-card__main">
+                  <div
+                    className={`pm-medication-visual pm-medication-visual--${index % 4}`}
+                    aria-hidden="true"
+                  >
+                    <span>▰</span>
+                    <i />
                   </div>
-                  <div className="flex-grow-1">
-                    <div className="d-flex align-items-center gap-2">
-                      <strong>{m.drug_name_raw}</strong>
-                      {statusPill(m.status)}
+                  <div className="pm-medication-card__info">
+                    <div className="pm-medication-card__title">
+                      <h3>{medicine.drug_name_raw}</h3>
+                      <span className={`pm-med-status pm-med-status--${status.tone}`}>
+                        {language === 'fil'
+                          ? {
+                              Active: 'Aktibo',
+                              'Needs review': 'Kailangang suriin',
+                              'Schedule under review': 'Sinusuri ang iskedyul',
+                              'Prescription under review': 'Sinusuri ang reseta',
+                              'Prescription needed': 'Kailangan ng reseta',
+                            }[status.label] || status.label
+                          : status.label}
+                      </span>
                     </div>
-                    <div className="text-muted small">
-                      {[m.dosage_instruction, m.frequency].filter(Boolean).join(' • ') || '—'}
-                    </div>
+                    <p>{details}</p>
+                    {medicine.status === 'active' && (
+                      <small>
+                        <span aria-hidden="true">●</span>{' '}
+                        {tr('Ready for your schedule', 'Handa na para sa iyong iskedyul')}
+                      </small>
+                    )}
                   </div>
                 </div>
-                {wasRejected && m.prescription_reason && (
-                  <div className="pm-banner pm-banner--warn mt-2 small">
-                    Pharmacist note: {m.prescription_reason}
+
+                {wasRejected && medicine.prescription_reason && (
+                  <div className="pm-prescription-note">
+                    <strong>{tr('Pharmacist’s note', 'Tala ng parmasyutiko')}</strong>
+                    <span>{medicine.prescription_reason}</span>
                   </div>
                 )}
+
+                {isExpanded && (
+                  <div className="pm-medication-details">
+                    <div>
+                      <span>{tr('Dosage instructions', 'Tagubilin sa dosis')}</span>
+                      <strong>
+                        {medicine.dosage_instruction || tr('Not provided', 'Hindi ibinigay')}
+                      </strong>
+                    </div>
+                    <div>
+                      <span>{tr('Frequency', 'Dalas')}</span>
+                      <strong>{medicine.frequency || tr('Not provided', 'Hindi ibinigay')}</strong>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => speak(`${medicine.drug_name_raw}. ${details}`)}
+                    >
+                      <span aria-hidden="true">🔊</span>{' '}
+                      {tr('Read instructions aloud', 'Basahin nang malakas ang tagubilin')}
+                    </button>
+                  </div>
+                )}
+
                 {needsPhoto && (
                   <button
-                    className="pm-btn-primary mt-2"
-                    onClick={() => navigate(`/patient/medications/${m.id}/prescription`)}
+                    type="button"
+                    className="pm-upload-rx-button"
+                    onClick={() => navigate(`/patient/medications/${medicine.id}/prescription`)}
                   >
-                    📷 {wasRejected ? 'Re-upload prescription' : 'Upload prescription'}
+                    <span aria-hidden="true">▣</span>{' '}
+                    {wasRejected
+                      ? tr('Upload a clearer prescription', 'Mag-upload ng mas malinaw na reseta')
+                      : tr('Upload Prescription', 'Mag-upload ng Reseta')}
                   </button>
                 )}
-              </div>
+
+                <button
+                  type="button"
+                  className="pm-view-med-button"
+                  onClick={() => setExpanded(isExpanded ? null : medicine.id)}
+                  aria-expanded={isExpanded}
+                >
+                  {isExpanded
+                    ? tr('Hide Details', 'Itago ang Detalye')
+                    : tr('View Details', 'Tingnan ang Detalye')}{' '}
+                  <span aria-hidden="true">{isExpanded ? '⌃' : '›'}</span>
+                </button>
+              </article>
             );
           })}
-
-          <div className="pm-card p-3 mb-3">
-            <div className="d-flex align-items-start gap-2">
-              <span>ℹ️</span>
-              <div className="small">
-                <strong>Ready to set up your schedule?</strong>
-                <div className="text-muted">
-                  We&apos;ll help you plan the safest times to take your medicines.
-                </div>
-              </div>
-            </div>
-            <button className="pm-btn-primary mt-3" onClick={() => navigate('/patient/schedule')}>
-              📅 Create Schedule
-            </button>
-          </div>
-        </>
+        </section>
       )}
-    </>
+
+      {meds && meds.length > 0 && (
+        <section className="pm-med-schedule-prompt">
+          <span aria-hidden="true">▦</span>
+          <div>
+            <h2>{tr('Ready to plan your day?', 'Handa ka na bang planuhin ang araw?')}</h2>
+            <p>
+              {tr(
+                'Create safe times for each medicine.',
+                'Gumawa ng ligtas na oras para sa bawat gamot.'
+              )}
+            </p>
+          </div>
+          <button type="button" onClick={() => navigate('/patient/schedule')}>
+            {tr('Create Schedule', 'Gumawa ng Iskedyul')}
+          </button>
+        </section>
+      )}
+    </main>
   );
 }
