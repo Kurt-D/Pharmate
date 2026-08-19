@@ -114,7 +114,10 @@ export async function postMessage(threadId, senderRole, senderId, message) {
         return { error: 'not_found' };
       }
       if (!thread.pharmacist_id) {
-        await conn.execute('UPDATE inquiry_threads SET pharmacist_id=? WHERE id=?', [senderId, threadId]);
+        await conn.execute('UPDATE inquiry_threads SET pharmacist_id=? WHERE id=?', [
+          senderId,
+          threadId,
+        ]);
       }
     }
     if (thread.status !== 'open') {
@@ -165,7 +168,10 @@ export async function getMessages(threadId, viewerRole, viewerId) {
           await conn.rollback();
           return { error: 'not_found' };
         }
-        await conn.execute('UPDATE inquiry_threads SET pharmacist_id=? WHERE id=?', [viewerId, threadId]);
+        await conn.execute('UPDATE inquiry_threads SET pharmacist_id=? WHERE id=?', [
+          viewerId,
+          threadId,
+        ]);
       }
     }
     const [rows] = await conn.execute(
