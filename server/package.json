@@ -12,6 +12,7 @@
     "seed:formulary": "node src/db/seed-formulary.js",
     "import:ph-fda": "node src/db/import-ph-fda-csv.js",
     "import:drug-reference": "node src/db/import-drug-reference-json.js",
+    "import:medicine-catalog": "node src/db/import-medicine-catalog-csv.js",
     "dedupe:provisional-drugs": "node src/db/dedupe-provisional-drugs.js",
     "db:test:setup": "node src/db/setup-test-db.js",
     "purge:photos": "node src/jobs/purgePhotos.js",

@@ -21,16 +21,21 @@ export default function AddMedicine() {
     searchParams.get('mode') === 'manual' ? 'manual' : null
   );
 
-  const [name, setName] = useState('');
-  const [strength, setStrength] = useState('');
-  const [form, setForm] = useState('');
+  const [name, setName] = useState(searchParams.get('name') || '');
+  const [strength, setStrength] = useState(searchParams.get('strength') || '');
+  const [form, setForm] = useState(() => {
+    const value = searchParams.get('form') || '';
+    return value ? value[0].toUpperCase() + value.slice(1) : '';
+  });
   const [freqChoice, setFreqChoice] = useState('once daily');
   const [customFreq, setCustomFreq] = useState('');
   const [isPrn, setIsPrn] = useState(false);
-  const [source, setSource] = useState('');
-  const [rxClass, setRxClass] = useState(null); // 'OTC' | 'RX' | null (unknown)
+  const [source, setSource] = useState(searchParams.get('rx') === 'RX' ? 'RX_VALIDATED' : searchParams.get('name') ? 'OTC_SELF' : '');
+  const [rxClass, setRxClass] = useState(searchParams.get('rx') || null); // 'OTC' | 'RX' | null (unknown)
 
   const [suggestions, setSuggestions] = useState([]);
+  const [selectedDrug, setSelectedDrug] = useState(null);
+  const [showDrugInfo, setShowDrugInfo] = useState(false);
   const [showSuggest, setShowSuggest] = useState(false);
   const [searchingDrugs, setSearchingDrugs] = useState(false);
 
@@ -50,6 +55,10 @@ export default function AddMedicine() {
       try {
         const r = await api(`/api/patient/drugs?q=${encodeURIComponent(name.trim())}`);
         setSuggestions(r.data);
+        const exact = r.data.find(
+          (drug) => drug.generic_name.toLowerCase() === name.trim().toLowerCase()
+        );
+        if (exact) setSelectedDrug(exact);
       } catch {
         setSuggestions([]);
       } finally {
@@ -232,6 +241,8 @@ export default function AddMedicine() {
               setName(e.target.value);
               setShowSuggest(true);
               setRxClass(null); // no longer a confirmed formulary pick
+              setSelectedDrug(null);
+              setShowDrugInfo(false);
             }}
             onFocus={() => setShowSuggest(true)}
             autoComplete="off"
@@ -257,25 +268,65 @@ export default function AddMedicine() {
                   className="btn btn-sm w-100 text-start"
                   onClick={() => {
                     setName(s.generic_name);
+                    setSelectedDrug(s);
+                    setShowDrugInfo(false);
                     setShowSuggest(false);
                     setRxClass(s.rx_class ?? null);
+                    if (s.common_strength) setStrength(s.common_strength);
+                    if (s.dosage_form) {
+                      const value = s.dosage_form;
+                      setForm(value[0].toUpperCase() + value.slice(1));
+                    }
                     if (s.rx_class === 'RX') setSource('RX_VALIDATED');
+                    if (s.rx_class === 'OTC') setSource('OTC_SELF');
                   }}
                 >
-                  {s.generic_name}
-                  {s.rx_class === 'RX' ? (
-                    <span className="pm-pill pm-pill--pending ms-2">Rx</span>
-                  ) : s.rx_class === 'OTC' ? (
-                    <span className="pm-pill pm-pill--taken ms-2">OTC</span>
-                  ) : null}
-                  {s.is_provisional ? (
-                    <span className="pm-pill pm-pill--provisional ms-2">unverified</span>
-                  ) : null}
+                  <span className="d-flex align-items-center gap-1">
+                    <strong>{s.generic_name}</strong>
+                    {s.rx_class === 'RX' ? (
+                      <span className="pm-pill pm-pill--pending">Rx</span>
+                    ) : s.rx_class === 'OTC' ? (
+                      <span className="pm-pill pm-pill--taken">OTC</span>
+                    ) : null}
+                    {s.is_provisional ? (
+                      <span className="pm-pill pm-pill--provisional">unverified</span>
+                    ) : null}
+                  </span>
+                  <small className="d-block text-muted mt-1">
+                    {[s.therapeutic_category, s.drug_class].filter(Boolean).join(' · ')}
+                  </small>
                 </button>
               ))}
             </div>
           )}
         </div>
+        {selectedDrug && (
+          <div className="pm-selected-drug">
+            <div>
+              <strong>{selectedDrug.generic_name}</strong>
+              <span className={selectedDrug.rx_class === 'RX' ? 'rx' : 'otc'}>
+                {selectedDrug.rx_class}
+              </span>
+              <button
+                type="button"
+                className="pm-medicine-info-button"
+                aria-label={`${showDrugInfo ? 'Hide' : 'View'} information about ${selectedDrug.generic_name}`}
+                aria-expanded={showDrugInfo}
+                onClick={() => setShowDrugInfo((current) => !current)}
+              >
+                i
+              </button>
+            </div>
+            <small>
+              {[selectedDrug.therapeutic_category, selectedDrug.drug_class].filter(Boolean).join(' · ')}
+            </small>
+            {showDrugInfo && (
+              <p className="pm-medicine-info-panel">
+                {selectedDrug.short_description || selectedDrug.common_uses || 'No additional information available.'}
+              </p>
+            )}
+          </div>
+        )}
         <div className="form-text mb-3">
           Enter one or more letters, then select a medicine from the verified database list.
         </div>
@@ -299,10 +350,22 @@ export default function AddMedicine() {
           required
         >
           <option value="">Select form</option>
+          {form && ![
+            'Tablet', 'Capsule', 'Syrup', 'Injection', 'Solution', 'Suspension', 'Cream',
+            'Ointment', 'Inhaler', 'Eye drops', 'Ear drops', 'Transdermal patch',
+          ].includes(form) && <option>{form}</option>}
           <option>Tablet</option>
           <option>Capsule</option>
           <option>Syrup</option>
           <option>Injection</option>
+          <option>Solution</option>
+          <option>Suspension</option>
+          <option>Cream</option>
+          <option>Ointment</option>
+          <option>Inhaler</option>
+          <option>Eye drops</option>
+          <option>Ear drops</option>
+          <option>Transdermal patch</option>
         </select>
 
         {/* Frequency */}
