@@ -17,3 +17,15 @@
   font-size: 1.3rem;
   letter-spacing: 0.02em;
 }
+
+.login-role-picker {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+
+@media (max-width: 380px) {
+  .login-role-picker {
+    grid-template-columns: 1fr;
+  }
+}

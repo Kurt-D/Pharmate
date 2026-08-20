@@ -124,10 +124,19 @@ router.post('/register', registerLimit, async (req, res) => {
 
 // ── POST /api/auth/login ──────────────────────────────────────────────────────
 router.post('/login', loginLimit, failedLoginLimit, async (req, res) => {
-  const { password } = req.body;
+  const { password, role: selectedRole, accountGroup } = req.body;
   const email = normalizeEmail(req.body.email);
   if (!email || !password) {
     return res.status(400).json({ error: 'email and password are required' });
+  }
+  if (selectedRole !== undefined && !['patient', 'caregiver'].includes(selectedRole)) {
+    return res.status(400).json({ error: 'Invalid mobile account type' });
+  }
+  if (accountGroup !== undefined && accountGroup !== 'staff') {
+    return res.status(400).json({ error: 'Invalid account group' });
+  }
+  if (selectedRole && accountGroup) {
+    return res.status(400).json({ error: 'Choose either a mobile role or the staff portal' });
   }
 
   const [rows] = await pool.execute(
@@ -143,6 +152,12 @@ router.post('/login', loginLimit, failedLoginLimit, async (req, res) => {
 
   if (!user || !match || !user.is_active) {
     return res.status(401).json({ error: 'Invalid credentials' });
+  }
+
+  const roleMismatch = selectedRole && user.role !== selectedRole;
+  const staffMismatch = accountGroup === 'staff' && !['pharmacist', 'admin'].includes(user.role);
+  if (roleMismatch || staffMismatch) {
+    return res.status(403).json({ error: 'This account does not match the selected login type' });
   }
 
   // Fetch role-specific extras

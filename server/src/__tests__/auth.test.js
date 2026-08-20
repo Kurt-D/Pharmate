@@ -143,6 +143,36 @@ describe('Auth — register and login', () => {
     expect(res.status).toBe(401);
   });
 
+  test('patient cannot sign in through the caregiver option', async () => {
+    const res = await request(app).post('/api/auth/login').send({
+      email: PATIENT_EMAIL,
+      password: PASSWORD,
+      role: 'caregiver',
+    });
+    expect(res.status).toBe(403);
+    expect(res.body).not.toHaveProperty('accessToken');
+  });
+
+  test('patient cannot sign in through the staff portal', async () => {
+    const res = await request(app).post('/api/auth/login').send({
+      email: PATIENT_EMAIL,
+      password: PASSWORD,
+      accountGroup: 'staff',
+    });
+    expect(res.status).toBe(403);
+    expect(res.body).not.toHaveProperty('accessToken');
+  });
+
+  test('pharmacist can sign in through the staff portal', async () => {
+    const res = await request(app).post('/api/auth/login').send({
+      email: PHARMACIST_EMAIL,
+      password: PASSWORD,
+      accountGroup: 'staff',
+    });
+    expect(res.status).toBe(200);
+    expect(res.body.user.role).toBe('pharmacist');
+  });
+
   test('duplicate email registration returns 409', async () => {
     const res = await request(app).post('/api/auth/register').send({
       email: PATIENT_EMAIL,
