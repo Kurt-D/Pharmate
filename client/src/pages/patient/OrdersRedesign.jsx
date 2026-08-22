@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { api, apiUpload } from '../../api.js';
 import { useLanguage } from '../../context/LanguageContext.jsx';
 
@@ -24,6 +25,7 @@ function categoryOf(name) {
 }
 
 export default function OrdersRedesign() {
+  const navigate = useNavigate();
   const { language } = useLanguage();
   const tr = (english, filipino) => (language === 'fil' ? filipino : english);
   const [medicines, setMedicines] = useState([]);
@@ -32,6 +34,9 @@ export default function OrdersRedesign() {
   const [tab, setTab] = useState('OTC');
   const [category, setCategory] = useState('All');
   const [search, setSearch] = useState('');
+  const [catalog, setCatalog] = useState([]);
+  const [catalogLoading, setCatalogLoading] = useState(false);
+  const [expandedDrugId, setExpandedDrugId] = useState(null);
   const [quantities, setQuantities] = useState({});
   const [branchId, setBranchId] = useState('');
   const [kind, setKind] = useState('refill');
@@ -59,6 +64,23 @@ export default function OrdersRedesign() {
   useEffect(() => {
     load();
   }, []);
+  useEffect(() => {
+    const timer = setTimeout(async () => {
+      setCatalogLoading(true);
+      try {
+        const response = await api(
+          `/api/patient/drugs?q=${encodeURIComponent(search.trim())}&limit=500`
+        );
+        setCatalog(response.data);
+      } catch (catalogError) {
+        setError(catalogError.message);
+        setCatalog([]);
+      } finally {
+        setCatalogLoading(false);
+      }
+    }, 200);
+    return () => clearTimeout(timer);
+  }, [search, tab]);
   const eligible = useMemo(
     () =>
       medicines.filter(
@@ -70,6 +92,13 @@ export default function OrdersRedesign() {
     [medicines, tab, category, search]
   );
   const selected = eligible.filter((medicine) => Number(quantities[medicine.id] || 0) > 0);
+  const catalogMatches = catalog.filter((drug) => {
+    if (search.trim()) return true;
+    return (
+      drug.rx_class === tab &&
+      (category === 'All' || tab === 'RX' || categoryOf(drug.generic_name) === category)
+    );
+  });
   const total = selected.reduce(
     (sum, medicine) =>
       sum + estimatedPrice(medicine.drug_name_raw) * Number(quantities[medicine.id]),
@@ -84,6 +113,16 @@ export default function OrdersRedesign() {
   function choosePrescription(medicine) {
     uploadMedicine.current = medicine;
     fileInput.current?.click();
+  }
+  function addCatalogMedicine(drug) {
+    const params = new URLSearchParams({
+      mode: 'manual',
+      name: drug.generic_name,
+      rx: drug.rx_class,
+    });
+    if (drug.common_strength) params.set('strength', drug.common_strength);
+    if (drug.dosage_form) params.set('form', drug.dosage_form);
+    navigate(`/patient/medications/add?${params.toString()}`);
   }
   async function uploadPrescription(event) {
     const file = event.target.files?.[0];
@@ -157,6 +196,26 @@ export default function OrdersRedesign() {
           placeholder={tr('Search anything', 'Maghanap ng gamot')}
         />
       </div>
+      {search.trim() && (
+        <div className="pm-order-suggestions">
+          {catalogLoading ? (
+            <span>Searching medicine catalog…</span>
+          ) : catalog.length ? (
+            catalog.slice(0, 12).map((drug) => (
+              <button key={drug.id} onClick={() => addCatalogMedicine(drug)}>
+                <span>
+                  <strong>{drug.generic_name}</strong>
+                  <small>{[drug.therapeutic_category, drug.drug_class].filter(Boolean).join(' · ')}</small>
+                </span>
+                <em className={drug.rx_class === 'RX' ? 'rx' : 'otc'}>{drug.rx_class}</em>
+                <b>+ Add</b>
+              </button>
+            ))
+          ) : (
+            <span>No catalog medicine matches “{search.trim()}”.</span>
+          )}
+        </div>
+      )}
       <div className="pm-order-tabs">
         <button className={tab === 'OTC' ? 'active' : ''} onClick={() => setTab('OTC')}>
           <strong>{tr('OTC & Vitamins', 'OTC at Bitamina')}</strong>
@@ -207,7 +266,31 @@ export default function OrdersRedesign() {
           </div>
         </>
       )}
+      <section className="pm-catalog-section">
+        <div className="pm-catalog-heading">
+          <span><h2>{search.trim() ? 'Medicine Search Results' : tab === 'RX' ? 'Prescription Medicine Catalog' : 'OTC Medicine Catalog'}</h2><small>Select a medicine to add it to your medication schedule.</small></span>
+          <b>{catalog.length} total · {catalogMatches.length} shown</b>
+        </div>
+        <div className="pm-catalog-grid">
+          {catalogLoading ? <div className="pm-order-empty">Loading catalog…</div> : catalogMatches.map((drug) => (
+            <article key={drug.id}>
+              <span className="pm-catalog-icon">✚</span>
+              <div><h3>{drug.generic_name}</h3><p>{drug.common_strength || 'Strength varies'} · {drug.dosage_form || 'Form varies'}</p><small>{[drug.therapeutic_category, drug.drug_class].filter(Boolean).join(' · ')}</small>{expandedDrugId === drug.id && <small className="pm-catalog-description">{drug.short_description || drug.common_uses || 'No additional information available.'}</small>}</div>
+              <em className={drug.rx_class === 'RX' ? 'rx' : 'otc'}>{drug.rx_class}</em>
+              <button
+                className="pm-catalog-info-button"
+                type="button"
+                aria-label={`${expandedDrugId === drug.id ? 'Hide' : 'View'} information about ${drug.generic_name}`}
+                aria-expanded={expandedDrugId === drug.id}
+                onClick={() => setExpandedDrugId((current) => current === drug.id ? null : drug.id)}
+              >i</button>
+              <button onClick={() => addCatalogMedicine(drug)}>Add to Medications</button>
+            </article>
+          ))}
+        </div>
+      </section>
       <section className="pm-order-products">
+        <h2 className="pm-order-list-title">Medicines already in your medication record</h2>
         {eligible.length === 0 && (
           <div className="pm-order-empty">
             No medicines in this category yet. Add the medicine in the Medications tab first.

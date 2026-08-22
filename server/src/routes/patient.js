@@ -292,7 +292,10 @@ router.delete('/caregivers/:linkId', async (req, res) => {
 // ── GET /api/patient/drugs?q= ─────────────────────────────────────────────────
 // Type-ahead drug picker for the encode form.
 router.get('/drugs', async (req, res) => {
-  const results = await searchDrugs(req.query.q, 20);
+  const results = await searchDrugs(req.query.q, req.query.limit || 20, {
+    rxClass: req.query.rx_class,
+    category: req.query.category,
+  });
   res.json(results);
 });
 

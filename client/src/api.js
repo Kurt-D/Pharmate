@@ -5,6 +5,56 @@
  */
 import { apiUrl } from './config.js';
 
+let refreshInFlight = null;
+
+function clearStoredSession() {
+  for (const storage of [sessionStorage, localStorage]) {
+    storage.removeItem('pm_token');
+    storage.removeItem('pm_refresh');
+    storage.removeItem('pm_user');
+  }
+}
+
+async function refreshAccessToken() {
+  if (refreshInFlight) return refreshInFlight;
+  const refreshToken = sessionStorage.getItem('pm_refresh') || localStorage.getItem('pm_refresh');
+  if (!refreshToken) return null;
+  refreshInFlight = fetch(apiUrl('/api/auth/refresh'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ refreshToken }),
+  })
+    .then(async (response) => {
+      if (!response.ok) return null;
+      const data = await response.json();
+      sessionStorage.setItem('pm_token', data.accessToken);
+      sessionStorage.setItem('pm_refresh', data.refreshToken);
+      return data.accessToken;
+    })
+    .catch(() => null)
+    .finally(() => { refreshInFlight = null; });
+  return refreshInFlight;
+}
+
+async function fetchWithAuthRefresh(path, options = {}, auth = true) {
+  const headers = new Headers(options.headers || {});
+  const token = sessionStorage.getItem('pm_token') || localStorage.getItem('pm_token');
+  if (auth && token) headers.set('Authorization', `Bearer ${token}`);
+  let response = await fetch(apiUrl(path), { ...options, headers });
+  if (!auth || response.status !== 401 || path === '/api/auth/refresh') return response;
+
+  const renewedToken = await refreshAccessToken();
+  if (renewedToken) {
+    headers.set('Authorization', `Bearer ${renewedToken}`);
+    response = await fetch(apiUrl(path), { ...options, headers });
+    return response;
+  }
+
+  clearStoredSession();
+  if (typeof window !== 'undefined') window.location.replace('/login?reason=session-expired');
+  return response;
+}
+
 export async function api(path, { method = 'GET', body, auth = true } = {}) {
   const headers = { 'Content-Type': 'application/json' };
   if (auth) {
@@ -12,11 +62,11 @@ export async function api(path, { method = 'GET', body, auth = true } = {}) {
     if (token) headers.Authorization = `Bearer ${token}`;
   }
 
-  const res = await fetch(apiUrl(path), {
+  const res = await fetchWithAuthRefresh(path, {
     method,
     headers,
     body: body !== undefined ? JSON.stringify(body) : undefined,
-  });
+  }, auth);
 
   const text = await res.text();
   const data = text ? JSON.parse(text) : null;
@@ -37,7 +87,7 @@ function authHeaders() {
 
 /** POST multipart/form-data (file uploads). Do not set Content-Type — the browser sets the boundary. */
 export async function apiUpload(path, formData) {
-  const res = await fetch(apiUrl(path), { method: 'POST', headers: authHeaders(), body: formData });
+  const res = await fetchWithAuthRefresh(path, { method: 'POST', headers: authHeaders(), body: formData });
   const text = await res.text();
   const data = text ? JSON.parse(text) : null;
   if (!res.ok) {
@@ -51,7 +101,7 @@ export async function apiUpload(path, formData) {
 
 /** Fetch a protected binary (e.g. the redacted photo) and return an object URL. Revoke it when done. */
 export async function apiBlobUrl(path) {
-  const res = await fetch(apiUrl(path), { headers: authHeaders() });
+  const res = await fetchWithAuthRefresh(path, { headers: authHeaders() });
   if (!res.ok) throw new Error(`Failed to load (${res.status})`);
   return URL.createObjectURL(await res.blob());
 }

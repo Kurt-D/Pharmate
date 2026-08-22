@@ -22,7 +22,11 @@ export default function LoginRedesign() {
   const [password, setPassword] = useState('');
   const [remember, setRemember] = useState(Boolean(rememberedEmail));
   const [error, setError] = useState('');
-  const [message, setMessage] = useState('');
+  const [message, setMessage] = useState(
+    params.get('reason') === 'session-expired'
+      ? 'Your session expired. Please sign in again to continue.'
+      : ''
+  );
   const [loading, setLoading] = useState(false);
   async function submit(e) {
     e.preventDefault();
