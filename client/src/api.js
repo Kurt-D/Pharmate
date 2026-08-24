@@ -32,7 +32,9 @@ async function refreshAccessToken() {
       return data.accessToken;
     })
     .catch(() => null)
-    .finally(() => { refreshInFlight = null; });
+    .finally(() => {
+      refreshInFlight = null;
+    });
   return refreshInFlight;
 }
 
@@ -62,11 +64,15 @@ export async function api(path, { method = 'GET', body, auth = true } = {}) {
     if (token) headers.Authorization = `Bearer ${token}`;
   }
 
-  const res = await fetchWithAuthRefresh(path, {
-    method,
-    headers,
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-  }, auth);
+  const res = await fetchWithAuthRefresh(
+    path,
+    {
+      method,
+      headers,
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    },
+    auth
+  );
 
   const text = await res.text();
   const data = text ? JSON.parse(text) : null;
@@ -87,7 +93,11 @@ function authHeaders() {
 
 /** POST multipart/form-data (file uploads). Do not set Content-Type — the browser sets the boundary. */
 export async function apiUpload(path, formData) {
-  const res = await fetchWithAuthRefresh(path, { method: 'POST', headers: authHeaders(), body: formData });
+  const res = await fetchWithAuthRefresh(path, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: formData,
+  });
   const text = await res.text();
   const data = text ? JSON.parse(text) : null;
   if (!res.ok) {

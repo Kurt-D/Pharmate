@@ -205,7 +205,9 @@ export default function OrdersRedesign() {
               <button key={drug.id} onClick={() => addCatalogMedicine(drug)}>
                 <span>
                   <strong>{drug.generic_name}</strong>
-                  <small>{[drug.therapeutic_category, drug.drug_class].filter(Boolean).join(' · ')}</small>
+                  <small>
+                    {[drug.therapeutic_category, drug.drug_class].filter(Boolean).join(' · ')}
+                  </small>
                 </span>
                 <em className={drug.rx_class === 'RX' ? 'rx' : 'otc'}>{drug.rx_class}</em>
                 <b>+ Add</b>
@@ -268,25 +270,60 @@ export default function OrdersRedesign() {
       )}
       <section className="pm-catalog-section">
         <div className="pm-catalog-heading">
-          <span><h2>{search.trim() ? 'Medicine Search Results' : tab === 'RX' ? 'Prescription Medicine Catalog' : 'OTC Medicine Catalog'}</h2><small>Select a medicine to add it to your medication schedule.</small></span>
-          <b>{catalog.length} total · {catalogMatches.length} shown</b>
+          <span>
+            <h2>
+              {search.trim()
+                ? 'Medicine Search Results'
+                : tab === 'RX'
+                  ? 'Prescription Medicine Catalog'
+                  : 'OTC Medicine Catalog'}
+            </h2>
+            <small>Select a medicine to add it to your medication schedule.</small>
+          </span>
+          <b>
+            {catalog.length} total · {catalogMatches.length} shown
+          </b>
         </div>
         <div className="pm-catalog-grid">
-          {catalogLoading ? <div className="pm-order-empty">Loading catalog…</div> : catalogMatches.map((drug) => (
-            <article key={drug.id}>
-              <span className="pm-catalog-icon">✚</span>
-              <div><h3>{drug.generic_name}</h3><p>{drug.common_strength || 'Strength varies'} · {drug.dosage_form || 'Form varies'}</p><small>{[drug.therapeutic_category, drug.drug_class].filter(Boolean).join(' · ')}</small>{expandedDrugId === drug.id && <small className="pm-catalog-description">{drug.short_description || drug.common_uses || 'No additional information available.'}</small>}</div>
-              <em className={drug.rx_class === 'RX' ? 'rx' : 'otc'}>{drug.rx_class}</em>
-              <button
-                className="pm-catalog-info-button"
-                type="button"
-                aria-label={`${expandedDrugId === drug.id ? 'Hide' : 'View'} information about ${drug.generic_name}`}
-                aria-expanded={expandedDrugId === drug.id}
-                onClick={() => setExpandedDrugId((current) => current === drug.id ? null : drug.id)}
-              >i</button>
-              <button onClick={() => addCatalogMedicine(drug)}>Add to Medications</button>
-            </article>
-          ))}
+          {catalogLoading ? (
+            <div className="pm-order-empty">Loading catalog…</div>
+          ) : (
+            catalogMatches.map((drug) => (
+              <article key={drug.id}>
+                <span className="pm-catalog-icon">✚</span>
+                <div>
+                  <h3>{drug.generic_name}</h3>
+                  <p>
+                    {drug.common_strength || 'Strength varies'} ·{' '}
+                    {drug.dosage_form || 'Form varies'}
+                  </p>
+                  <small>
+                    {[drug.therapeutic_category, drug.drug_class].filter(Boolean).join(' · ')}
+                  </small>
+                  {expandedDrugId === drug.id && (
+                    <small className="pm-catalog-description">
+                      {drug.short_description ||
+                        drug.common_uses ||
+                        'No additional information available.'}
+                    </small>
+                  )}
+                </div>
+                <em className={drug.rx_class === 'RX' ? 'rx' : 'otc'}>{drug.rx_class}</em>
+                <button
+                  className="pm-catalog-info-button"
+                  type="button"
+                  aria-label={`${expandedDrugId === drug.id ? 'Hide' : 'View'} information about ${drug.generic_name}`}
+                  aria-expanded={expandedDrugId === drug.id}
+                  onClick={() =>
+                    setExpandedDrugId((current) => (current === drug.id ? null : drug.id))
+                  }
+                >
+                  i
+                </button>
+                <button onClick={() => addCatalogMedicine(drug)}>Add to Medications</button>
+              </article>
+            ))
+          )}
         </div>
       </section>
       <section className="pm-order-products">
