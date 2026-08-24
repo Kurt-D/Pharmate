@@ -30,7 +30,9 @@ export default function AddMedicine() {
   const [freqChoice, setFreqChoice] = useState('once daily');
   const [customFreq, setCustomFreq] = useState('');
   const [isPrn, setIsPrn] = useState(false);
-  const [source, setSource] = useState(searchParams.get('rx') === 'RX' ? 'RX_VALIDATED' : searchParams.get('name') ? 'OTC_SELF' : '');
+  const [source, setSource] = useState(
+    searchParams.get('rx') === 'RX' ? 'RX_VALIDATED' : searchParams.get('name') ? 'OTC_SELF' : ''
+  );
   const [rxClass, setRxClass] = useState(searchParams.get('rx') || null); // 'OTC' | 'RX' | null (unknown)
 
   const [suggestions, setSuggestions] = useState([]);
@@ -318,11 +320,15 @@ export default function AddMedicine() {
               </button>
             </div>
             <small>
-              {[selectedDrug.therapeutic_category, selectedDrug.drug_class].filter(Boolean).join(' · ')}
+              {[selectedDrug.therapeutic_category, selectedDrug.drug_class]
+                .filter(Boolean)
+                .join(' · ')}
             </small>
             {showDrugInfo && (
               <p className="pm-medicine-info-panel">
-                {selectedDrug.short_description || selectedDrug.common_uses || 'No additional information available.'}
+                {selectedDrug.short_description ||
+                  selectedDrug.common_uses ||
+                  'No additional information available.'}
               </p>
             )}
           </div>
@@ -350,10 +356,21 @@ export default function AddMedicine() {
           required
         >
           <option value="">Select form</option>
-          {form && ![
-            'Tablet', 'Capsule', 'Syrup', 'Injection', 'Solution', 'Suspension', 'Cream',
-            'Ointment', 'Inhaler', 'Eye drops', 'Ear drops', 'Transdermal patch',
-          ].includes(form) && <option>{form}</option>}
+          {form &&
+            ![
+              'Tablet',
+              'Capsule',
+              'Syrup',
+              'Injection',
+              'Solution',
+              'Suspension',
+              'Cream',
+              'Ointment',
+              'Inhaler',
+              'Eye drops',
+              'Ear drops',
+              'Transdermal patch',
+            ].includes(form) && <option>{form}</option>}
           <option>Tablet</option>
           <option>Capsule</option>
           <option>Syrup</option>

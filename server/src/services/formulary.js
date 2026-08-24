@@ -94,7 +94,15 @@ export async function searchDrugs(query, limit = 20, filters = {}) {
             WHEN LOWER(generic_name) LIKE ? THEN 1 ELSE 2 END,
        generic_name
      LIMIT ${safeLimit}`,
-    [...params, String(query ?? '').trim().toLowerCase(), `${String(query ?? '').trim().toLowerCase()}%`]
+    [
+      ...params,
+      String(query ?? '')
+        .trim()
+        .toLowerCase(),
+      `${String(query ?? '')
+        .trim()
+        .toLowerCase()}%`,
+    ]
   );
   return rows;
 }
