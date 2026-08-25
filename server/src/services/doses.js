@@ -18,6 +18,7 @@ import { idealSlots } from '../../engine/intervals.js';
 import { parseClock } from '../../engine/time.js';
 import { raiseMissedAlerts } from './alerts.js';
 import { createPatientNotification } from './patientNotifications.js';
+import { publishPatientAdherence } from './caregiverEvents.js';
 
 const VALID_METHODS = ['fcm', 'local', 'manual', 'ocr'];
 const MANILA_OFFSET_MS = 8 * 3600 * 1000;
@@ -103,6 +104,11 @@ export async function logDose(patientId, scheduleId, opts = {}) {
   if (status === 'taken_late') {
     reflow = await reflowSuggestion(patientId, sched.frequency_code, loggedAt);
   }
+  await publishPatientAdherence(patientId, {
+    schedule_id: scheduleId,
+    status,
+    logged_at: loggedAt.toISOString(),
+  });
   return { status, log_id: logId, reflow };
 }
 
@@ -177,6 +183,12 @@ export async function sweepMissed(now = new Date()) {
         missed++;
         // UC-08: alert caregivers (or flag the pharmacist if none) on the missed dose.
         await raiseMissedAlerts(r.patient_id, r.id);
+        await publishPatientAdherence(r.patient_id, {
+          schedule_id: r.id,
+          status: 'missed',
+          scheduled_time: r.scheduled_time,
+          medicine_name: r.drug_name_raw,
+        });
       }
     }
   }

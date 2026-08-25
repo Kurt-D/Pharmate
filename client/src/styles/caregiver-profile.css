@@ -23,3 +23,30 @@
   color: #fff;
   text-align: center;
 }
+
+.cg-link-relationship {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  text-align: left;
+}
+.cg-link-relationship > span {
+  color: #1e2e4a;
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+.cg-link-relationship select {
+  background: #fff;
+  border: 1.5px solid #afc4df;
+  border-radius: 0.65rem;
+  color: #1e2e4a;
+  font-family: inherit;
+  font-size: 1rem;
+  min-height: 54px;
+  padding: 0.65rem 0.75rem;
+  width: 100%;
+}
+.cg-link-form > button:disabled {
+  background: #aab8cc;
+  cursor: not-allowed;
+}

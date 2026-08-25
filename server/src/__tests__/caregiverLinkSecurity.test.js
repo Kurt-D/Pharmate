@@ -55,13 +55,13 @@ afterAll(async () => {
   await pool.end();
 });
 
-test('patient creates a hashed, 24-hour invite and lists its safe metadata', async () => {
+test('patient creates a hashed, single-use 15-minute invite and lists safe metadata', async () => {
   const created = await request(app).post('/api/patient/invite').set(auth(patientA.token));
   expect(created.status).toBe(201);
-  expect(created.body.code).toMatch(/^[A-Za-z0-9_-]{22}$/);
-  expect(new Date(created.body.expires_at).getTime() - Date.now()).toBeGreaterThan(
-    23 * 60 * 60 * 1000
-  );
+  expect(created.body.code).toMatch(/^[A-Z2-9]{3}-[A-Z2-9]{3}$/);
+  const ttl = new Date(created.body.expires_at).getTime() - Date.now();
+  expect(ttl).toBeGreaterThan(14 * 60 * 1000);
+  expect(ttl).toBeLessThanOrEqual(15 * 60 * 1000);
 
   const [[stored]] = await pool.execute('SELECT code, token_hash FROM invite_codes WHERE id = ?', [
     created.body.id,
@@ -117,9 +117,9 @@ test('caregiver redeems successfully without patient_id leakage', async () => {
   const linked = await request(app)
     .post('/api/caregiver/link')
     .set(auth(caregiverA.token))
-    .send({ code: invite.body.code });
+    .send({ code: invite.body.code, relationship: 'Daughter' });
   expect(linked.status).toBe(201);
-  expect(linked.body).toEqual({ message: 'Linked to patient' });
+  expect(linked.body).toEqual({ message: 'Linked to patient', relationship: 'Daughter' });
   expect(JSON.stringify(linked.body)).not.toContain('patient_id');
   expect(JSON.stringify(linked.body)).not.toContain(patientA.id);
 });
@@ -152,6 +152,7 @@ test('patient lists only privacy-appropriate active caregiver details', async ()
   expect(listed.body[0]).toEqual({
     id: expect.any(String),
     email: caregiverA.email,
+    relationship: 'Daughter',
     linked_at: expect.any(String),
     status: 'active',
   });

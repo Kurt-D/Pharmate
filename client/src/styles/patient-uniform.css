@@ -1,0 +1,723 @@
+/* Unified patient portal — professional healthcare visual system. */
+:where(
+  .pm-home,
+  .pm-medications-page,
+  .pm-ask-page,
+  .pm-shop-page,
+  .pm-tracker-page,
+  .pm-streak-page
+) {
+  background: #f8fafc;
+  color: #1e2e4a;
+  gap: 1rem;
+  margin: -1rem;
+  padding: 1.15rem 1rem 2rem;
+}
+:where(
+  .pm-home__header,
+  .pm-medications-header,
+  .pm-ask-page > header,
+  .pm-shop-header,
+  .pm-orders-header
+) {
+  align-items: flex-start;
+  min-height: 58px;
+}
+:where(
+    .pm-home__header,
+    .pm-medications-header,
+    .pm-ask-page > header,
+    .pm-shop-header,
+    .pm-orders-header
+  )
+  h1 {
+  color: #1769f5;
+  font-size: 1.55rem;
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  line-height: 1.2;
+  margin: 0;
+}
+:where(
+    .pm-home__header,
+    .pm-medications-header,
+    .pm-ask-page > header,
+    .pm-shop-header,
+    .pm-orders-header
+  )
+  p {
+  color: #52627a;
+  font-size: 0.9rem;
+  line-height: 1.45;
+  margin: 0.2rem 0 0;
+}
+
+/* Home */
+.pm-welcome-card,
+.pm-dashboard-card,
+.pm-tip-card {
+  background: #fff;
+  border: 1px solid #d7e2f0;
+  border-radius: 1.05rem;
+  box-shadow: 0 5px 16px #1e2e4a0b;
+}
+.pm-welcome-card {
+  background: #fff;
+  border-left: 4px solid #4c8ce4;
+  padding: 1rem;
+}
+.pm-welcome-card h2 {
+  color: #1e2e4a;
+  font-size: 1rem;
+  line-height: 1.35;
+}
+.pm-welcome-card p {
+  color: #475569;
+  font-size: 0.84rem;
+  line-height: 1.55;
+}
+.pm-support-line {
+  border-top: 1px solid #e5ebf3;
+  color: #405474;
+  padding-top: 0.55rem;
+}
+.pm-support-line svg {
+  color: #1769f5;
+}
+.pm-dashboard-card {
+  padding: 1rem;
+}
+.pm-section-heading {
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+.pm-section-heading h2 {
+  color: #1e2e4a;
+  font-size: 1rem;
+}
+.pm-section-heading > a,
+.pm-section-heading > button {
+  color: #1558c9;
+  font-weight: 800;
+}
+.pm-summary-grid {
+  background: #f8fafc;
+  border: 1px solid #e4eaf2;
+  border-radius: 0.8rem;
+  padding: 0.65rem 0.25rem;
+}
+.pm-summary-grid > button,
+.pm-summary-grid > div {
+  min-height: 74px;
+}
+.pm-summary-grid strong {
+  font-size: 1.12rem;
+}
+.pm-summary-grid small {
+  color: #52627a;
+  font-size: 0.76rem;
+}
+.pm-voice-card {
+  border-color: #bed5f4;
+}
+.pm-voice-card .pm-section-heading {
+  border-bottom: 1px solid #e4ebf5;
+  padding-bottom: 0.65rem;
+}
+.pm-mic {
+  background: #1769f5;
+  box-shadow:
+    0 0 0 7px #e6f0ff,
+    0 4px 14px #1769f52c;
+}
+.pm-active-pill {
+  background: #e8f7ed;
+  border: 1px solid #bfe4ca;
+  color: #1b6f31;
+}
+.pm-action-button {
+  background: #1769f5;
+  border-color: #1769f5;
+  border-radius: 0.7rem;
+  min-height: 54px;
+}
+.pm-action-button--outline {
+  background: #fff;
+  color: #1558c9;
+}
+.pm-scan-hint {
+  color: #52627a;
+  font-size: 0.76rem;
+  line-height: 1.4;
+}
+.pm-tip-card {
+  background: #fffdf0;
+  border-color: #eadf93;
+  padding: 1rem;
+}
+.pm-tip-icon {
+  background: #fff799;
+  color: #2a2500;
+}
+.pm-tip-card h2 {
+  color: #2a2500;
+}
+.pm-tip-card p {
+  color: #4a4320;
+}
+.pm-priority-streak-card {
+  border-top: 4px solid #4c8ce4;
+}
+.pm-priority-streak__top {
+  border-bottom: 1px solid #e5ebf3;
+  padding-bottom: 0.75rem;
+}
+.pm-streak-details,
+.pm-ask-pharmacist-button {
+  background: #fff;
+  border: 1.5px solid #4c8ce4;
+  border-radius: 0.65rem;
+  color: #1558c9;
+  min-height: 48px;
+}
+.pm-streak-reward {
+  background: #eef5ff;
+  border: 1px solid #c9dcf7;
+  color: #1e2e4a;
+}
+.pm-streak-reward small {
+  color: #405474;
+}
+
+/* Medications */
+.pm-medications-page > section:not(.pm-compact-reminder),
+.pm-med-loading {
+  border-radius: 1.05rem;
+}
+.pm-med-setup-empty,
+.pm-med-library,
+.pm-schedule-choice,
+.pm-suggested-schedule,
+.pm-manual-schedule,
+.pm-edit-schedule {
+  background: #fff;
+  border: 1px solid #d7e2f0;
+  box-shadow: 0 5px 16px #1e2e4a0b;
+  padding: 1rem;
+}
+.pm-med-dashboard-v2 {
+  gap: 1rem;
+}
+.pm-compact-reminder,
+.pm-dashboard-schedule-tools,
+.pm-dose-section {
+  background: #fff;
+  border: 1px solid #d7e2f0;
+  border-radius: 1.05rem;
+  box-shadow: 0 5px 16px #1e2e4a0b;
+  overflow: hidden;
+}
+.pm-compact-reminder {
+  border-top: 4px solid #4c8ce4;
+  padding: 1rem;
+}
+.pm-compact-reminder__header {
+  border-bottom: 1px solid #e5ebf3;
+  padding-bottom: 0.65rem;
+}
+.pm-compact-reminder__header strong {
+  color: #1e2e4a;
+}
+.pm-compact-reminder__message {
+  background: #f8fbff;
+  border-radius: 0.75rem;
+  margin-top: 0.75rem;
+  padding: 0.75rem;
+}
+.pm-reminder-mark,
+.pm-reminder-scan,
+.pm-reminder-snooze {
+  border-radius: 0.65rem;
+  min-height: 52px;
+}
+.pm-reminder-scan {
+  background: #1769f5;
+}
+.pm-reminder-snooze {
+  background: #fff799;
+  border-color: #dfcf4e;
+  color: #2a2500;
+}
+.pm-edit-schedule-card {
+  border: 0;
+  border-radius: 1rem;
+  min-height: 86px;
+  padding: 1rem;
+}
+.pm-edit-schedule-card > span {
+  background: #e8f1ff;
+  color: #1769f5;
+}
+.pm-edit-schedule-card strong {
+  font-size: 1rem;
+}
+.pm-edit-schedule-card small {
+  color: #52627a;
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+.pm-dose-section {
+  padding: 1rem;
+}
+.pm-dose-section > div:first-child {
+  border-bottom: 1px solid #e7edf5;
+  margin-bottom: 0.15rem;
+  padding-bottom: 0.7rem;
+}
+.pm-dose-section h2 {
+  font-size: 1rem;
+}
+.pm-dose-section.upcoming h2 {
+  color: #9a6100;
+}
+.pm-dose-section.missed h2 {
+  color: #b91c1c;
+}
+.pm-dose-section.taken h2 {
+  color: #247c34;
+}
+.pm-dashboard-dose-row {
+  border-color: #e4eaf2;
+  min-height: 82px;
+  padding: 0.7rem;
+}
+.pm-dashboard-dose-medicine strong {
+  color: #1e2e4a;
+  font-size: 0.92rem;
+}
+.pm-dashboard-dose-medicine small {
+  color: #52627a;
+}
+.pm-dose-see-all {
+  border-radius: 0.65rem;
+  margin-top: 0.7rem;
+  min-height: 48px;
+}
+.pm-med-info,
+.pm-safe-strip,
+.pm-success-strip {
+  border-radius: 0.75rem;
+}
+.pm-primary-large {
+  background: #1769f5;
+  border-color: #1769f5;
+  border-radius: 0.7rem;
+}
+.pm-secondary-large {
+  background: #fff;
+  border-color: #4c8ce4;
+  border-radius: 0.7rem;
+  color: #1558c9;
+}
+
+/* Ask a Pharmacist */
+.pm-ask-steps {
+  background: #fff;
+  border: 1px solid #d7e2f0;
+  border-radius: 0.9rem;
+  padding: 0.8rem 0.6rem;
+}
+.pm-ask-card,
+.pm-chat-history {
+  background: #fff;
+  border: 1px solid #d7e2f0;
+  border-radius: 1.05rem;
+  box-shadow: 0 5px 16px #1e2e4a0b;
+  padding: 1rem;
+}
+.pm-ask-card h2,
+.pm-ask-card h3 {
+  color: #1e2e4a;
+}
+.pm-ask-card > p {
+  color: #52627a;
+  line-height: 1.5;
+}
+.pm-ask-primary {
+  background: #1769f5;
+  border-radius: 0.7rem;
+  min-height: 54px;
+}
+.pm-ask-security {
+  background: #eef5ff;
+  border: 1px solid #cbdcf5;
+  border-radius: 0.75rem;
+  color: #405474;
+  padding: 0.75rem;
+}
+.pm-ask-priority-heading {
+  border-bottom: 1px solid #e5ebf3;
+  padding-bottom: 0.7rem;
+}
+.pm-ask-priority-balance {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.75rem;
+}
+.pm-ask-chat-options > button {
+  border-radius: 0.8rem;
+  min-height: 82px;
+}
+.pm-ask-chat-options > button[aria-checked='true'],
+.pm-ask-chat-options > button.active {
+  background: #eef5ff;
+  border-color: #1769f5;
+}
+.pm-ask-earn-tokens {
+  color: #1558c9;
+  font-weight: 800;
+}
+.pm-chat-header {
+  background: #fff;
+  border: 1px solid #d7e2f0;
+  border-radius: 1.05rem 1.05rem 0 0;
+}
+.pm-chat-secure {
+  background: #eef5ff;
+  color: #405474;
+}
+.pm-chat-waiting {
+  border-radius: 0.75rem;
+}
+.pm-chat-compose {
+  background: #fff;
+  border: 1px solid #d7e2f0;
+  border-radius: 0.8rem;
+}
+.pm-history-entry-summary {
+  min-width: 0;
+}
+.pm-history-bookmark-icon {
+  background: #e8f1ff;
+  color: #1769f5;
+}
+.pm-history-entry-actions button {
+  color: #1558c9;
+}
+
+/* Pharmacy shop and delivery */
+.pm-shop-page,
+.pm-tracker-page {
+  padding-bottom: 7.25rem;
+}
+.pm-shop-mode-tabs {
+  background: #fff;
+  border: 1px solid #d7e2f0;
+  border-radius: 0.85rem;
+  padding: 0.3rem;
+}
+.pm-shop-mode-tabs button {
+  border-color: transparent;
+}
+.pm-shop-mode-tabs button.active {
+  background: #eaf2ff;
+  border-color: #4c8ce4;
+  color: #1558c9;
+}
+.pm-shop-track-button {
+  background: #fff;
+  border-color: #4c8ce4;
+  border-radius: 0.75rem;
+  color: #1558c9;
+  box-shadow: 0 3px 10px #1e2e4a08;
+}
+.pm-shop-search {
+  border-color: #c4d5ea;
+  border-radius: 0.85rem;
+  box-shadow: 0 3px 10px #1e2e4a08;
+}
+.pm-shop-filters button {
+  border-color: #cbd8e8;
+  min-height: 48px;
+}
+.pm-shop-filters button.active {
+  background: #1769f5;
+}
+.pm-shop-heading h2,
+.pm-tracker-heading h2 {
+  color: #1e2e4a;
+  font-size: 1.05rem;
+}
+.pm-product-grid article {
+  border-color: #d5e1ef;
+  border-radius: 1rem;
+  box-shadow: 0 4px 14px #1e2e4a0a;
+}
+.pm-product-visual {
+  background: #f1f6fd;
+}
+.pm-product-add {
+  background: #1769f5;
+  border-radius: 0.65rem;
+  min-height: 50px;
+}
+.pm-orders-header--with-back > button {
+  background: #fff;
+  border: 1px solid #d5e1ef;
+  border-radius: 50%;
+  box-shadow: 0 3px 10px #1e2e4a0a;
+}
+.pm-orders-header--with-back h1 > span {
+  background: #e8f1ff;
+  color: #1769f5;
+}
+.pm-order-success {
+  background: #eff9ec;
+  border-color: #b9dfad;
+  border-radius: 0.9rem;
+}
+.pm-active-orders > article,
+.pm-order-history-new {
+  background: #fff;
+  border: 1px solid #d7e2f0;
+  border-radius: 1.05rem;
+  box-shadow: 0 5px 16px #1e2e4a0b;
+  overflow: hidden;
+}
+.pm-order-card-summary {
+  min-height: 94px;
+  padding: 1rem;
+}
+.pm-order-type-icon {
+  background: #e8f1ff;
+  color: #1769f5;
+}
+.pm-order-card-detail {
+  background: #f8fafc;
+  border-top: 1px solid #e4eaf2;
+}
+.pm-order-stepper > div > span {
+  background: #fff;
+  border-color: #b9c9dd;
+}
+.pm-order-stepper > div.active > span {
+  background: #1769f5;
+  border-color: #1769f5;
+}
+.pm-order-history-new {
+  padding: 1rem;
+}
+.pm-order-history-new h2 {
+  border-bottom: 1px solid #e5ebf3;
+  padding-bottom: 0.7rem;
+}
+
+/* Adherence streak */
+.pm-streak-page {
+  padding-bottom: 2rem;
+}
+.pm-streak-page__header {
+  background: #fff;
+  border: 1px solid #d7e2f0;
+  border-radius: 1.05rem;
+  box-shadow: 0 5px 16px #1e2e4a0b;
+  color: #1e2e4a;
+  grid-template-columns: 52px 1fr 52px;
+  margin: 0;
+  min-height: 68px;
+  padding: 0.4rem 0.65rem;
+}
+.pm-streak-page__header button {
+  background: #e8f1ff;
+  border: 1px solid #c5d9f5;
+  border-radius: 50%;
+  color: #1769f5;
+  height: 48px;
+  min-height: 48px;
+  width: 48px;
+}
+.pm-streak-page__header h1 {
+  color: #1769f5;
+  font-size: 1.4rem;
+}
+.pm-streak-page__header > span {
+  color: #1769f5;
+}
+.pm-streak-overview,
+.pm-streak-rules,
+.pm-streak-reward-path {
+  border-color: #d7e2f0;
+  border-radius: 1.05rem;
+  box-shadow: 0 5px 16px #1e2e4a0b;
+}
+.pm-streak-overview__tokens > span {
+  background: #e8f1ff;
+  color: #1769f5;
+}
+.pm-streak-overview__tokens > a {
+  background: #fff;
+  border-color: #4c8ce4;
+  border-radius: 0.65rem;
+}
+.pm-streak-overview__status {
+  background: #fbfdff;
+}
+.pm-streak-ring--clean {
+  background: conic-gradient(#1769f5 var(--streak-progress), #dce8fa 0);
+}
+.pm-streak-week--clean {
+  background: #fff;
+}
+.pm-streak-rules > div > span {
+  border-radius: 0.7rem;
+}
+.pm-streak-reward-path progress {
+  accent-color: #1769f5;
+}
+.pm-streak-tip--clean {
+  background: #fff;
+  border-color: #d7e2f0;
+  border-radius: 1rem;
+  box-shadow: 0 4px 14px #1e2e4a08;
+}
+
+/* Shared interaction polish */
+:where(
+    .pm-home,
+    .pm-medications-page,
+    .pm-ask-page,
+    .pm-shop-page,
+    .pm-tracker-page,
+    .pm-streak-page
+  )
+  button {
+  font-family: inherit;
+}
+:where(
+    .pm-home,
+    .pm-medications-page,
+    .pm-ask-page,
+    .pm-shop-page,
+    .pm-tracker-page,
+    .pm-streak-page
+  )
+  :focus-visible {
+  outline: 3px solid #4c8ce4;
+  outline-offset: 2px;
+}
+:where(
+  .pm-action-button,
+  .pm-primary-large,
+  .pm-ask-primary,
+  .pm-product-add,
+  .pm-checkout-primary
+):hover {
+  background: #1558c9;
+}
+
+/* Accessibility preferences continue to apply to every redesigned page. */
+.pm-phone.pm-a11y-dark-mode
+  :where(
+    .pm-home,
+    .pm-medications-page,
+    .pm-ask-page,
+    .pm-shop-page,
+    .pm-tracker-page,
+    .pm-streak-page
+  ) {
+  background: #0f172a !important;
+}
+.pm-phone.pm-a11y-dark-mode
+  :where(
+    .pm-welcome-card,
+    .pm-dashboard-card,
+    .pm-tip-card,
+    .pm-compact-reminder,
+    .pm-dashboard-schedule-tools,
+    .pm-dose-section,
+    .pm-ask-card,
+    .pm-chat-history,
+    .pm-ask-steps,
+    .pm-shop-mode-tabs,
+    .pm-product-grid article,
+    .pm-active-orders > article,
+    .pm-order-history-new,
+    .pm-streak-page__header,
+    .pm-streak-overview,
+    .pm-streak-rules,
+    .pm-streak-reward-path,
+    .pm-streak-tip--clean
+  ) {
+  background: #1e293b !important;
+  border-color: #475569 !important;
+}
+.pm-phone.pm-a11y-dark-mode
+  :where(
+    .pm-summary-grid,
+    .pm-compact-reminder__message,
+    .pm-order-card-detail,
+    .pm-streak-overview__status,
+    .pm-shop-search
+  ) {
+  background: #111827 !important;
+  border-color: #475569 !important;
+}
+.pm-phone.pm-a11y-dark-mode .pm-streak-page__header h1 {
+  color: #75a7ff !important;
+}
+.pm-phone.pm-a11y-dark-mode .pm-orders-header--with-back > button,
+.pm-phone.pm-a11y-dark-mode .pm-streak-page__header button {
+  background: #172b4d;
+  border-color: #365d91;
+  color: #9cc2ff;
+}
+.pm-phone.pm-a11y-dark-mode .pm-tip-card {
+  background: #3f390b !important;
+}
+.pm-phone.pm-a11y-dark-mode .pm-tip-card :where(h2, p) {
+  color: #fff5a6 !important;
+}
+
+@media (max-width: 380px) {
+  :where(
+    .pm-home,
+    .pm-medications-page,
+    .pm-ask-page,
+    .pm-shop-page,
+    .pm-tracker-page,
+    .pm-streak-page
+  ) {
+    padding-left: 0.75rem;
+    padding-right: 0.75rem;
+  }
+  :where(
+      .pm-home__header,
+      .pm-medications-header,
+      .pm-ask-page > header,
+      .pm-shop-header,
+      .pm-orders-header
+    )
+    h1 {
+    font-size: 1.38rem;
+  }
+  .pm-welcome-card {
+    grid-template-columns: 5.6rem minmax(0, 1fr);
+  }
+  .pm-product-grid {
+    gap: 0.6rem;
+  }
+  .pm-product-grid article {
+    padding: 0.55rem;
+  }
+  .pm-streak-page__header {
+    grid-template-columns: 46px 1fr 40px;
+  }
+  .pm-streak-page__header button {
+    height: 44px;
+    min-height: 44px;
+    width: 44px;
+  }
+  .pm-streak-page__header h1 {
+    font-size: 1.22rem;
+  }
+}

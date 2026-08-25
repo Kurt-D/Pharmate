@@ -1,0 +1,508 @@
+.pm-profile-page {
+  background: linear-gradient(180deg, #f5f8fd 0, #f8fafc 100%);
+  color: #1e2e4a;
+  gap: 1rem;
+  margin: -1rem;
+  padding: 1.15rem 1rem 2rem;
+}
+.pm-profile-page > header {
+  align-items: flex-start;
+  min-height: 58px;
+}
+.pm-profile-page > header h1 {
+  color: #1e2e4a;
+  font-size: 1.6rem;
+  letter-spacing: -0.025em;
+  line-height: 1.2;
+}
+.pm-profile-page > header p {
+  color: #52627a;
+  font-size: 0.92rem;
+  line-height: 1.45;
+  margin-top: 0.22rem;
+}
+.pm-profile-alert {
+  align-items: center;
+  border-radius: 0.9rem;
+  display: grid;
+  gap: 0.7rem;
+  grid-template-columns: auto 1fr;
+  padding: 0.85rem 1rem;
+}
+.pm-profile-alert > svg {
+  flex: 0 0 auto;
+}
+.pm-profile-alert > span {
+  display: flex;
+  flex-direction: column;
+}
+.pm-profile-alert strong {
+  font-size: 0.9rem;
+  line-height: 1.35;
+}
+.pm-profile-alert small {
+  font-size: 0.76rem;
+  line-height: 1.4;
+  margin-top: 0.12rem;
+}
+
+.pm-profile-identity {
+  background: linear-gradient(135deg, #fff, #f3f7ff);
+  border: 1px solid #ccdbee;
+  border-radius: 1.05rem;
+  box-shadow: 0 6px 18px #1e2e4a0c;
+  gap: 1rem;
+  padding: 1rem;
+}
+.pm-profile-avatar {
+  background: linear-gradient(145deg, #eaf2ff, #fff);
+  border: 2px solid #bfd4f2;
+  box-shadow: 0 4px 12px #2a67b817;
+  color: #2a67b8;
+  font-size: 1.25rem;
+  height: 72px;
+  width: 72px;
+}
+.pm-profile-avatar i {
+  background: #3d9e25;
+  border: 3px solid #fff;
+  bottom: 3px;
+  height: 14px;
+  right: 0;
+  width: 14px;
+}
+.pm-profile-identity h2 {
+  color: #1e2e4a;
+  font-size: 1.2rem;
+  line-height: 1.25;
+}
+.pm-profile-identity > div > small {
+  background: #eaf2ff;
+  border-radius: 999px;
+  color: #2a67b8;
+  display: inline-block;
+  font-size: 0.67rem;
+  font-weight: 800;
+  margin-top: 0.25rem;
+  padding: 0.25rem 0.55rem;
+}
+.pm-profile-identity dl {
+  gap: 0.5rem;
+  margin-top: 0.8rem;
+}
+.pm-profile-identity dl > div {
+  background: #fff;
+  border: 1px solid #e0e8f3;
+  border-radius: 0.65rem;
+  padding: 0.55rem;
+}
+.pm-profile-identity dt {
+  align-items: center;
+  color: #52627a;
+  display: flex;
+  font-size: 0.68rem;
+  font-weight: 700;
+  gap: 0.3rem;
+}
+.pm-profile-identity dt svg {
+  color: #2a67b8;
+}
+.pm-profile-identity dd {
+  color: #1e2e4a;
+  font-size: 0.78rem;
+  margin-top: 0.25rem;
+  overflow-wrap: anywhere;
+}
+.pm-profile-identity .pm-profile-email {
+  grid-column: 1/-1;
+}
+.pm-profile-details-toggle {
+  align-items: center;
+  background: #fff;
+  border: 1.5px solid #a9c8ef;
+  border-radius: 0.7rem;
+  color: #1558c9;
+  display: flex;
+  font-family: inherit;
+  font-size: 0.82rem;
+  font-weight: 800;
+  grid-column: 1/-1;
+  justify-content: center;
+  min-height: 50px;
+  padding: 0.55rem 0.8rem;
+  width: 100%;
+}
+.pm-profile-details-toggle:hover {
+  background: #eef5ff;
+}
+.pm-profile-details-toggle[aria-expanded='true'] svg {
+  transform: rotate(-90deg);
+}
+.pm-profile-details-toggle[aria-expanded='false'] svg {
+  transform: rotate(90deg);
+}
+.pm-profile-more-details {
+  border-top: 1px solid #dce5f0;
+  display: grid;
+  gap: 0.55rem;
+  grid-column: 1/-1;
+  padding-top: 0.85rem;
+}
+.pm-profile-more-details > div {
+  align-items: center;
+  background: #fff;
+  border: 1px solid #e0e8f3;
+  border-radius: 0.7rem;
+  display: grid;
+  gap: 0.65rem;
+  grid-template-columns: 40px minmax(0, 1fr);
+  padding: 0.65rem;
+}
+.pm-profile-more-details > div > span {
+  align-items: center;
+  background: #e8f1ff;
+  border-radius: 0.6rem;
+  color: #1769f5;
+  display: flex;
+  height: 40px;
+  justify-content: center;
+  width: 40px;
+}
+.pm-profile-more-details p {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  min-width: 0;
+}
+.pm-profile-more-details small {
+  color: #64748b;
+  font-size: 0.68rem;
+}
+.pm-profile-more-details strong {
+  color: #1e2e4a;
+  font-size: 0.82rem;
+  line-height: 1.4;
+  margin-top: 0.12rem;
+  overflow-wrap: anywhere;
+}
+.pm-profile-more-details .pm-profile-active-status {
+  align-items: center;
+  color: #1b6f31;
+  display: flex;
+  gap: 0.3rem;
+}
+
+.pm-profile-heading {
+  padding: 0.05rem 0.15rem;
+}
+.pm-profile-heading h2 {
+  color: #1e2e4a;
+  font-size: 1rem;
+  line-height: 1.3;
+}
+.pm-profile-heading p {
+  color: #52627a;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  margin-top: 0.18rem;
+}
+.pm-caregiver-card {
+  border: 1px solid #d8e3f1;
+  border-radius: 1.05rem;
+  box-shadow: 0 5px 16px #1e2e4a0b;
+  gap: 0.8rem;
+  padding: 1rem;
+}
+.pm-caregiver-intro {
+  gap: 0.7rem;
+  grid-template-columns: 48px minmax(0, 1fr) 42px;
+}
+.pm-caregiver-intro > i,
+.pm-caregiver-intro > b {
+  align-items: center;
+  background: #eaf2ff;
+  border: 1px solid #d4e3f7;
+  border-radius: 0.75rem;
+  color: #2a67b8;
+  display: flex;
+  height: 44px;
+  justify-content: center;
+  width: 44px;
+}
+.pm-caregiver-intro > i {
+  font-size: initial;
+}
+.pm-caregiver-intro > b {
+  background: #eff9ec;
+  border-color: #cce8c2;
+  color: #1b4d08;
+}
+.pm-caregiver-intro strong {
+  color: #1e2e4a;
+  font-size: 0.92rem;
+  line-height: 1.35;
+}
+.pm-caregiver-intro small {
+  color: #52627a;
+  font-size: 0.76rem;
+  line-height: 1.45;
+  margin-top: 0.12rem;
+}
+.pm-caregiver-code {
+  background: #f8fbff;
+  border: 1.5px dashed #9fbee9;
+  border-radius: 0.85rem;
+  padding: 0.9rem;
+}
+.pm-caregiver-code > small {
+  font-size: 0.68rem;
+}
+.pm-caregiver-code > strong {
+  color: #2a67b8;
+  font-size: 1.15rem;
+  margin-top: 0.35rem;
+}
+.pm-caregiver-code > p {
+  font-size: 0.68rem;
+  line-height: 1.4;
+  margin: 0.2rem 0 0.65rem;
+}
+.pm-caregiver-code > div {
+  gap: 0.25rem;
+  padding-top: 0.55rem;
+}
+.pm-caregiver-code button {
+  align-items: center;
+  border-radius: 0.55rem;
+  color: #2a67b8;
+  display: flex;
+  flex-direction: column;
+  font-size: 0.68rem;
+  gap: 0.25rem;
+  justify-content: center;
+  min-height: 54px;
+  padding: 0.35rem;
+}
+.pm-caregiver-code button:hover:not(:disabled) {
+  background: #eaf2ff;
+}
+.pm-caregiver-code button:disabled {
+  color: #94a3b8;
+}
+.pm-linked-caregivers {
+  gap: 0.35rem;
+  padding-top: 0.7rem;
+}
+.pm-linked-caregivers strong {
+  font-size: 0.82rem;
+}
+.pm-linked-caregivers span {
+  background: #f3f6fa;
+  border-radius: 0.5rem;
+  color: #405474;
+  font-size: 0.76rem;
+  padding: 0.5rem 0.6rem;
+}
+
+.pm-profile-menu {
+  border: 1px solid #d8e3f1;
+  border-radius: 1.05rem;
+  box-shadow: 0 5px 16px #1e2e4a0b;
+}
+.pm-profile-menu > button {
+  background: #fff;
+  gap: 0.75rem;
+  grid-template-columns: 46px minmax(0, 1fr) 24px;
+  min-height: 70px;
+  padding: 0.7rem 0.85rem;
+}
+.pm-profile-menu > button:hover {
+  background: #f8fbff;
+}
+.pm-profile-menu > button i {
+  background: #eaf2ff;
+  border: 1px solid #d5e4f8;
+  border-radius: 0.7rem;
+  color: #2a67b8;
+  height: 44px;
+  width: 44px;
+}
+.pm-profile-menu > button > span {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.pm-profile-menu > button > span strong {
+  color: #1e2e4a;
+  font-size: 0.91rem;
+  line-height: 1.3;
+}
+.pm-profile-menu > button > span small {
+  color: #64748b;
+  font-size: 0.72rem;
+  line-height: 1.4;
+  margin-top: 0.12rem;
+}
+.pm-profile-menu > button b {
+  align-items: center;
+  color: #64748b;
+  display: flex;
+  font-size: inherit;
+  justify-content: center;
+}
+.pm-profile-menu > button.logout i {
+  background: #fff0f0;
+  border-color: #f5caca;
+  color: #dc2626;
+}
+.pm-profile-menu > button.logout > span strong {
+  color: #b91c1c;
+}
+.pm-profile-panel {
+  background: #f6f9fd;
+  border-color: #dce5f0;
+  gap: 0.75rem;
+  padding: 0.85rem;
+}
+.pm-profile-panel label {
+  color: #1e2e4a;
+  font-size: 0.8rem;
+  gap: 0.35rem;
+}
+.pm-profile-panel input:not([type='checkbox']),
+.pm-profile-panel textarea,
+.pm-profile-panel select {
+  background: #fff;
+  border: 1.5px solid #afc0d6;
+  border-radius: 0.65rem;
+  color: #1e2e4a;
+  font-family: inherit;
+  font-size: 1rem;
+  min-height: 52px;
+  padding: 0.65rem 0.75rem;
+}
+.pm-profile-panel > button {
+  background: #2a67b8;
+  border-radius: 0.65rem;
+  font-size: 0.9rem;
+  min-height: 52px;
+}
+.pm-profile-panel > button:hover {
+  background: #205fae;
+}
+.pm-profile-panel p {
+  font-size: 0.82rem;
+  line-height: 1.55;
+}
+.pm-profile-toggles label {
+  background: #fff;
+  border: 1px solid #e0e7f0;
+  border-radius: 0.6rem;
+  min-height: 52px;
+  padding: 0.5rem 0.65rem;
+}
+.pm-profile-toggles input {
+  accent-color: #2a67b8;
+  height: 24px;
+  width: 24px;
+}
+
+.pm-phone.pm-a11y-dark-mode .pm-profile-page {
+  background: linear-gradient(180deg, #0f172a, #111c31) !important;
+}
+.pm-phone.pm-a11y-dark-mode .pm-profile-identity {
+  background: linear-gradient(135deg, #1e293b, #17233a) !important;
+}
+.pm-phone.pm-a11y-dark-mode .pm-profile-avatar,
+.pm-phone.pm-a11y-dark-mode .pm-profile-identity dl > div,
+.pm-phone.pm-a11y-dark-mode .pm-caregiver-code,
+.pm-phone.pm-a11y-dark-mode .pm-profile-menu > button,
+.pm-phone.pm-a11y-dark-mode .pm-profile-toggles label {
+  background: #111827 !important;
+  border-color: #475569 !important;
+}
+.pm-phone.pm-a11y-dark-mode .pm-caregiver-intro > i,
+.pm-phone.pm-a11y-dark-mode .pm-caregiver-intro > b,
+.pm-phone.pm-a11y-dark-mode .pm-profile-menu > button i {
+  background: #172b4d !important;
+  border-color: #365d91 !important;
+  color: #9cc2ff !important;
+}
+.pm-phone.pm-a11y-dark-mode .pm-profile-menu > button.logout i {
+  background: #4b1f26 !important;
+  border-color: #7f3840 !important;
+  color: #ffb4b4 !important;
+}
+.pm-phone.pm-a11y-dark-mode .pm-profile-menu > button.logout > span strong {
+  color: #ffb4b4 !important;
+}
+.pm-phone.pm-a11y-dark-mode .pm-profile-panel {
+  background: #172033 !important;
+  border-color: #475569 !important;
+}
+.pm-phone.pm-a11y-dark-mode .pm-linked-caregivers span {
+  background: #111827;
+  color: #cbd5e1;
+}
+.pm-phone.pm-a11y-dark-mode .pm-profile-details-toggle,
+.pm-phone.pm-a11y-dark-mode .pm-profile-more-details > div {
+  background: #111827;
+  border-color: #475569;
+  color: #9cc2ff;
+}
+.pm-phone.pm-a11y-dark-mode .pm-profile-more-details {
+  border-color: #475569;
+}
+.pm-phone.pm-a11y-dark-mode .pm-profile-more-details > div > span {
+  background: #172b4d;
+  color: #9cc2ff;
+}
+.pm-phone.pm-a11y-dark-mode .pm-profile-more-details .pm-profile-active-status {
+  color: #b7f7c8 !important;
+}
+@media (max-width: 380px) {
+  .pm-profile-page {
+    padding-left: 0.75rem;
+    padding-right: 0.75rem;
+  }
+  .pm-profile-page > header h1 {
+    font-size: 1.4rem;
+  }
+  .pm-profile-identity {
+    grid-template-columns: 62px minmax(0, 1fr);
+    gap: 0.7rem;
+    padding: 0.8rem;
+  }
+  .pm-profile-avatar {
+    height: 60px;
+    width: 60px;
+  }
+  .pm-profile-identity dl {
+    grid-template-columns: 1fr;
+  }
+  .pm-caregiver-card {
+    padding: 0.8rem;
+  }
+  .pm-caregiver-intro {
+    grid-template-columns: 42px minmax(0, 1fr) 38px;
+  }
+  .pm-caregiver-intro > i {
+    height: 40px;
+    width: 40px;
+  }
+  .pm-caregiver-intro > b {
+    height: 36px;
+    width: 36px;
+  }
+  .pm-profile-menu > button {
+    grid-template-columns: 42px minmax(0, 1fr) 22px;
+    padding: 0.65rem;
+  }
+  .pm-profile-menu > button i {
+    height: 40px;
+    width: 40px;
+  }
+  .pm-profile-menu > button > span small {
+    font-size: 0.68rem;
+  }
+}

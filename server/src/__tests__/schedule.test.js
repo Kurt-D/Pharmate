@@ -84,6 +84,26 @@ describe('POST /api/patient/schedule/confirm', () => {
     // Same dose count — the prior 'scheduled' rows were replaced, not appended.
     expect(second.body.count).toBe(first.body.count);
   });
+
+  test('deleting all selected reminders remains deleted when doses are fetched again', async () => {
+    await request(app).post('/api/patient/schedule/confirm').set(auth());
+    const before = await request(app).get('/api/patient/doses/today').set(auth());
+    const scheduleIds = before.body
+      .filter((dose) => dose.status === 'scheduled')
+      .map((dose) => dose.schedule_id);
+
+    expect(scheduleIds.length).toBeGreaterThan(0);
+    const removed = await request(app)
+      .delete('/api/patient/schedule/items')
+      .set(auth())
+      .send({ schedule_ids: scheduleIds });
+
+    expect(removed.status).toBe(200);
+    expect(removed.body.deleted).toBe(scheduleIds.length);
+
+    const after = await request(app).get('/api/patient/doses/today').set(auth());
+    expect(after.body.filter((dose) => scheduleIds.includes(dose.schedule_id))).toEqual([]);
+  });
 });
 
 // Layout: patient has paracetamol TID (3 doses, min interval 4h) at 08:00/16:00/00:00.

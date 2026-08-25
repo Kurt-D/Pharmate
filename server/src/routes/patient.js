@@ -1,5 +1,4 @@
 import { Router } from 'express';
-import { createHash, randomBytes } from 'node:crypto';
 import { v4 as uuidv4 } from 'uuid';
 import { pool } from '../db/connection.js';
 import { requireAuth } from '../middleware/auth.js';
@@ -43,6 +42,12 @@ import {
   updateMedication,
   validateMedicationPatch,
 } from '../services/patientMedications.js';
+import {
+  CAREGIVER_CODE_TTL_MS,
+  displayCaregiverCode,
+  generateCaregiverCode,
+  hashCaregiverCode,
+} from '../utils/caregiverInvite.js';
 
 const router = Router();
 
@@ -202,22 +207,46 @@ router.delete('/device-token', async (req, res) => {
 // ── POST /api/patient/invite ──────────────────────────────────────────────────
 // Generate a cryptographically random, single-use caregiver invite. Only its
 // SHA-256 digest is persisted; the raw code is returned exactly once.
-router.post('/invite', async (req, res) => {
-  // 128 bits of entropy encoded as unpadded base64url (22 chars), matching the
-  // existing invite-code contract used by tests and clients.
-  const code = randomBytes(16).toString('base64url');
-  const tokenHash = createHash('sha256').update(code).digest('hex');
-  const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+async function createCaregiverInvite(req, res) {
+  const code = generateCaregiverCode();
+  const tokenHash = hashCaregiverCode(code);
+  const expiresAt = new Date(Date.now() + CAREGIVER_CODE_TTL_MS);
   const id = uuidv4();
+  const conn = await pool.getConnection();
 
-  await pool.execute(
-    `INSERT INTO invite_codes (id, patient_id, code, token_hash, expires_at)
-     VALUES (?, ?, NULL, ?, ?)`,
-    [id, req.user.sub, tokenHash, expiresAt]
-  );
+  try {
+    await conn.beginTransaction();
+    // One visible invite keeps the patient experience simple and immediately
+    // invalidates a code that may have been shared with the wrong person.
+    await conn.execute(
+      `UPDATE invite_codes SET revoked_at = NOW(3)
+       WHERE patient_id = ? AND used = 0 AND revoked_at IS NULL`,
+      [req.user.sub]
+    );
+    await conn.execute(
+      `INSERT INTO invite_codes (id, patient_id, code, token_hash, expires_at)
+       VALUES (?, ?, NULL, ?, ?)`,
+      [id, req.user.sub, tokenHash, expiresAt]
+    );
+    await conn.commit();
+  } catch (error) {
+    await conn.rollback();
+    throw error;
+  } finally {
+    conn.release();
+  }
 
-  res.status(201).json({ id, code, expires_at: expiresAt });
-});
+  res.status(201).json({
+    id,
+    code: displayCaregiverCode(code),
+    expires_at: expiresAt,
+    expires_in_seconds: CAREGIVER_CODE_TTL_MS / 1000,
+    single_use: true,
+  });
+}
+
+router.post('/invite', createCaregiverInvite);
+router.post('/caregiver-link-code', createCaregiverInvite);
 
 // Only active, unused and unexpired invites are visible. The raw code cannot be
 // listed because it is never stored.
@@ -244,7 +273,7 @@ router.delete('/invites/:id', async (req, res) => {
 
 router.get('/caregivers', async (req, res) => {
   const [rows] = await pool.execute(
-    `SELECT cp.id, u.email, cp.linked_at, cp.status
+    `SELECT cp.id, u.email, cp.relationship, cp.linked_at, cp.status
      FROM caregiver_patients cp
      JOIN users u ON u.id = cp.caregiver_id
      WHERE cp.patient_id = ? AND cp.status = 'active'
@@ -313,6 +342,7 @@ router.post('/medications', async (req, res) => {
     dosage_instruction,
     start_date,
     end_date,
+    schedule_only = false,
   } = req.body;
 
   if (!drug_name || !String(drug_name).trim()) {
@@ -320,6 +350,9 @@ router.post('/medications', async (req, res) => {
   }
   if (!['RX_VALIDATED', 'OTC_SELF'].includes(source)) {
     return res.status(400).json({ error: 'source must be RX_VALIDATED or OTC_SELF' });
+  }
+  if (typeof schedule_only !== 'boolean') {
+    return res.status(400).json({ error: 'schedule_only must be a boolean' });
   }
 
   // 1. Restricted-substance check (TC-11) — decline before anything is stored.
@@ -348,13 +381,17 @@ router.post('/medications', async (req, res) => {
     await conn.beginTransaction();
 
     if (drug) {
-      // The verified formulary classification is authoritative. A known OTC drug
-      // is active immediately regardless of where the patient obtained it; a
-      // known Rx drug must always go through prescription validation.
-      const effectiveSource =
-        drug.rx_class === 'RX' || source === 'RX_VALIDATED' ? 'RX_VALIDATED' : 'OTC_SELF';
+      // schedule_only records a medicine the patient is already taking for
+      // reminder/adherence tracking. It does not validate a prescription or
+      // grant prescription-order access, so no prescription image is required.
+      const effectiveSource = schedule_only
+        ? 'OTC_SELF'
+        : drug.rx_class === 'RX' || source === 'RX_VALIDATED'
+          ? 'RX_VALIDATED'
+          : 'OTC_SELF';
       const prn = is_prn !== undefined ? (is_prn ? 1 : 0) : drug.is_prn_default;
-      const status = effectiveSource === 'RX_VALIDATED' ? 'pending_validation' : 'active';
+      const status =
+        schedule_only || effectiveSource !== 'RX_VALIDATED' ? 'active' : 'pending_validation';
       await conn.execute(
         `INSERT INTO medications
            (id, patient_id, drug_id, drug_name_raw, source, is_prn, frequency,
@@ -382,9 +419,8 @@ router.post('/medications', async (req, res) => {
         source: effectiveSource,
         drug_id: drug.id,
         rx_class: drug.rx_class,
-        // Rx medicines and medicines explicitly sourced from a prescription stay
-        // pending until a pharmacist approves the uploaded prescription photo.
-        requires_prescription: drug.rx_class === 'RX',
+        requires_prescription: !schedule_only && drug.rx_class === 'RX',
+        schedule_only: Boolean(schedule_only),
         frequency_code: frequencyCode,
         needs_frequency_review: frequencyCode === 'CONSULT',
         is_provisional_drug: !!drug.is_provisional,
@@ -436,14 +472,14 @@ router.post('/medications', async (req, res) => {
 router.get('/medications', async (req, res) => {
   const [rows] = await pool.execute(
     `SELECT m.id, m.drug_id, m.drug_name_raw, m.source, m.is_prn, m.frequency, m.frequency_code,
-            m.dosage_instruction, m.start_date, m.end_date, m.status, m.created_at,
+            m.dosage_instruction, m.start_date, m.end_date, m.status, m.created_at, m.updated_at,
             dr.rx_class,
             pp.status AS prescription_status, pp.decision_reason AS prescription_reason,
             pp.review_stage AS prescription_review_stage
      FROM medications m
      LEFT JOIN drug_reference dr ON dr.id = m.drug_id
      LEFT JOIN prescription_photos pp ON pp.id = m.prescription_photo_id
-     WHERE m.patient_id = ? AND m.status != 'cancelled'
+     WHERE m.patient_id = ? AND m.status NOT IN ('cancelled', 'completed')
      ORDER BY m.created_at DESC`,
     [req.user.sub]
   );
@@ -546,6 +582,25 @@ router.post('/schedule/confirm', async (req, res) => {
     return res.status(400).json({ error: 'Unknown medication in the adjusted layout' });
   }
   res.status(201).json({ message: 'Schedule confirmed', ...result });
+});
+
+// ── DELETE /api/patient/schedule/items ────────────────────────────────────────
+// Delete selected, not-yet-taken reminders while preserving adherence history.
+router.delete('/schedule/items', async (req, res) => {
+  const scheduleIds = Array.isArray(req.body?.schedule_ids) ? req.body.schedule_ids : [];
+  const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  const validIds = [...new Set(scheduleIds.filter((id) => uuidPattern.test(String(id))))].slice(
+    0,
+    500
+  );
+  if (!validIds.length) return res.json({ deleted: 0 });
+  const placeholders = validIds.map(() => '?').join(',');
+  const [result] = await pool.execute(
+    `DELETE FROM medication_schedules
+     WHERE patient_id = ? AND status = 'scheduled' AND id IN (${placeholders})`,
+    [req.user.sub, ...validIds]
+  );
+  res.json({ deleted: result.affectedRows });
 });
 
 // ── GET /api/patient/doses/today ──────────────────────────────────────────────

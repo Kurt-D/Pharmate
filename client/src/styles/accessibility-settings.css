@@ -1,0 +1,391 @@
+.pm-accessibility-page {
+  background: linear-gradient(180deg, #f5f8fd 0, #f8fafc 100%);
+  gap: 1.05rem;
+  margin: -1rem;
+  padding: 1.15rem 1rem 2rem;
+}
+.pm-accessibility-page > header {
+  align-items: center;
+  gap: 0.7rem;
+  margin: 0.05rem 0 0.1rem;
+}
+.pm-accessibility-page > header > button {
+  background: #fff;
+  border: 1px solid #d7e2f1;
+  border-radius: 50%;
+  box-shadow: 0 3px 10px #1e2e4a0a;
+  color: #2a67b8;
+  height: 50px;
+  width: 50px;
+}
+.pm-accessibility-page > header > button:hover {
+  background: #eaf2ff;
+}
+.pm-accessibility-page > header h1 {
+  color: #1e2e4a;
+  font-size: 1.55rem;
+  letter-spacing: -0.025em;
+  line-height: 1.2;
+}
+.pm-accessibility-page > header p {
+  color: #52627a;
+  line-height: 1.45;
+  margin-top: 0.25rem;
+}
+
+.pm-a11y-overview {
+  background: linear-gradient(135deg, #1e5fba 0%, #4c8ce4 100%);
+  border: 0;
+  border-radius: 1.1rem;
+  box-shadow: 0 10px 24px #2a67b82b;
+  color: #fff;
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: auto minmax(0, 1fr);
+  overflow: hidden;
+  padding: 1rem;
+  position: relative;
+}
+.pm-a11y-overview::after {
+  border: 24px solid #ffffff13;
+  border-radius: 50%;
+  content: '';
+  height: 92px;
+  position: absolute;
+  right: -42px;
+  top: -50px;
+  width: 92px;
+}
+.pm-a11y-overview__icon {
+  align-items: center;
+  background: #ffffff24;
+  border: 1px solid #ffffff4d;
+  border-radius: 0.85rem;
+  display: flex;
+  height: 52px;
+  justify-content: center;
+  width: 52px;
+}
+.pm-a11y-overview__copy {
+  min-width: 0;
+}
+.pm-a11y-overview__copy small {
+  color: #e9f2ff;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+.pm-a11y-overview__copy h2 {
+  color: #fff;
+  font-size: 1.1rem;
+  line-height: 1.25;
+  margin: 0.1rem 0;
+}
+.pm-a11y-overview__copy p {
+  color: #f3f7ff;
+  font-size: 0.83rem;
+  line-height: 1.45;
+  margin: 0;
+}
+.pm-a11y-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  grid-column: 1/-1;
+}
+.pm-a11y-summary > span {
+  align-items: center;
+  background: #ffffff17;
+  border: 1px solid #ffffff45;
+  border-radius: 999px;
+  color: #fff;
+  display: inline-flex;
+  font-size: 0.72rem;
+  font-weight: 700;
+  gap: 0.35rem;
+  min-height: 34px;
+  padding: 0.35rem 0.6rem;
+}
+.pm-a11y-summary > span.is-enabled {
+  background: #effbea;
+  border-color: #c5e8b7;
+  color: #1b4d08;
+}
+
+.pm-a11y-section {
+  border: 1px solid #d8e3f1;
+  border-radius: 1.05rem;
+  box-shadow: 0 5px 16px #1e2e4a0b;
+  padding: 1rem;
+}
+.pm-a11y-section-title {
+  align-items: center;
+  border-bottom: 0;
+  gap: 0.75rem;
+  margin-bottom: 0.8rem;
+  padding-bottom: 0;
+}
+.pm-a11y-section-title > span {
+  background: linear-gradient(145deg, #eef5ff, #e5efff);
+  border: 1px solid #d3e2fa;
+  border-radius: 0.8rem;
+  color: #2a67b8;
+  height: 48px;
+  width: 48px;
+}
+.pm-a11y-section h2 {
+  font-size: 1.1rem;
+  line-height: 1.25;
+}
+.pm-a11y-section-title p {
+  font-size: 0.87rem;
+  line-height: 1.45;
+  margin-top: 0.2rem;
+}
+.pm-a11y-segmented {
+  background: #f3f6fa;
+  border: 1px solid #e0e7f0;
+  border-radius: 0.8rem;
+  gap: 0.3rem;
+  padding: 0.3rem;
+}
+.pm-a11y-segmented button {
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 0.6rem;
+  color: #405474;
+  min-height: 58px;
+  padding: 0.48rem 0.32rem;
+}
+.pm-a11y-segmented button.active {
+  background: #fff;
+  border: 2px solid #4c8ce4;
+  box-shadow: 0 3px 9px #2a67b814;
+  color: #205fae;
+}
+.pm-a11y-segmented strong {
+  font-size: 0.8rem;
+  line-height: 1.2;
+}
+.pm-a11y-segmented small {
+  color: #64748b;
+  font-size: 0.69rem;
+  margin-top: 0.12rem;
+}
+.pm-a11y-segmented button.active small {
+  color: #2a67b8;
+}
+.pm-a11y-preview {
+  background: linear-gradient(100deg, #f0f6ff, #fbfdff);
+  border: 1px solid #cbdcf4;
+  border-left: 5px solid #4c8ce4;
+  border-radius: 0.8rem;
+  margin-top: 0.85rem;
+  padding: 0.9rem 1rem;
+}
+.pm-a11y-preview > small {
+  color: #2a67b8;
+}
+.pm-a11y-preview > strong {
+  color: #1e2e4a;
+}
+.pm-a11y-preview > span {
+  margin-top: 0.2rem;
+}
+.pm-a11y-toggle-row {
+  gap: 0.75rem;
+  grid-template-columns: 46px minmax(0, 1fr) auto;
+  padding: 0.85rem 0;
+}
+.pm-a11y-toggle-row + .pm-a11y-toggle-row {
+  border-color: #e5ebf3;
+}
+.pm-a11y-toggle-row > span {
+  background: #f0f5fb;
+  border: 1px solid #e0e8f2;
+  border-radius: 0.7rem;
+  color: #406093;
+  height: 44px;
+  width: 44px;
+}
+.pm-a11y-toggle-row strong {
+  color: #1e2e4a;
+  font-size: 0.96rem;
+  line-height: 1.3;
+}
+.pm-a11y-toggle-row small {
+  color: #52627a;
+  font-size: 0.8rem;
+  line-height: 1.45;
+  margin-top: 0.14rem;
+}
+.pm-a11y-toggle-row > button {
+  box-shadow: inset 0 0 0 1px #aebdce;
+  height: 34px;
+  min-height: 34px;
+  width: 58px;
+}
+.pm-a11y-toggle-row > button i {
+  height: 28px;
+  width: 28px;
+}
+.pm-a11y-toggle-row > button.on {
+  background: #2a67b8;
+  box-shadow: inset 0 0 0 1px #205fae;
+}
+.pm-a11y-toggle-row > button.on i {
+  transform: translateX(24px);
+}
+.pm-a11y-status-preview {
+  background: #f8fafc;
+  border: 1px dashed #cbd8e8;
+  border-radius: 0.75rem;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+  padding: 0.65rem;
+}
+.pm-a11y-status-preview span {
+  font-size: 0.72rem;
+  min-height: 34px;
+  padding: 0.4rem 0.55rem;
+}
+.pm-a11y-section fieldset {
+  border-top: 1px solid #e5ebf3;
+  margin-top: 0.25rem;
+  padding-top: 0.8rem;
+}
+.pm-a11y-section legend {
+  padding-right: 0.5rem;
+}
+.pm-a11y-section fieldset select {
+  background: #fff;
+  border-color: #afc0d6;
+  color: #1e2e4a;
+}
+.pm-a11y-listen-test {
+  background: #2a67b8;
+  border-radius: 0.7rem;
+  box-shadow: 0 4px 10px #2a67b824;
+}
+.pm-a11y-listen-test:hover {
+  background: #205fae;
+}
+.pm-a11y-saved {
+  background: #eff9ec;
+  border-color: #b8dfa9;
+  border-radius: 0.9rem;
+  padding: 0.9rem 1rem;
+}
+.pm-a11y-saved > svg {
+  flex: 0 0 auto;
+}
+.pm-a11y-saved strong {
+  font-size: 0.93rem;
+}
+.pm-a11y-saved small {
+  font-size: 0.78rem;
+  line-height: 1.45;
+  margin-top: 0.1rem;
+}
+.pm-a11y-reset {
+  background: transparent;
+  border: 1.5px solid #9bbbe8;
+  border-radius: 0.8rem;
+  color: #2a67b8;
+  min-height: 54px;
+}
+.pm-a11y-reset:hover {
+  background: #eaf2ff;
+}
+
+.pm-phone.pm-a11y-dark-mode .pm-accessibility-page {
+  background: linear-gradient(180deg, #0f172a, #111c31) !important;
+}
+.pm-phone.pm-a11y-dark-mode .pm-accessibility-page > header > button {
+  background: #1e293b;
+  border-color: #475569;
+  color: #9cc2ff;
+}
+.pm-phone.pm-a11y-dark-mode .pm-a11y-overview {
+  background: linear-gradient(135deg, #173d7a, #285fa9) !important;
+  border-color: #75a7ff !important;
+}
+.pm-phone.pm-a11y-dark-mode .pm-a11y-overview__copy :where(h2, p, small),
+.pm-phone.pm-a11y-dark-mode .pm-a11y-summary > span {
+  color: #fff !important;
+}
+.pm-phone.pm-a11y-dark-mode .pm-a11y-summary > span.is-enabled {
+  background: #173f2a !important;
+  border-color: #4a8d62 !important;
+  color: #b7f7c8 !important;
+}
+.pm-phone.pm-a11y-dark-mode .pm-a11y-segmented,
+.pm-phone.pm-a11y-dark-mode .pm-a11y-status-preview {
+  background: #111827 !important;
+  border-color: #475569 !important;
+}
+.pm-phone.pm-a11y-dark-mode .pm-a11y-section-title > span {
+  background: #172b4d !important;
+  border-color: #365d91 !important;
+  color: #9cc2ff !important;
+}
+.pm-phone.pm-a11y-dark-mode .pm-a11y-preview {
+  background: #111827 !important;
+  border-left-color: #75a7ff !important;
+}
+.pm-phone.pm-a11y-dark-mode .pm-a11y-toggle-row + .pm-a11y-toggle-row,
+.pm-phone.pm-a11y-dark-mode .pm-a11y-section fieldset {
+  border-color: #3b4a5f;
+}
+.pm-phone.pm-a11y-dark-mode .pm-a11y-toggle-row > span {
+  background: #111827 !important;
+  border-color: #475569 !important;
+}
+.pm-phone.pm-a11y-dark-mode .pm-a11y-toggle-row > button {
+  background: #64748b;
+}
+.pm-phone.pm-a11y-dark-mode .pm-a11y-toggle-row > button.on {
+  background: #4c8ce4;
+}
+.pm-phone.pm-a11y-dark-mode .pm-a11y-saved {
+  background: #173f2a !important;
+  border-color: #4a8d62 !important;
+}
+.pm-phone.pm-a11y-dark-mode .pm-a11y-saved :where(strong, small) {
+  color: #c7f9d2 !important;
+}
+@media (max-width: 380px) {
+  .pm-accessibility-page {
+    padding-left: 0.75rem;
+    padding-right: 0.75rem;
+  }
+  .pm-accessibility-page > header h1 {
+    font-size: 1.35rem;
+  }
+  .pm-a11y-section {
+    padding: 0.85rem;
+  }
+  .pm-a11y-segmented strong {
+    font-size: 0.72rem;
+  }
+  .pm-a11y-segmented small {
+    font-size: 0.62rem;
+  }
+  .pm-a11y-toggle-row {
+    gap: 0.55rem;
+    grid-template-columns: 42px minmax(0, 1fr) auto;
+  }
+  .pm-a11y-toggle-row > span {
+    height: 40px;
+    width: 40px;
+  }
+  .pm-a11y-toggle-row small {
+    font-size: 0.75rem;
+  }
+  .pm-a11y-toggle-row > button {
+    width: 54px;
+  }
+  .pm-a11y-toggle-row > button.on i {
+    transform: translateX(20px);
+  }
+}

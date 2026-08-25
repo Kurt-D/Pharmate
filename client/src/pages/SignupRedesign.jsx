@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import pharmateLogo from '../assets/pharmate-logo.png';
 import { useAuth } from '../context/AuthContext.jsx';
 import { apiUrl } from '../config.js';
 import '../styles/auth.css';
@@ -15,7 +16,7 @@ export default function SignupRedesign() {
   async function submit(e) {
     e.preventDefault();
     setError('');
-    if (form.password.length < 8) return setError('Password must be at least 8 characters.');
+    if (form.password.length < 12) return setError('Password must be at least 12 characters.');
     if (form.password !== form.confirm) return setError('Passwords do not match.');
     if (!agreed) return setError('Please agree to the Terms of Service and Privacy Policy.');
     setLoading(true);
@@ -44,7 +45,7 @@ export default function SignupRedesign() {
       const data = await response.json();
       if (!response.ok) return navigate('/login', { replace: true });
       login(data.user, data.accessToken, data.refreshToken);
-      navigate('/patient/home', { replace: true });
+      navigate('/patient/today', { replace: true });
     } catch {
       setError('Cannot reach the server. Please try again.');
     } finally {
@@ -54,18 +55,22 @@ export default function SignupRedesign() {
   return (
     <main className="auth-page">
       <section className="auth-shell signup">
-        <div className="auth-logo">
-          <b>P</b>
-          <i>●</i>
+        <div className="auth-logo" aria-label="PharMate">
+          <img src={pharmateLogo} alt="PharMate" />
         </div>
-        <div className="auth-heading">
-          <h1>Create Account</h1>
-          <p>Sign up and get started</p>
-        </div>
-        {error && <div className="auth-alert error">{error}</div>}
-        <form onSubmit={submit}>
+        <header className="auth-heading">
+          <span className="auth-kicker">Patient registration</span>
+          <h1>Create your account</h1>
+          <p>Set up your secure PharMate patient profile.</p>
+        </header>
+        {error && (
+          <div className="auth-alert error" role="alert">
+            {error}
+          </div>
+        )}
+        <form className="auth-form" onSubmit={submit}>
           <label>
-            Full Name
+            <span>Full name</span>
             <input
               value={form.name}
               onChange={(e) => set('name', e.target.value)}
@@ -74,7 +79,7 @@ export default function SignupRedesign() {
             />
           </label>
           <label>
-            Email Address
+            <span>Email address</span>
             <input
               type="email"
               value={form.email}
@@ -84,22 +89,26 @@ export default function SignupRedesign() {
             />
           </label>
           <label>
-            Password
+            <span>Password</span>
             <input
               type="password"
               value={form.password}
               onChange={(e) => set('password', e.target.value)}
               placeholder="Enter your password"
+              minLength={12}
+              autoComplete="new-password"
               required
             />
           </label>
           <label>
-            Confirm Password
+            <span>Confirm password</span>
             <input
               type="password"
               value={form.confirm}
               onChange={(e) => set('confirm', e.target.value)}
               placeholder="Confirm your password"
+              minLength={12}
+              autoComplete="new-password"
               required
             />
           </label>
@@ -115,7 +124,7 @@ export default function SignupRedesign() {
           </button>
         </form>
         <p className="auth-signin">
-          Already have an account? <Link to="/login">Sign In</Link>
+          Already have an account? <Link to="/login">Sign in</Link>
         </p>
       </section>
     </main>

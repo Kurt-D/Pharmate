@@ -1,26 +1,68 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import pharmateLogo from '../assets/pharmate-logo.png';
 import { useAuth } from '../context/AuthContext.jsx';
 import { apiUrl } from '../config.js';
+import { homeForRole } from '../config/roleRoutes.js';
 import '../styles/auth.css';
-import '../styles/auth-links.css';
 
-const ROUTES = {
-  patient: '/patient/home',
-  caregiver: '/caregiver',
-  pharmacist: '/pharmacist',
-  admin: '/admin',
-};
+const MAX_FAILED_ATTEMPTS = 5;
+const DEFAULT_COOLDOWN_SECONDS = 60;
+const COOLDOWN_STORAGE_KEY = 'pm_login_cooldown_until';
+
+const PASSWORD_CHECKS = [
+  { label: '12+ characters', test: (value) => value.length >= 12 },
+  { label: 'Upper & lowercase', test: (value) => /[a-z]/.test(value) && /[A-Z]/.test(value) },
+  { label: 'At least one number', test: (value) => /\d/.test(value) },
+  { label: 'At least one symbol', test: (value) => /[^A-Za-z0-9]/.test(value) },
+];
+
+function PasswordToggleIcon({ visible }) {
+  return visible ? (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="m3 3 18 18M10.6 10.6a2 2 0 0 0 2.8 2.8M9.9 4.3A10.7 10.7 0 0 1 12 4c5.5 0 9 5.2 9 5.2a14 14 0 0 1-2.2 2.6M6.6 6.6A15.2 15.2 0 0 0 3 10.2S6.5 16 12 16a10 10 0 0 0 3-.5" />
+    </svg>
+  ) : (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M3 10.2S6.5 4 12 4s9 6.2 9 6.2S17.5 16 12 16s-9-5.8-9-5.8Z" />
+      <circle cx="12" cy="10" r="2.4" />
+    </svg>
+  );
+}
+
+function getStoredCooldown() {
+  const stored = Number(sessionStorage.getItem(COOLDOWN_STORAGE_KEY));
+  return Number.isFinite(stored) && stored > Date.now() ? stored : 0;
+}
+
+function retryAfterSeconds(value) {
+  if (!value) return 0;
+  const seconds = Number(value);
+  if (Number.isFinite(seconds)) return Math.max(1, Math.ceil(seconds));
+  const retryAt = Date.parse(value);
+  return Number.isNaN(retryAt) ? 0 : Math.max(1, Math.ceil((retryAt - Date.now()) / 1000));
+}
+
+function formatCooldown(seconds) {
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  const remainder = seconds % 60;
+  return `${minutes}:${String(remainder).padStart(2, '0')}`;
+}
+
 export default function LoginRedesign() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const { login } = useAuth();
-  const staff = params.get('mode') === 'staff';
-  const caregiver = params.get('role') === 'caregiver';
-  const rememberedEmail = sessionStorage.getItem('pm_remember_email') || '';
+  const tokenFromEmail = params.get('token') || '';
+  const rememberedEmail = localStorage.getItem('pm_remember_email') || '';
+
+  const [mode, setMode] = useState(tokenFromEmail ? 'recovery' : 'login');
   const [email, setEmail] = useState(rememberedEmail);
   const [password, setPassword] = useState('');
   const [remember, setRemember] = useState(Boolean(rememberedEmail));
+  const [showPassword, setShowPassword] = useState(false);
+  const [captchaChecked, setCaptchaChecked] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState(
     params.get('reason') === 'session-expired'
@@ -28,124 +70,507 @@ export default function LoginRedesign() {
       : ''
   );
   const [loading, setLoading] = useState(false);
-  async function submit(e) {
-    e.preventDefault();
+  const [failedAttempts, setFailedAttempts] = useState(0);
+  const [cooldownUntil, setCooldownUntil] = useState(getStoredCooldown);
+  const [cooldownSeconds, setCooldownSeconds] = useState(() =>
+    Math.max(0, Math.ceil((getStoredCooldown() - Date.now()) / 1000))
+  );
+
+  const [recoveryStep, setRecoveryStep] = useState(tokenFromEmail ? 3 : 1);
+  const [recoveryEmail, setRecoveryEmail] = useState(rememberedEmail);
+  const [pin, setPin] = useState('');
+  const [resetToken, setResetToken] = useState(tokenFromEmail);
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [resetComplete, setResetComplete] = useState(false);
+
+  const passwordScore = useMemo(
+    () => PASSWORD_CHECKS.filter((check) => check.test(newPassword)).length,
+    [newPassword]
+  );
+  const strengthLabel = ['Too short', 'Weak', 'Fair', 'Good', 'Strong'][passwordScore];
+  const loginLocked = cooldownSeconds > 0;
+
+  useEffect(() => {
+    if (!cooldownUntil) return undefined;
+
+    function updateCountdown() {
+      const remaining = Math.max(0, Math.ceil((cooldownUntil - Date.now()) / 1000));
+      setCooldownSeconds(remaining);
+
+      if (remaining === 0) {
+        sessionStorage.removeItem(COOLDOWN_STORAGE_KEY);
+        setCooldownUntil(0);
+        setFailedAttempts(0);
+      }
+    }
+
+    updateCountdown();
+    const timer = window.setInterval(updateCountdown, 1000);
+    return () => window.clearInterval(timer);
+  }, [cooldownUntil]);
+
+  function startCooldown(seconds = DEFAULT_COOLDOWN_SECONDS) {
+    const safeSeconds = Math.max(1, Math.ceil(seconds));
+    const until = Date.now() + safeSeconds * 1000;
+    sessionStorage.setItem(COOLDOWN_STORAGE_KEY, String(until));
+    setCooldownSeconds(safeSeconds);
+    setCooldownUntil(until);
+    setPassword('');
+  }
+
+  function clearFeedback() {
     setError('');
+    setMessage('');
+  }
+
+  function openRecovery() {
+    clearFeedback();
+    setRecoveryEmail(email.trim());
+    setRecoveryStep(1);
+    setMode('recovery');
+  }
+
+  function returnToLogin() {
+    clearFeedback();
+    setMode('login');
+    setRecoveryStep(1);
+    setPin('');
+    setResetToken('');
+    setNewPassword('');
+    setConfirmPassword('');
+    setResetComplete(false);
+    navigate('/login', { replace: true });
+  }
+
+  async function submitLogin(event) {
+    event.preventDefault();
+    if (loginLocked) return;
+    clearFeedback();
     setLoading(true);
+
     try {
+      const cleanEmail = email.trim();
       const response = await fetch(apiUrl('/api/auth/login'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email,
-          password,
-          ...(staff ? { accountGroup: 'staff' } : { role: caregiver ? 'caregiver' : 'patient' }),
-        }),
+        body: JSON.stringify({ email: cleanEmail, password }),
       });
-      const data = await response.json();
-      if (!response.ok) return setError(data.error || 'Login failed');
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        setCaptchaChecked(false);
+        if (response.status === 429) {
+          startCooldown(
+            retryAfterSeconds(response.headers.get('Retry-After')) || DEFAULT_COOLDOWN_SECONDS
+          );
+          return;
+        }
+
+        if (response.status === 401) {
+          const nextAttempt = failedAttempts + 1;
+          setFailedAttempts(nextAttempt);
+          if (nextAttempt >= MAX_FAILED_ATTEMPTS) {
+            setError('');
+            startCooldown();
+            return;
+          }
+        }
+
+        setError(data.error || 'We could not sign you in. Check your details and try again.');
+        return;
+      }
+
+      if (remember) localStorage.setItem('pm_remember_email', cleanEmail);
+      else localStorage.removeItem('pm_remember_email');
+
+      sessionStorage.removeItem(COOLDOWN_STORAGE_KEY);
+      setFailedAttempts(0);
+
       login(data.user, data.accessToken, data.refreshToken);
-      if (remember) sessionStorage.setItem('pm_remember_email', email);
-      else sessionStorage.removeItem('pm_remember_email');
-      navigate(ROUTES[data.user.role] || '/login', { replace: true });
+      navigate(homeForRole(data.role || data.user.role), { replace: true });
     } catch {
-      setError('Cannot reach the server. Please try again.');
+      setError('PharMate cannot reach the server right now. Please check your connection.');
     } finally {
       setLoading(false);
     }
   }
-  async function forgot() {
-    if (!email.trim()) return setError('Enter your email address first.');
-    setError('');
+
+  async function requestPin(event) {
+    event.preventDefault();
+    clearFeedback();
+    setLoading(true);
+
     try {
       const response = await fetch(apiUrl('/api/auth/forgot-password'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ email: recoveryEmail.trim() }),
       });
       const data = await response.json();
-      setMessage(data.message || 'Password reset instructions requested.');
+      if (!response.ok) {
+        setError(data.error || 'We could not send a recovery PIN. Please try again.');
+        return;
+      }
+      setMessage('If this email is registered, a 6-digit PIN has been sent.');
+      setRecoveryStep(2);
     } catch {
-      setError('Cannot reach the server. Please try again.');
+      setError('PharMate cannot reach the server right now. Please check your connection.');
+    } finally {
+      setLoading(false);
     }
   }
+
+  async function verifyPin(event) {
+    event.preventDefault();
+    clearFeedback();
+    setLoading(true);
+
+    try {
+      const response = await fetch(apiUrl('/api/auth/verify-reset-pin'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: recoveryEmail.trim(), pin }),
+      });
+      const data = await response.json();
+      if (!response.ok || !data.resetToken) {
+        setError(data.error || 'That PIN is invalid or has expired.');
+        return;
+      }
+      setResetToken(data.resetToken);
+      setRecoveryStep(3);
+    } catch {
+      setError('PharMate cannot reach the server right now. Please check your connection.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function resetPassword(event) {
+    event.preventDefault();
+    clearFeedback();
+    if (newPassword !== confirmPassword) {
+      setError('The passwords do not match.');
+      return;
+    }
+    setLoading(true);
+
+    try {
+      const response = await fetch(apiUrl('/api/auth/reset-password'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: resetToken, new_password: newPassword }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        setError(data.error || 'We could not reset your password. Please request a new PIN.');
+        return;
+      }
+      setResetComplete(true);
+    } catch {
+      setError('PharMate cannot reach the server right now. Please check your connection.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
   return (
     <main className="auth-page">
-      <section className="auth-shell">
-        <div className="auth-logo">
-          <b>P</b>
-          <i>●</i>
+      <div className="auth-orb auth-orb--one" aria-hidden="true" />
+      <div className="auth-orb auth-orb--two" aria-hidden="true" />
+
+      <section className="auth-shell" aria-labelledby="auth-title">
+        <div className="auth-logo" aria-label="PharMate">
+          <img src={pharmateLogo} alt="PharMate" />
         </div>
-        <div className="auth-heading">
-          <h1>Welcome Back!</h1>
-          <p>
-            {staff
-              ? 'Pharmacist and administrator portal'
-              : caregiver
-                ? 'Caregiver sign in and patient linking'
-                : 'Patient sign in'}
-          </p>
-        </div>
-        {error && <div className="auth-alert error">{error}</div>}
-        {message && <div className="auth-alert success">{message}</div>}
-        <form onSubmit={submit}>
-          <label>
-            Email Address
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="Enter your email"
-              autoComplete="email"
-              required
-            />
-          </label>
-          <label>
-            Password
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Enter your password"
-              autoComplete="current-password"
-              required
-            />
-          </label>
-          <label className="auth-check">
-            <input
-              type="checkbox"
-              checked={remember}
-              onChange={(e) => setRemember(e.target.checked)}
-            />{' '}
-            Remember me
-          </label>
-          <button className="auth-primary" disabled={loading}>
-            {loading ? 'Signing in…' : 'Login'}
-          </button>
-        </form>
-        <button className="auth-link" onClick={forgot}>
-          Forgot Password?
-        </button>
-        <div className="auth-spacer" />
-        {!staff && (
+
+        {mode === 'login' ? (
           <>
-            <Link className="auth-outline" to="/identify">
-              Create Account
-            </Link>
-            <div className="auth-access-links">
-              {caregiver ? (
-                <Link to="/login">Patient sign in</Link>
+            <header className="auth-heading">
+              <h1 id="auth-title">Welcome Back!</h1>
+              <p>Sign in to your PharMate account.</p>
+            </header>
+
+            <div className="auth-feedback" aria-live="assertive">
+              {loginLocked ? (
+                <div className="auth-alert cooldown" role="alert">
+                  <span className="auth-alert-icon" aria-hidden="true">
+                    !
+                  </span>
+                  <span>
+                    <strong>Too many failed attempts</strong>
+                    Sign-in is temporarily paused. Retry in <b>{formatCooldown(cooldownSeconds)}</b>
+                    .
+                  </span>
+                </div>
               ) : (
-                <Link to="/login?role=caregiver">I have a caregiver code</Link>
+                error && (
+                  <div className="auth-alert error" role="alert">
+                    {error}
+                  </div>
+                )
               )}
-              <Link to="/login?mode=staff">Pharmacist or Admin sign in</Link>
+            </div>
+
+            <form
+              className={`auth-form${loginLocked ? ' auth-form--locked' : ''}`}
+              onSubmit={submitLogin}
+            >
+              <label>
+                <span>Email address</span>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  placeholder="Enter your email address"
+                  autoComplete="email"
+                  disabled={loginLocked || loading}
+                  required
+                />
+              </label>
+
+              <label>
+                <span>Password</span>
+                <div className="auth-password-field">
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
+                    placeholder="Enter your password"
+                    autoComplete="current-password"
+                    disabled={loginLocked || loading}
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((value) => !value)}
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                    aria-pressed={showPassword}
+                    disabled={loginLocked}
+                  >
+                    <PasswordToggleIcon visible={showPassword} />
+                  </button>
+                </div>
+              </label>
+
+              <div className="auth-options">
+                <label className="auth-check">
+                  <input
+                    type="checkbox"
+                    checked={remember}
+                    onChange={(event) => setRemember(event.target.checked)}
+                  />
+                  <span>Remember me</span>
+                </label>
+                <button type="button" className="auth-text-button" onClick={openRecovery}>
+                  Forgot password?
+                </button>
+              </div>
+
+              <label className="auth-captcha">
+                <input
+                  type="checkbox"
+                  checked={captchaChecked}
+                  onChange={(event) => setCaptchaChecked(event.target.checked)}
+                  disabled={loginLocked || loading}
+                  required
+                />
+                <span>
+                  <strong>I&apos;m not a robot</strong>
+                  <small>Security verification</small>
+                </span>
+                <span className="auth-captcha-mark" aria-hidden="true">
+                  ✓
+                </span>
+              </label>
+
+              <button className="auth-primary" disabled={loading || loginLocked || !captchaChecked}>
+                {loading ? <span className="auth-spinner" aria-hidden="true" /> : null}
+                {loading ? 'Signing in…' : 'Login'}
+              </button>
+            </form>
+
+            <div className="auth-signup-footer">
+              <p>
+                Don&apos;t have an account? <Link to="/signup">Sign Up</Link>
+              </p>
             </div>
           </>
-        )}
-        {staff && (
-          <div className="auth-access-links">
-            <Link to="/login">Patient sign in</Link>
-            <Link to="/login?role=caregiver">Caregiver sign in</Link>
+        ) : (
+          <div className="auth-recovery">
+            <button type="button" className="auth-back" onClick={returnToLogin}>
+              <span aria-hidden="true">←</span> Back to login
+            </button>
+
+            {!resetComplete ? (
+              <>
+                <header className="auth-heading">
+                  <span className="auth-kicker">Account recovery</span>
+                  <h1 id="auth-title">
+                    {recoveryStep === 1 && 'Forgot your password?'}
+                    {recoveryStep === 2 && 'Enter your 6-digit PIN'}
+                    {recoveryStep === 3 && 'Create a new password'}
+                  </h1>
+                  <p>
+                    {recoveryStep === 1 && 'Enter the email connected to your PharMate account.'}
+                    {recoveryStep === 2 && `We sent a recovery PIN to ${recoveryEmail}.`}
+                    {recoveryStep === 3 && 'Choose a strong password you have not used before.'}
+                  </p>
+                </header>
+
+                <ol className="auth-steps" aria-label="Password recovery progress">
+                  {[1, 2, 3].map((step) => (
+                    <li
+                      key={step}
+                      className={
+                        step === recoveryStep ? 'active' : step < recoveryStep ? 'done' : ''
+                      }
+                      aria-current={step === recoveryStep ? 'step' : undefined}
+                    >
+                      <span>{step < recoveryStep ? '✓' : step}</span>
+                      <small>{['Email', 'PIN', 'Password'][step - 1]}</small>
+                    </li>
+                  ))}
+                </ol>
+
+                <div className="auth-feedback" aria-live="polite">
+                  {error && <div className="auth-alert error">{error}</div>}
+                  {message && <div className="auth-alert success">{message}</div>}
+                </div>
+
+                {recoveryStep === 1 && (
+                  <form className="auth-form" onSubmit={requestPin}>
+                    <label>
+                      <span>Email address</span>
+                      <input
+                        type="email"
+                        value={recoveryEmail}
+                        onChange={(event) => setRecoveryEmail(event.target.value)}
+                        placeholder="Enter your email address"
+                        autoComplete="email"
+                        required
+                      />
+                    </label>
+                    <button className="auth-primary" disabled={loading}>
+                      {loading ? 'Sending PIN…' : 'Send 6-Digit PIN'}
+                    </button>
+                  </form>
+                )}
+
+                {recoveryStep === 2 && (
+                  <form className="auth-form" onSubmit={verifyPin}>
+                    <label>
+                      <span>6-digit PIN</span>
+                      <input
+                        className="auth-pin"
+                        type="text"
+                        inputMode="numeric"
+                        pattern="[0-9]{6}"
+                        maxLength={6}
+                        value={pin}
+                        onChange={(event) => setPin(event.target.value.replace(/\D/g, ''))}
+                        placeholder="000000"
+                        autoComplete="one-time-code"
+                        required
+                        autoFocus
+                      />
+                    </label>
+                    <button className="auth-primary" disabled={loading || pin.length !== 6}>
+                      {loading ? 'Verifying…' : 'Verify PIN'}
+                    </button>
+                    <div className="auth-recovery-actions">
+                      <button
+                        type="button"
+                        className="auth-text-button"
+                        onClick={() => {
+                          clearFeedback();
+                          setRecoveryStep(1);
+                        }}
+                      >
+                        Change email
+                      </button>
+                      <button type="button" className="auth-text-button" onClick={requestPin}>
+                        Resend PIN
+                      </button>
+                    </div>
+                  </form>
+                )}
+
+                {recoveryStep === 3 && (
+                  <form className="auth-form" onSubmit={resetPassword}>
+                    <label>
+                      <span>New password</span>
+                      <div className="auth-password-field">
+                        <input
+                          type={showNewPassword ? 'text' : 'password'}
+                          value={newPassword}
+                          onChange={(event) => setNewPassword(event.target.value)}
+                          placeholder="Enter your new password"
+                          autoComplete="new-password"
+                          minLength={12}
+                          required
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowNewPassword((value) => !value)}
+                          aria-label={showNewPassword ? 'Hide password' : 'Show password'}
+                        >
+                          <PasswordToggleIcon visible={showNewPassword} />
+                        </button>
+                      </div>
+                    </label>
+
+                    <div className={`auth-meter auth-meter--${passwordScore}`}>
+                      <div>
+                        {[1, 2, 3, 4].map((bar) => (
+                          <span key={bar} className={bar <= passwordScore ? 'filled' : ''} />
+                        ))}
+                      </div>
+                      <strong>{strengthLabel}</strong>
+                    </div>
+
+                    <ul className="auth-password-rules">
+                      {PASSWORD_CHECKS.map((check) => (
+                        <li key={check.label} className={check.test(newPassword) ? 'met' : ''}>
+                          <span aria-hidden="true">{check.test(newPassword) ? '✓' : '○'}</span>
+                          {check.label}
+                        </li>
+                      ))}
+                    </ul>
+
+                    <label>
+                      <span>Confirm new password</span>
+                      <input
+                        type="password"
+                        value={confirmPassword}
+                        onChange={(event) => setConfirmPassword(event.target.value)}
+                        placeholder="Re-enter your new password"
+                        autoComplete="new-password"
+                        minLength={12}
+                        required
+                      />
+                    </label>
+
+                    <button
+                      className="auth-primary"
+                      disabled={loading || newPassword.length < 12 || !confirmPassword}
+                    >
+                      {loading ? 'Updating password…' : 'Reset Password'}
+                    </button>
+                  </form>
+                )}
+              </>
+            ) : (
+              <div className="auth-reset-success" role="status">
+                <span aria-hidden="true">✓</span>
+                <h1 id="auth-title">Password updated</h1>
+                <p>Your password has been reset. You can now sign in to your PharMate account.</p>
+                <button type="button" className="auth-primary" onClick={returnToLogin}>
+                  Return to Login
+                </button>
+              </div>
+            )}
           </div>
         )}
       </section>

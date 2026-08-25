@@ -1,0 +1,104 @@
+/* Accessible Poppins hierarchy shared by every PharMate portal. */
+:root {
+  --pm-weight-regular: 400;
+  --pm-weight-medium: 500;
+  --pm-weight-semibold: 600;
+  --pm-weight-bold: 700;
+}
+
+body {
+  font-weight: var(--pm-weight-regular);
+  line-height: 1.6;
+  text-rendering: optimizeLegibility;
+}
+
+p,
+li,
+dd,
+input,
+select,
+textarea,
+small,
+.text-muted,
+.auth-heading p,
+.auth-portal-note,
+.pw-sub,
+.admin-sub {
+  font-weight: var(--pm-weight-regular) !important;
+}
+
+p,
+li,
+dd {
+  line-height: 1.65;
+}
+
+input::placeholder,
+textarea::placeholder {
+  font-weight: var(--pm-weight-regular);
+}
+
+label,
+dt,
+th,
+button,
+a,
+nav,
+.form-label,
+.auth-kicker,
+.auth-check,
+.pw-menu-label,
+.admin-menu-label {
+  font-weight: var(--pm-weight-semibold) !important;
+}
+
+h1,
+h2,
+h3,
+.h1,
+.h2,
+.h3,
+strong,
+b,
+.fw-bold,
+.auth-heading h1,
+.admin-brand,
+.pw-brand {
+  font-weight: var(--pm-weight-bold) !important;
+}
+
+h4,
+h5,
+h6,
+.h4,
+.h5,
+.h6 {
+  font-weight: var(--pm-weight-semibold) !important;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  line-height: 1.25;
+}
+
+/* Statuses and important numeric values may be bold, but their descriptions stay regular. */
+.admin-badge,
+.pm-banner,
+.auth-meter strong,
+.cg-label,
+.pw-pill,
+.pw-badge {
+  font-weight: var(--pm-weight-bold) !important;
+}
+
+.admin-note,
+.auth-alert,
+.pm-banner p,
+.cg-linked small,
+.pw-card p {
+  font-weight: var(--pm-weight-regular) !important;
+}

@@ -105,6 +105,24 @@ describe('Encode — curated drug', () => {
     expect(res.body.rx_class).toBe('RX');
     expect(res.body.requires_prescription).toBe(true);
   });
+
+  test('an Rx medicine can be added for schedule tracking without uploading a prescription', async () => {
+    const res = await request(app)
+      .post('/api/patient/medications')
+      .set('Authorization', `Bearer ${patientToken}`)
+      .send({
+        drug_name: 'amoxicillin',
+        frequency: 'TID',
+        source: 'OTC_SELF',
+        schedule_only: true,
+      });
+    expect(res.status).toBe(201);
+    expect(res.body.status).toBe('active');
+    expect(res.body.source).toBe('OTC_SELF');
+    expect(res.body.rx_class).toBe('RX');
+    expect(res.body.requires_prescription).toBe(false);
+    expect(res.body.schedule_only).toBe(true);
+  });
 });
 
 describe('TC-11 — restricted-substance redirect', () => {

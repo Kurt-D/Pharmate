@@ -26,26 +26,51 @@ function notifId(scheduleId) {
   return Math.abs(h) || 1;
 }
 
-/** Speak text aloud (voice prompt). Returns false where speech is unavailable. */
-export function speak(text) {
+/**
+ * Speak text aloud (voice prompt). Returns false where speech is unavailable.
+ * Optional lifecycle callbacks let reminder UIs stay in sync with the actual
+ * utterance instead of playing a decorative animation on their own timer.
+ */
+export function speak(text, { onStart, onEnd, onError } = {}) {
   try {
-    if (typeof window === 'undefined' || !window.speechSynthesis || !text) return false;
+    let accessibility = {};
+    try {
+      accessibility = JSON.parse(localStorage.getItem('pm_senior_accessibility') || '{}');
+    } catch {
+      accessibility = {};
+    }
+    if (accessibility.ttsEnabled === false) {
+      onError?.();
+      return false;
+    }
+    if (typeof window === 'undefined' || !window.speechSynthesis || !text) {
+      onError?.();
+      return false;
+    }
     const u = new SpeechSynthesisUtterance(text);
     // A measured pace, neutral pitch, and full volume make medicine prompts
     // easier to understand for older adults without sounding robotic.
-    u.rate = 0.78;
+    u.rate = accessibility.speechRate === 'normal' ? 1 : 0.75;
     u.pitch = 0.95;
     u.volume = 1;
+    u.lang = accessibility.speechLanguage === 'fil' ? 'fil-PH' : 'en-US';
     const preferredVoice = window.speechSynthesis
       .getVoices()
       .find(
-        (voice) => /^en(-|_)/i.test(voice.lang) && /female|zira|samantha|aria/i.test(voice.name)
+        (voice) =>
+          new RegExp(`^${accessibility.speechLanguage === 'fil' ? 'fil' : 'en'}(-|_)`, 'i').test(
+            voice.lang
+          ) && /female|zira|samantha|aria/i.test(voice.name)
       );
     if (preferredVoice) u.voice = preferredVoice;
+    u.onstart = () => onStart?.();
+    u.onend = () => onEnd?.();
+    u.onerror = () => onError?.();
     window.speechSynthesis.cancel(); // never stack utterances
     window.speechSynthesis.speak(u);
     return true;
   } catch {
+    onError?.();
     return false;
   }
 }

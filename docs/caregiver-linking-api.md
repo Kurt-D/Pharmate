@@ -8,15 +8,21 @@ Dates are JSON ISO-8601 timestamps.
 
 ### `POST /api/patient/invite`
 
-Creates a cryptographically random, single-use invite that expires after 24
+Creates a cryptographically random, single-use invite that expires after 15
 hours. Response `201`:
 
 ```json
-{ "id": "invite-uuid", "code": "one-time-secret", "expires_at": "timestamp" }
+{
+  "id": "invite-uuid",
+  "code": "K7M-9Q2",
+  "expires_at": "timestamp",
+  "expires_in_seconds": 900,
+  "single_use": true
+}
 ```
 
 Show or share `code` immediately. The server stores only its SHA-256 hash, so it
-cannot be retrieved later. Creating another invite does not revoke earlier ones.
+cannot be retrieved later. Creating another invite revokes earlier unused codes.
 
 ### `GET /api/patient/invites`
 

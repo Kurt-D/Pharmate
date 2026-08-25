@@ -142,7 +142,7 @@ router.post('/login', loginLimit, failedLoginLimit, async (req, res) => {
   }
 
   const [rows] = await pool.execute(
-    'SELECT id, password_hash, role, is_active, session_version FROM users WHERE email = ?',
+    'SELECT id, email, password_hash, role, is_active, session_version FROM users WHERE email = ?',
     [email]
   );
   const user = rows[0];
@@ -181,7 +181,9 @@ router.post('/login', loginLimit, failedLoginLimit, async (req, res) => {
   res.json({
     accessToken,
     refreshToken: rawRefresh,
-    user: { id: user.id, role: user.role, ...extra },
+    role: user.role,
+    profile: { id: user.id, email: user.email, role: user.role, ...extra },
+    user: { id: user.id, email: user.email, role: user.role, ...extra },
   });
 });
 

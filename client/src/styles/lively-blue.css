@@ -1,0 +1,85 @@
+/* Brighter PharMate blue treatment with senior-safe contrast. */
+.pm-accessibility-page > header h1,
+.pm-profile-page > header h1 {
+  color: #1769f5;
+}
+.pm-a11y-overview {
+  background: #fff;
+  border: 1px solid #d5e2f2;
+  box-shadow: 0 6px 18px #1e2e4a0d;
+  color: #1e2e4a;
+}
+.pm-a11y-overview::after {
+  display: none;
+}
+.pm-a11y-overview__icon {
+  background: #1769f5;
+  border: 1px solid #1558c9;
+  color: #fff;
+}
+.pm-a11y-overview__copy small {
+  color: #1769f5;
+}
+.pm-a11y-overview__copy h2 {
+  color: #1e2e4a;
+}
+.pm-a11y-overview__copy p {
+  color: #405474;
+}
+.pm-a11y-summary > span {
+  background: #fff;
+  border-color: #a9c8ef;
+  color: #1558c9;
+}
+.pm-a11y-section-title > span,
+.pm-profile-menu > button i,
+.pm-caregiver-intro > i {
+  background: #e8f1ff;
+  border-color: #bbd7f8;
+  color: #1769f5;
+}
+.pm-a11y-segmented button.active {
+  border-color: #1769f5;
+  color: #1558c9;
+}
+.pm-a11y-listen-test {
+  background: #1769f5;
+  border: 2px solid #1558c9;
+}
+.pm-a11y-listen-test:hover {
+  background: #1558c9;
+}
+.pm-profile-identity {
+  background: linear-gradient(135deg, #fff, #eaf4ff);
+  border-color: #b9d4f5;
+  box-shadow: 0 7px 20px #4c8ce419;
+}
+.pm-profile-avatar {
+  background: linear-gradient(145deg, #1769f5, #4c8ce4);
+  border: 3px solid #fff;
+  box-shadow: 0 4px 14px #1769f538;
+  color: #fff;
+}
+.pm-profile-panel > button {
+  background: #1769f5;
+  border: 2px solid #1558c9;
+}
+.pm-profile-panel > button:hover {
+  background: #1558c9;
+}
+.pm-phone.pm-a11y-dark-mode .pm-a11y-overview {
+  background: #1558c9 !important;
+}
+.pm-linked-caregivers span {
+  display: flex;
+  flex-direction: column;
+}
+.pm-linked-caregivers span b {
+  font-size: 0.76rem;
+  overflow-wrap: anywhere;
+}
+.pm-linked-caregivers span small {
+  color: #64748b;
+  font-size: 0.68rem;
+  margin-top: 0.12rem;
+}

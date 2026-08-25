@@ -1,5 +1,4 @@
 import { Router } from 'express';
-import { createHash } from 'node:crypto';
 import { v4 as uuidv4 } from 'uuid';
 import { pool } from '../db/connection.js';
 import { requireAuth } from '../middleware/auth.js';
@@ -10,6 +9,13 @@ import { openThread } from '../services/inquiry.js';
 import { failedAttemptLimit, rateLimit } from '../middleware/rateLimit.js';
 import { createPatientNotification } from '../services/patientNotifications.js';
 import { decrypt, encrypt } from '../utils/crypto.js';
+import {
+  CAREGIVER_CODE_LENGTH,
+  hashCaregiverCode,
+  legacyCaregiverCodeHash,
+  normalizeCaregiverCode,
+} from '../utils/caregiverInvite.js';
+import { publishCaregiverEvent, subscribeCaregiver } from '../services/caregiverEvents.js';
 
 const router = Router();
 
@@ -21,6 +27,22 @@ const failedInviteLimit = failedAttemptLimit({
 });
 
 router.use(requireAuth, requireRole('caregiver'));
+
+router.get('/events', (req, res) => {
+  res.set({
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache, no-transform',
+    Connection: 'keep-alive',
+    'X-Accel-Buffering': 'no',
+  });
+  res.flushHeaders();
+  const unsubscribe = subscribeCaregiver(req.user.sub, res);
+  const heartbeat = setInterval(() => res.write(': keep-alive\n\n'), 25_000);
+  req.on('close', () => {
+    clearInterval(heartbeat);
+    unsubscribe();
+  });
+});
 
 router.get('/profile', async (req, res) => {
   const [[row]] = await pool.execute(
@@ -102,7 +124,7 @@ router.get('/alerts', async (req, res) => {
 // The caregiver's linked patients, by patient_code only (no PII).
 router.get('/patients', async (req, res) => {
   const [rows] = await pool.execute(
-    `SELECT p.patient_code, cp.linked_at
+    `SELECT p.patient_code, cp.relationship, cp.linked_at
      FROM caregiver_patients cp
      JOIN patients p ON p.id = cp.patient_id
      WHERE cp.caregiver_id = ? AND cp.status = 'active'
@@ -199,17 +221,25 @@ router.post('/patients/:code/inquiries', async (req, res) => {
 // ── POST /api/caregiver/link ──────────────────────────────────────────────────
 // Caregiver submits a patient's invite code to link accounts
 router.post('/link', inviteLimit, failedInviteLimit, async (req, res) => {
-  const code = typeof req.body?.code === 'string' ? req.body.code.trim() : '';
-  if (!code) return res.status(400).json({ error: 'code is required' });
-  const tokenHash = createHash('sha256').update(code).digest('hex');
+  const submittedCode = typeof req.body?.code === 'string' ? req.body.code.trim() : '';
+  const code = normalizeCaregiverCode(submittedCode);
+  const relationship = String(req.body?.relationship || 'Caregiver').trim();
+  if (code.length !== CAREGIVER_CODE_LENGTH) {
+    return res.status(400).json({ error: 'Enter the complete 6-character link code' });
+  }
+  if (!relationship || relationship.length > 50) {
+    return res.status(400).json({ error: 'Choose a valid relationship' });
+  }
+  const tokenHash = hashCaregiverCode(code);
+  const legacyTokenHash = legacyCaregiverCodeHash(submittedCode);
 
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
     const [[invite]] = await conn.execute(
       `SELECT id, patient_id, expires_at, used, revoked_at
-       FROM invite_codes WHERE token_hash = ? FOR UPDATE`,
-      [tokenHash]
+       FROM invite_codes WHERE token_hash IN (?, ?) FOR UPDATE`,
+      [tokenHash, legacyTokenHash]
     );
     if (!invite) {
       await conn.rollback();
@@ -239,9 +269,9 @@ router.post('/link', inviteLimit, failedInviteLimit, async (req, res) => {
     }
 
     const [claimed] = await conn.execute(
-      `UPDATE invite_codes SET used = 1, used_at = NOW(3)
+      `UPDATE invite_codes SET used = 1, used_at = NOW(3), used_by_caregiver_id = ?
        WHERE id = ? AND used = 0 AND revoked_at IS NULL AND expires_at > NOW(3)`,
-      [invite.id]
+      [req.user.sub, invite.id]
     );
     if (claimed.affectedRows !== 1) {
       await conn.rollback();
@@ -253,14 +283,15 @@ router.post('/link', inviteLimit, failedInviteLimit, async (req, res) => {
     if (existing) {
       await conn.execute(
         `UPDATE caregiver_patients
-         SET status = 'active', linked_at = NOW(3), revoked_at = NULL,
+         SET status = 'active', relationship = ?, linked_at = NOW(3), revoked_at = NULL,
              revoked_by_patient_id = NULL WHERE id = ?`,
-        [linkId]
+        [relationship, linkId]
       );
     } else {
       await conn.execute(
-        'INSERT INTO caregiver_patients (id, caregiver_id, patient_id) VALUES (?, ?, ?)',
-        [linkId, req.user.sub, invite.patient_id]
+        `INSERT INTO caregiver_patients
+           (id, caregiver_id, patient_id, relationship) VALUES (?, ?, ?, ?)`,
+        [linkId, req.user.sub, invite.patient_id, relationship]
       );
     }
     await conn.execute(
@@ -277,7 +308,8 @@ router.post('/link', inviteLimit, failedInviteLimit, async (req, res) => {
     conn.release();
   }
 
-  res.status(201).json({ message: 'Linked to patient' });
+  publishCaregiverEvent(req.user.sub, 'patient-linked', { linked: true });
+  res.status(201).json({ message: 'Linked to patient', relationship });
 });
 
 export default router;

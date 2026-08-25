@@ -1,17 +1,27 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Poppins:wght@400;500;600;700;800&display=swap');
+
 /* Bootstrap */
 @import 'bootstrap/dist/css/bootstrap.min.css';
+
+@tailwind components;
+@tailwind utilities;
 
 :root {
   --pm-primary: #0d6efd;
   --pm-green: #198754;
 }
 
+html,
+body,
+#root,
+button,
+input,
+select,
+textarea {
+  font-family: 'Poppins', system-ui, sans-serif;
+}
+
 body {
-  font-family:
-    'Segoe UI',
-    system-ui,
-    -apple-system,
-    sans-serif;
   background-color: #f8f9fa;
   margin: 0;
 }

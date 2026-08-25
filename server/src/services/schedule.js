@@ -315,7 +315,9 @@ export async function confirmForPatient(patientId, adjusted) {
        FROM medication_schedules WHERE patient_id = ?`,
       [patientId]
     );
-    const version = v.next;
+    // MySQL/MariaDB may return aggregate values as strings. Keep the public
+    // API stable and numeric so clients can compare schedule versions safely.
+    const version = Number(v.next);
 
     // Future, not-yet-acted doses are replaced; taken/missed stay as the record.
     await conn.execute(
