@@ -134,7 +134,9 @@ router.delete('/medicines/:id', async (req, res) => {
     [req.params.id]
   );
   if (Number(usage.count) > 0) {
-    return res.status(409).json({ error: 'This medicine is in use and cannot be deleted. Set its stock to 0 instead.' });
+    return res.status(409).json({
+      error: 'This medicine is in use and cannot be deleted. Set its stock to 0 instead.',
+    });
   }
   const [result] = await pool.execute('DELETE FROM drug_reference WHERE id = ?', [req.params.id]);
   if (!result.affectedRows) return res.status(404).json({ error: 'Medicine not found' });
@@ -400,7 +402,10 @@ router.get('/alerts', async (_req, res) => {
       id: `delivery:${row.id}`,
       type: 'order',
       severity: ageSeverity(row.created_at),
-      title: row.status === 'out_for_delivery' ? 'Delivery currently in transit' : 'Delivery requires processing',
+      title:
+        row.status === 'out_for_delivery'
+          ? 'Delivery currently in transit'
+          : 'Delivery requires processing',
       description: `${row.patient_code} · ${row.drug}`,
       status: row.status,
       patient_code: row.patient_code,
@@ -411,7 +416,10 @@ router.get('/alerts', async (_req, res) => {
       id: `inventory:${row.id}`,
       type: 'inventory',
       severity: Number(row.stock_quantity) === 0 ? 'critical' : 'warning',
-      title: Number(row.stock_quantity) === 0 ? `${row.generic_name} is out of stock` : `${row.generic_name} is running low`,
+      title:
+        Number(row.stock_quantity) === 0
+          ? `${row.generic_name} is out of stock`
+          : `${row.generic_name} is running low`,
       description: `${Number(row.stock_quantity)} units currently available.`,
       status: Number(row.stock_quantity) === 0 ? 'out_of_stock' : 'low_stock',
       created_at: row.created_at,
@@ -421,7 +429,10 @@ router.get('/alerts', async (_req, res) => {
       id: `prescription:${row.id}`,
       type: 'prescription',
       severity: row.status === 'needs_clearer' ? 'critical' : ageSeverity(row.created_at, 12),
-      title: row.status === 'needs_clearer' ? 'Prescription needs patient resubmission' : 'Prescription awaiting pharmacist review',
+      title:
+        row.status === 'needs_clearer'
+          ? 'Prescription needs patient resubmission'
+          : 'Prescription awaiting pharmacist review',
       description: `${row.patient_code} · ${row.drug}`,
       status: row.status,
       patient_code: row.patient_code,

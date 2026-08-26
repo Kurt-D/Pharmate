@@ -109,7 +109,10 @@ describe('Patient-authorized medication management', () => {
     const denied = await request(app)
       .patch(`/api/caregiver/patients/${patientCode}/medications/${medicine.id}`)
       .set(auth(caregiverToken))
-      .send({ dosage_instruction: 'Take after breakfast', expected_updated_at: medicine.updated_at });
+      .send({
+        dosage_instruction: 'Take after breakfast',
+        expected_updated_at: medicine.updated_at,
+      });
     expect(denied.status).toBe(403);
     expect(denied.body.code).toBe('caregiver_medication_permission_required');
 
@@ -123,7 +126,10 @@ describe('Patient-authorized medication management', () => {
     const updated = await request(app)
       .patch(`/api/caregiver/patients/${patientCode}/medications/${medicine.id}`)
       .set(auth(caregiverToken))
-      .send({ dosage_instruction: 'Take after breakfast', expected_updated_at: medicine.updated_at });
+      .send({
+        dosage_instruction: 'Take after breakfast',
+        expected_updated_at: medicine.updated_at,
+      });
     expect(updated.status).toBe(200);
     expect(updated.body.medication.dosage_instruction).toBe('Take after breakfast');
   });

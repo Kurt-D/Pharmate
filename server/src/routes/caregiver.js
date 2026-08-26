@@ -181,7 +181,9 @@ router.post('/patients/:code/medications', async (req, res) => {
   const frequency = String(req.body?.frequency || '').trim();
   const dosageInstruction = String(req.body?.dosage_instruction || '').trim();
   if (!drugName || !frequency || !dosageInstruction) {
-    return res.status(400).json({ error: 'Medicine, frequency, and dose instructions are required' });
+    return res
+      .status(400)
+      .json({ error: 'Medicine, frequency, and dose instructions are required' });
   }
   if (await findRestricted(drugName)) {
     return res.status(403).json({

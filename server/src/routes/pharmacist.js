@@ -169,12 +169,15 @@ router.get('/adherence', async (_req, res) => {
       adherence_pct: scheduled ? Math.round(((taken + takenLate) / scheduled) * 100) : 0,
     };
   });
-  const totals = patientRows.reduce((result, row) => ({
-    scheduled: result.scheduled + row.scheduled,
-    completed: result.completed + row.taken + row.taken_late,
-    missed: result.missed + row.missed,
-    needs_attention: result.needs_attention + Number(row.missed > 0 || row.adherence_pct < 80),
-  }), { scheduled: 0, completed: 0, missed: 0, needs_attention: 0 });
+  const totals = patientRows.reduce(
+    (result, row) => ({
+      scheduled: result.scheduled + row.scheduled,
+      completed: result.completed + row.taken + row.taken_late,
+      missed: result.missed + row.missed,
+      needs_attention: result.needs_attention + Number(row.missed > 0 || row.adherence_pct < 80),
+    }),
+    { scheduled: 0, completed: 0, missed: 0, needs_attention: 0 }
+  );
   const trendMap = new Map(trendRows.map((row) => [row.date, row]));
   const trend = Array.from({ length: 7 }, (_, index) => {
     const date = new Date();

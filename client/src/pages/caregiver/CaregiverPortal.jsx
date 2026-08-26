@@ -366,9 +366,7 @@ export default function CaregiverPortal() {
     if (!caregiverNotifications.some((item) => item.status === 'unseen')) return;
     try {
       await api('/api/caregiver/alerts/read-all', { method: 'PATCH' });
-      setCaregiverNotifications((items) =>
-        items.map((item) => ({ ...item, status: 'resolved' }))
-      );
+      setCaregiverNotifications((items) => items.map((item) => ({ ...item, status: 'resolved' })));
     } catch {
       /* Keep the drawer usable if read-state syncing is temporarily unavailable. */
     }
@@ -406,9 +404,21 @@ export default function CaregiverPortal() {
               <strong className="block text-sm font-bold text-blue-700">PharMate Caregiver</strong>
               <small className="font-medium text-slate-500">Family medication support</small>
             </div>
-            <button aria-label="Open caregiver notifications" className="relative grid h-12 w-12 place-items-center rounded-full border border-blue-200 bg-blue-50 text-blue-700 active:scale-95" onClick={readCaregiverNotifications} type="button">
+            <button
+              aria-label="Open caregiver notifications"
+              className="relative grid h-12 w-12 place-items-center rounded-full border border-blue-200 bg-blue-50 text-blue-700 active:scale-95"
+              onClick={readCaregiverNotifications}
+              type="button"
+            >
               <Bell className="h-6 w-6" />
-              {caregiverNotifications.filter((item) => item.status === 'unseen').length > 0 && <span className="absolute -right-0.5 -top-0.5 grid min-h-[20px] min-w-[20px] place-items-center rounded-full bg-rose-600 px-1 text-[10px] font-bold text-white">{Math.min(99, caregiverNotifications.filter((item) => item.status === 'unseen').length)}</span>}
+              {caregiverNotifications.filter((item) => item.status === 'unseen').length > 0 && (
+                <span className="absolute -right-0.5 -top-0.5 grid min-h-[20px] min-w-[20px] place-items-center rounded-full bg-rose-600 px-1 text-[10px] font-bold text-white">
+                  {Math.min(
+                    99,
+                    caregiverNotifications.filter((item) => item.status === 'unseen').length
+                  )}
+                </span>
+              )}
             </button>
           </div>
           {loading && !patients.length ? (
@@ -422,64 +432,64 @@ export default function CaregiverPortal() {
             </div>
           ) : (
             <>
-            {activePage === 'home' && (
-              <CaregiverDashboard
-                patients={patients}
-                selectedCode={selectedCode}
-                onSelectPatient={setSelectedCode}
-                onAddPatient={() => setLinkOpen(true)}
-                timeline={timeline}
-                previewMode={previewMode}
-                patientLabel={selectedPatient?.displayLabel}
-                onVoiceReminder={(dose) =>
-                  setVoiceDose(dose || timeline.find((item) => item.status !== 'taken') || null)
-                }
-                onSnooze={snoozeAlert}
-                snoozedUntil={snoozedUntil}
-                refillAlert={stockAlerts[0]}
-                onOrderRefill={setRefillItem}
-                onNavigate={changePage}
-              />
-            )}
-            {activePage === 'medication' && (
-              <CaregiverRefills
-                medications={medications}
-                stockAlerts={stockAlerts}
-                orders={orders}
-                previewMode={previewMode}
-                onOrderRefill={setRefillItem}
-                timeline={timeline}
-                canManageMedications={Boolean(selectedPatient?.can_manage_medications)}
-                onUpdateMedication={updatePatientMedication}
-                onStopMedication={stopPatientMedication}
-                onSearchDrugs={searchCaregiverDrugs}
-                onAddMedicine={addPatientMedicine}
-                onCreateSuggestedSchedule={createSuggestedSchedule}
-              />
-            )}
-            {activePage === 'patient-info' && (
-              <CaregiverPatientInfo
-                patient={selectedPatient}
-                onAddPatient={() => setLinkOpen(true)}
-              />
-            )}
-            {activePage === 'orders' && <CaregiverOrders orders={orders} />}
-            {activePage === 'profile' && (
-              <CaregiverSettings
-                profile={profile}
-                patients={patients}
-                language={language}
-                onLanguage={setLanguage}
-                accessibility={accessibility}
-                onAccessibility={updatePreference}
-                onAddPatient={() => setLinkOpen(true)}
-                onSelectPatient={(code) => {
-                  setSelectedCode(code);
-                  changePage('home');
-                }}
-                onLogout={signOut}
-              />
-            )}
+              {activePage === 'home' && (
+                <CaregiverDashboard
+                  patients={patients}
+                  selectedCode={selectedCode}
+                  onSelectPatient={setSelectedCode}
+                  onAddPatient={() => setLinkOpen(true)}
+                  timeline={timeline}
+                  previewMode={previewMode}
+                  patientLabel={selectedPatient?.displayLabel}
+                  onVoiceReminder={(dose) =>
+                    setVoiceDose(dose || timeline.find((item) => item.status !== 'taken') || null)
+                  }
+                  onSnooze={snoozeAlert}
+                  snoozedUntil={snoozedUntil}
+                  refillAlert={stockAlerts[0]}
+                  onOrderRefill={setRefillItem}
+                  onNavigate={changePage}
+                />
+              )}
+              {activePage === 'medication' && (
+                <CaregiverRefills
+                  medications={medications}
+                  stockAlerts={stockAlerts}
+                  orders={orders}
+                  previewMode={previewMode}
+                  onOrderRefill={setRefillItem}
+                  timeline={timeline}
+                  canManageMedications={Boolean(selectedPatient?.can_manage_medications)}
+                  onUpdateMedication={updatePatientMedication}
+                  onStopMedication={stopPatientMedication}
+                  onSearchDrugs={searchCaregiverDrugs}
+                  onAddMedicine={addPatientMedicine}
+                  onCreateSuggestedSchedule={createSuggestedSchedule}
+                />
+              )}
+              {activePage === 'patient-info' && (
+                <CaregiverPatientInfo
+                  patient={selectedPatient}
+                  onAddPatient={() => setLinkOpen(true)}
+                />
+              )}
+              {activePage === 'orders' && <CaregiverOrders orders={orders} />}
+              {activePage === 'profile' && (
+                <CaregiverSettings
+                  profile={profile}
+                  patients={patients}
+                  language={language}
+                  onLanguage={setLanguage}
+                  accessibility={accessibility}
+                  onAccessibility={updatePreference}
+                  onAddPatient={() => setLinkOpen(true)}
+                  onSelectPatient={(code) => {
+                    setSelectedCode(code);
+                    changePage('home');
+                  }}
+                  onLogout={signOut}
+                />
+              )}
             </>
           )}
         </div>
@@ -525,19 +535,76 @@ export default function CaregiverPortal() {
         onSubmit={submitRefill}
       />
       {notificationsOpen && (
-        <div className="fixed inset-0 z-[90] flex items-end justify-center bg-slate-950/45 p-0 sm:items-center sm:p-4" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setNotificationsOpen(false)}>
-          <section aria-labelledby="caregiver-notifications-title" aria-modal="true" className="max-h-[78vh] w-full max-w-md overflow-y-auto rounded-t-3xl bg-white p-5 shadow-2xl sm:rounded-3xl" role="dialog">
+        <div
+          className="fixed inset-0 z-[90] flex items-end justify-center bg-slate-950/45 p-0 sm:items-center sm:p-4"
+          role="presentation"
+          onMouseDown={(event) =>
+            event.target === event.currentTarget && setNotificationsOpen(false)
+          }
+        >
+          <section
+            aria-labelledby="caregiver-notifications-title"
+            aria-modal="true"
+            className="max-h-[78vh] w-full max-w-md overflow-y-auto rounded-t-3xl bg-white p-5 shadow-2xl sm:rounded-3xl"
+            role="dialog"
+          >
             <div className="flex items-start justify-between gap-3">
-              <div><p className="m-0 text-xs font-bold uppercase tracking-wide text-blue-700">Linked patient updates</p><h2 className="mb-0 mt-1 text-xl font-bold text-slate-900" id="caregiver-notifications-title">Notifications</h2></div>
-              <button aria-label="Close notifications" className="grid h-11 w-11 place-items-center rounded-xl bg-slate-100 text-slate-700" onClick={() => setNotificationsOpen(false)} type="button"><X className="h-5 w-5" /></button>
+              <div>
+                <p className="m-0 text-xs font-bold uppercase tracking-wide text-blue-700">
+                  Linked patient updates
+                </p>
+                <h2
+                  className="mb-0 mt-1 text-xl font-bold text-slate-900"
+                  id="caregiver-notifications-title"
+                >
+                  Notifications
+                </h2>
+              </div>
+              <button
+                aria-label="Close notifications"
+                className="grid h-11 w-11 place-items-center rounded-xl bg-slate-100 text-slate-700"
+                onClick={() => setNotificationsOpen(false)}
+                type="button"
+              >
+                <X className="h-5 w-5" />
+              </button>
             </div>
             <div className="mt-4 grid gap-2">
-              {caregiverNotifications.length ? caregiverNotifications.slice(0, 20).map((item) => (
-                <article className="flex items-start gap-3 rounded-xl border border-rose-100 bg-rose-50 p-3" key={item.id}>
-                  <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white text-rose-600"><AlertCircle className="h-5 w-5" /></span>
-                  <div className="min-w-0"><strong className="block text-sm text-slate-900">Missed medicine dose</strong><p className="mb-0 mt-1 text-xs font-medium leading-5 text-slate-700">{item.patient_code} missed {item.drug_name || 'a scheduled medicine'}.</p><small className="mt-1 inline-flex items-center gap-1 font-medium text-slate-500"><Clock3 className="h-3.5 w-3.5" />{new Date(item.created_at).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}</small></div>
-                </article>
-              )) : <div className="rounded-2xl bg-slate-50 px-4 py-8 text-center"><Bell className="mx-auto h-8 w-8 text-slate-400" /><strong className="mt-3 block text-sm text-slate-900">No notifications yet</strong><p className="mb-0 mt-1 text-xs font-medium text-slate-600">Dose and patient updates will appear here.</p></div>}
+              {caregiverNotifications.length ? (
+                caregiverNotifications.slice(0, 20).map((item) => (
+                  <article
+                    className="flex items-start gap-3 rounded-xl border border-rose-100 bg-rose-50 p-3"
+                    key={item.id}
+                  >
+                    <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white text-rose-600">
+                      <AlertCircle className="h-5 w-5" />
+                    </span>
+                    <div className="min-w-0">
+                      <strong className="block text-sm text-slate-900">Missed medicine dose</strong>
+                      <p className="mb-0 mt-1 text-xs font-medium leading-5 text-slate-700">
+                        {item.patient_code} missed {item.drug_name || 'a scheduled medicine'}.
+                      </p>
+                      <small className="mt-1 inline-flex items-center gap-1 font-medium text-slate-500">
+                        <Clock3 className="h-3.5 w-3.5" />
+                        {new Date(item.created_at).toLocaleString([], {
+                          dateStyle: 'medium',
+                          timeStyle: 'short',
+                        })}
+                      </small>
+                    </div>
+                  </article>
+                ))
+              ) : (
+                <div className="rounded-2xl bg-slate-50 px-4 py-8 text-center">
+                  <Bell className="mx-auto h-8 w-8 text-slate-400" />
+                  <strong className="mt-3 block text-sm text-slate-900">
+                    No notifications yet
+                  </strong>
+                  <p className="mb-0 mt-1 text-xs font-medium text-slate-600">
+                    Dose and patient updates will appear here.
+                  </p>
+                </div>
+              )}
             </div>
           </section>
         </div>

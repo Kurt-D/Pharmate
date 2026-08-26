@@ -94,7 +94,11 @@ export default function DrugCuration() {
         medicine.therapeutic_category,
         medicine.drug_class,
         medicine.common_uses,
-      ].some((value) => String(value || '').toLowerCase().includes(query));
+      ].some((value) =>
+        String(value || '')
+          .toLowerCase()
+          .includes(query)
+      );
     });
   }, [catalog, catalogClass, catalogSearch]);
 
@@ -318,7 +322,9 @@ export default function DrugCuration() {
                         {medicine.drug_class && <small>{medicine.drug_class}</small>}
                       </td>
                       <td>
-                        <span className={`pw-drug-class ${medicine.rx_class === 'OTC' ? 'otc' : 'rx'}`}>
+                        <span
+                          className={`pw-drug-class ${medicine.rx_class === 'OTC' ? 'otc' : 'rx'}`}
+                        >
                           {medicine.rx_class === 'OTC' ? 'OTC' : 'Rx'}
                         </span>
                       </td>
@@ -329,7 +335,9 @@ export default function DrugCuration() {
                           .join(' · ') || '—'}
                       </td>
                       <td>
-                        <span className={`pw-drug-status ${medicine.availability ? 'available' : 'unavailable'}`}>
+                        <span
+                          className={`pw-drug-status ${medicine.availability ? 'available' : 'unavailable'}`}
+                        >
                           {medicine.availability ? 'Available' : 'Unavailable'}
                         </span>
                       </td>

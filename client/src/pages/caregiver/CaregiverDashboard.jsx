@@ -149,12 +149,17 @@ export default function CaregiverDashboard({
               Hello, Caregiver
             </h1>
           </div>
-          <span className="cg-home-hero__mark"><ShieldCheck className="h-7 w-7" /></span>
+          <span className="cg-home-hero__mark">
+            <ShieldCheck className="h-7 w-7" />
+          </span>
         </div>
         <p className="mb-0 mt-1 text-sm font-medium leading-5 text-slate-600">
           Keep {patientLabel || 'your linked patient'} on track today.
         </p>
-        <span className={`cg-live-status ${previewMode ? 'is-preview' : 'is-live'}`}><Activity className="h-4 w-4" />{previewMode ? 'Preview information' : 'Live patient monitoring'}</span>
+        <span className={`cg-live-status ${previewMode ? 'is-preview' : 'is-live'}`}>
+          <Activity className="h-4 w-4" />
+          {previewMode ? 'Preview information' : 'Live patient monitoring'}
+        </span>
       </header>
       <PatientSwitcher
         patients={patients}
@@ -318,7 +323,9 @@ export default function CaregiverDashboard({
               Chronological schedule for today
             </p>
           </div>
-          <span className="cg-checklist-icon"><ClipboardCheck className="h-6 w-6" /></span>
+          <span className="cg-checklist-icon">
+            <ClipboardCheck className="h-6 w-6" />
+          </span>
         </div>
         <div className="relative mt-4 grid gap-3 before:absolute before:bottom-5 before:left-[19px] before:top-5 before:w-px before:bg-slate-200">
           {timeline.length ? (
@@ -393,9 +400,20 @@ export default function CaregiverDashboard({
         </section>
       )}
       <section className="cg-pharmacy-support">
-        <span><ShieldCheck className="h-6 w-6" /></span>
-        <div><small>PHARMATE SUPPORT</small><h2>Medication care with pharmacist safeguards</h2><p>Prescription refills and medicine concerns remain pharmacist-reviewed for patient safety.</p></div>
-        <button onClick={() => onNavigate('medication')} type="button"><Package className="h-4 w-4" /> View medicine care</button>
+        <span>
+          <ShieldCheck className="h-6 w-6" />
+        </span>
+        <div>
+          <small>PHARMATE SUPPORT</small>
+          <h2>Medication care with pharmacist safeguards</h2>
+          <p>
+            Prescription refills and medicine concerns remain pharmacist-reviewed for patient
+            safety.
+          </p>
+        </div>
+        <button onClick={() => onNavigate('medication')} type="button">
+          <Package className="h-4 w-4" /> View medicine care
+        </button>
       </section>
     </main>
   );
