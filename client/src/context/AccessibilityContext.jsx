@@ -1,3 +1,4 @@
+/* oxlint-disable react/only-export-components */
 import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 
 const STORAGE_KEY = 'pm_senior_accessibility';

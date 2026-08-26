@@ -1,3 +1,4 @@
+/* oxlint-disable react/only-export-components */
 import { useEffect, useMemo, useState } from 'react';
 import { Check, HeartPulse, Pill, Volume2, X } from 'lucide-react';
 

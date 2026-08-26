@@ -1,3 +1,4 @@
+/* oxlint-disable react/only-export-components */
 import { createContext, useContext, useMemo, useState } from 'react';
 
 const translations = {

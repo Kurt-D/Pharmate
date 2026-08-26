@@ -1,93 +1,49 @@
-import { BellRing, CheckCircle2, Clock3, Pill, Volume2, X } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { BellRing, CheckCircle2, Clock3, ScanLine, Volume2, X } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
 import { speak } from '../../lib/notifications.js';
 
-export default function PatientVoiceAlert({ alert, dose, onTake, onSnooze, onDismiss }) {
+export default function PatientVoiceAlert({ alert, dose, onTake, onScan, onSnooze, onDismiss }) {
   const [speaking, setSpeaking] = useState(false);
 
-  useEffect(() => {
+  const playReminder = useCallback(() => {
     if (!alert?.message) return;
     speak(alert.message, {
       onStart: () => setSpeaking(true),
       onEnd: () => setSpeaking(false),
       onError: () => setSpeaking(false),
     });
+  }, [alert?.message]);
+
+  useEffect(() => {
+    playReminder();
     return () => window.speechSynthesis?.cancel();
-  }, [alert]);
+  }, [playReminder]);
 
   if (!alert) return null;
   const medicine = dose?.drug_name || alert.medicine || 'your scheduled medicine';
-  const caregiverTitle = alert.caregiverName
-    ? `Paalala mula kay ${alert.caregiverName}`
-    : 'Paalala mula sa caregiver';
 
   return (
-    <div className="pm-caregiver-alert-backdrop" role="presentation">
-      <section
-        aria-describedby="caregiver-voice-alert-message"
-        aria-labelledby="caregiver-voice-alert-title"
-        aria-modal="true"
-        className="pm-caregiver-alert"
-        role="alertdialog"
-      >
-        <header>
-          <span>
-            <BellRing />
-          </span>
-          <div>
-            <small>Caregiver reminder</small>
-            <h2 id="caregiver-voice-alert-title">{caregiverTitle}</h2>
-          </div>
-          <button aria-label="Close caregiver reminder" onClick={onDismiss} type="button">
-            <X />
-          </button>
-        </header>
-        <div className="pm-caregiver-alert__medicine">
-          <span className={speaking ? 'speaking' : ''}>
-            <Pill />
-          </span>
-          <div>
-            <small>Medicine reminder</small>
-            <strong>{medicine}</strong>
-            {dose?.scheduled_time && (
-              <time>
-                {new Date(dose.scheduled_time).toLocaleTimeString([], {
-                  hour: 'numeric',
-                  minute: '2-digit',
-                })}
-              </time>
-            )}
-          </div>
+    <section aria-labelledby="caregiver-voice-reminder-title" className="pm-dashboard-card pm-voice-card pm-caregiver-voice-card" role="status">
+      <div className="pm-section-heading">
+        <h2 id="caregiver-voice-reminder-title"><span><BellRing /></span> Caregiver Voice Reminder</h2>
+        <div className="pm-caregiver-voice-card__tools">
+          <span className="pm-active-pill">Active</span>
+          <button aria-label="Dismiss caregiver reminder" onClick={onDismiss} type="button"><X /></button>
         </div>
-        <blockquote id="caregiver-voice-alert-message">“{alert.message}”</blockquote>
-        <div className="pm-caregiver-alert__actions">
-          <button className="take" onClick={onTake} type="button">
-            <CheckCircle2 />
-            Nainom Ko Na · I Took This
-          </button>
-          <div className="pm-caregiver-alert__secondary">
-            <button
-              className="pm-caregiver-alert__listen"
-              onClick={() =>
-                speak(alert.message, {
-                  onStart: () => setSpeaking(true),
-                  onEnd: () => setSpeaking(false),
-                  onError: () => setSpeaking(false),
-                })
-              }
-              type="button"
-            >
-              <Volume2 />
-              {speaking ? 'Playing…' : 'Listen again'}
-            </button>
-            <button className="snooze" onClick={onSnooze} type="button">
-              <Clock3 />
-              Snooze 15 min
-            </button>
-          </div>
+      </div>
+      <div className="pm-reminder">
+        <button aria-label={speaking ? 'Voice reminder is playing' : 'Play caregiver voice reminder'} className={`pm-mic ${speaking ? 'speaking' : ''}`} onClick={playReminder} type="button"><Volume2 /></button>
+        <div className="pm-reminder__copy">
+          <small>Reminder from {alert.caregiverName || 'your caregiver'}</small>
+          <h3>“It’s time to take your {medicine}.”</h3>
+          <p>{alert.message}</p>
         </div>
-        <p>Sent from your linked caregiver.</p>
-      </section>
-    </div>
+      </div>
+      <div className="pm-wave" aria-hidden="true">{Array.from({ length: 40 }, (_, index) => <span key={index} />)}</div>
+      <button className="pm-action-button pm-action-button--outline" onClick={onTake} type="button"><CheckCircle2 /> Mark as Taken</button>
+      <button className="pm-action-button" onClick={onScan} type="button"><ScanLine /> Scan Medicine</button>
+      <small className="pm-scan-hint">Scan the medicine for a more accurate adherence log.</small>
+      <button className="pm-caregiver-voice-card__snooze" onClick={onSnooze} type="button"><Clock3 /> Snooze reminder for 15 minutes</button>
+    </section>
   );
 }

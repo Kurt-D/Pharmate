@@ -1212,3 +1212,101 @@ body.pm-a11y-reduce-motion .pm-home .pm-voice-card .pm-action-button {
 .pm-phone.pm-a11y-dark-mode .pm-caregiver-alert blockquote {
   border-left-color: #7aaaf8 !important;
 }
+
+/* Inline caregiver reminder on Patient Home — never blocks the dashboard. */
+.pm-caregiver-voice-card {
+  border: 1px solid #cfe0f7 !important;
+  border-left: 3px solid #4c8ce4 !important;
+  box-shadow: 0 8px 24px rgba(64, 96, 147, 0.1) !important;
+}
+
+.pm-caregiver-voice-card__tools {
+  align-items: center;
+  display: flex;
+  gap: 0.4rem;
+}
+
+.pm-caregiver-voice-card__tools > button {
+  align-items: center;
+  background: #f1f5f9;
+  border: 0;
+  border-radius: 50%;
+  color: #52627a;
+  display: flex;
+  height: 2.25rem;
+  justify-content: center;
+  width: 2.25rem;
+}
+
+.pm-caregiver-voice-card__tools > button svg {
+  height: 1rem;
+  width: 1rem;
+}
+
+.pm-caregiver-voice-card .pm-section-heading h2 span svg {
+  height: 1.1rem;
+  width: 1.1rem;
+}
+
+.pm-caregiver-voice-card .pm-mic svg {
+  height: 2rem;
+  width: 2rem;
+}
+
+.pm-caregiver-voice-card .pm-mic.speaking {
+  animation: pm-caregiver-voice-pulse-compact 1.35s ease-in-out infinite;
+}
+
+.pm-caregiver-voice-card .pm-reminder__copy > small {
+  color: #2a67b8;
+  display: block;
+  font-size: 0.68rem;
+  font-weight: 700;
+  margin-bottom: 0.2rem;
+}
+
+.pm-caregiver-voice-card .pm-reminder__copy h3 {
+  color: #1e2e4a;
+  font-size: 0.86rem;
+  line-height: 1.4;
+}
+
+.pm-caregiver-voice-card .pm-reminder__copy p {
+  color: #52627a;
+  font-size: 0.68rem;
+  line-height: 1.45;
+  margin-top: 0.25rem;
+}
+
+.pm-caregiver-voice-card .pm-action-button {
+  min-height: 52px;
+}
+
+.pm-caregiver-voice-card__snooze {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: #2a67b8;
+  display: flex;
+  font-size: 0.72rem;
+  font-weight: 700;
+  gap: 0.4rem;
+  justify-content: center;
+  margin-top: 0.4rem;
+  min-height: 44px;
+  width: 100%;
+}
+
+.pm-caregiver-voice-card__snooze svg {
+  height: 1rem;
+  width: 1rem;
+}
+
+.pm-phone.pm-a11y-dark-mode .pm-caregiver-voice-card {
+  background: #172033 !important;
+  border-color: #5878a5 !important;
+}
+
+.pm-phone.pm-a11y-dark-mode .pm-caregiver-voice-card .pm-reminder__copy h3 {
+  color: #f8fafc;
+}

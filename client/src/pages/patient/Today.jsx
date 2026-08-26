@@ -466,13 +466,6 @@ export default function Today() {
 
   return (
     <main className="pm-home">
-      <PatientVoiceAlert
-        alert={caregiverVoiceAlert}
-        dose={caregiverAlertDose}
-        onDismiss={closeCaregiverAlert}
-        onTake={takeCaregiverAlertDose}
-        onSnooze={snoozeCaregiverAlertDose}
-      />
       <header className="pm-home__header">
         <div>
           <h1>
@@ -569,7 +562,16 @@ export default function Today() {
         </div>
       </section>
 
-      {dueNow && (
+      <PatientVoiceAlert
+        alert={caregiverVoiceAlert}
+        dose={caregiverAlertDose}
+        onDismiss={closeCaregiverAlert}
+        onScan={() => setScanOpen(true)}
+        onTake={takeCaregiverAlertDose}
+        onSnooze={snoozeCaregiverAlertDose}
+      />
+
+      {dueNow && !caregiverVoiceAlert && (
         <section className="pm-dashboard-card pm-voice-card">
           <div className="pm-section-heading">
             <h2>
