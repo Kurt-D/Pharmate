@@ -1257,6 +1257,105 @@ body.pm-a11y-reduce-motion .pm-home .pm-voice-card .pm-action-button {
   animation: pm-caregiver-voice-pulse-compact 1.35s ease-in-out infinite;
 }
 
+/* Keep the listening control and copy aligned at every senior text scale. */
+.pm-home .pm-caregiver-voice-card .pm-reminder {
+  align-items: center;
+  display: grid;
+  gap: 0.9rem;
+  grid-template-columns: 76px minmax(0, 1fr);
+  padding: 0.55rem 0 0.45rem;
+  width: 100%;
+}
+
+.pm-home .pm-caregiver-voice-card .pm-mic {
+  align-items: center;
+  align-self: center;
+  display: inline-flex;
+  height: 64px;
+  justify-content: center;
+  justify-self: center;
+  min-height: 64px;
+  min-width: 64px;
+  width: 64px;
+}
+
+.pm-home .pm-caregiver-voice-card .pm-reminder__copy {
+  min-width: 0;
+  text-align: left;
+  width: 100%;
+}
+
+.pm-home .pm-caregiver-voice-card .pm-reminder__copy h3,
+.pm-home .pm-caregiver-voice-card .pm-reminder__copy p,
+.pm-home .pm-caregiver-voice-card .pm-reminder__copy small {
+  max-width: none;
+  overflow-wrap: break-word;
+  width: 100%;
+}
+
+.pm-home .pm-caregiver-voice-card .pm-wave span {
+  transform-origin: center;
+}
+
+.pm-home .pm-caregiver-voice-card .pm-wave.speaking span {
+  animation: pm-caregiver-wave-listening 620ms ease-in-out infinite alternate;
+  animation-delay: calc(var(--wave-index) * -35ms);
+  background: #4c8ce4;
+}
+
+@keyframes pm-caregiver-wave-listening {
+  from {
+    opacity: 0.45;
+    transform: scaleY(0.35);
+  }
+  to {
+    opacity: 1;
+    transform: scaleY(1.15);
+  }
+}
+
+@media (max-width: 360px) {
+  .pm-home .pm-caregiver-voice-card .pm-reminder {
+    gap: 0.7rem;
+    grid-template-columns: 64px minmax(0, 1fr);
+  }
+
+  .pm-home .pm-caregiver-voice-card .pm-mic {
+    height: 56px;
+    min-height: 56px;
+    min-width: 56px;
+    width: 56px;
+  }
+}
+
+.pm-phone.pm-a11y-reduce-motion .pm-caregiver-voice-card .pm-wave.speaking span {
+  animation: none;
+  background: #4c8ce4;
+  opacity: 1;
+}
+
+/* TTS off: remove the reserved listening column and use the full card width. */
+body.pm-a11y-tts-off .pm-home .pm-caregiver-voice-card .pm-reminder,
+.pm-phone.pm-a11y-tts-off .pm-home .pm-caregiver-voice-card .pm-reminder {
+  display: block;
+  padding: 0.55rem 0 0.45rem;
+  width: 100%;
+}
+
+body.pm-a11y-tts-off .pm-home .pm-caregiver-voice-card .pm-reminder__copy,
+.pm-phone.pm-a11y-tts-off .pm-home .pm-caregiver-voice-card .pm-reminder__copy {
+  display: block;
+  max-width: none;
+  min-width: 0;
+  text-align: left;
+  width: 100%;
+}
+
+body.pm-a11y-tts-off .pm-home .pm-caregiver-voice-card .pm-wave,
+.pm-phone.pm-a11y-tts-off .pm-home .pm-caregiver-voice-card .pm-wave {
+  display: none;
+}
+
 .pm-caregiver-voice-card .pm-reminder__copy > small {
   color: #2a67b8;
   display: block;

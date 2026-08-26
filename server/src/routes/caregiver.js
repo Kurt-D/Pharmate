@@ -8,6 +8,7 @@ import { createRefill, createDelivery, listOrders } from '../services/orders.js'
 import { openThread } from '../services/inquiry.js';
 import { failedAttemptLimit, rateLimit } from '../middleware/rateLimit.js';
 import { createPatientNotification } from '../services/patientNotifications.js';
+import { sendPush } from '../services/notifications.js';
 import { decrypt, encrypt } from '../utils/crypto.js';
 import {
   CAREGIVER_CODE_LENGTH,
@@ -283,7 +284,32 @@ router.post('/patients/:code/notify', async (req, res) => {
     medicineName,
     eventKey: `caregiver:${req.user.sub}:${patientId}:${uuidv4()}`,
   });
-  res.status(201).json({ notified: result.created });
+  let pushSent = false;
+  if (result.created) {
+    const [[patient]] = await pool.execute(
+      `SELECT p.fcm_token, COALESCE(pp.lock_screen_detail, 'private') AS lock_screen_detail
+       FROM patients p
+       LEFT JOIN patient_preferences pp ON pp.patient_id = p.id
+       WHERE p.id = ?`,
+      [patientId]
+    );
+    if (patient?.fcm_token) {
+      const body =
+        patient.lock_screen_detail === 'medicine_name' && medicineName
+          ? `Your caregiver says it is time for ${medicineName}.`
+          : 'Your caregiver sent a medicine reminder.';
+      const push = await sendPush(patient.fcm_token, {
+        title: 'Caregiver medicine reminder',
+        body,
+        data: { type: 'caregiver_dose_reminder' },
+      });
+      pushSent = push.ok;
+      if (push.stale) {
+        await pool.execute('UPDATE patients SET fcm_token = NULL WHERE id = ?', [patientId]);
+      }
+    }
+  }
+  res.status(201).json({ notified: result.created, push_sent: pushSent });
 });
 
 // ── GET /api/caregiver/patients/:code/orders ──────────────────────────────────

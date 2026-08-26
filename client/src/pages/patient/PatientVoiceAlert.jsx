@@ -57,9 +57,9 @@ export default function PatientVoiceAlert({ alert, dose, onTake, onScan, onSnooz
           <p>{alert.message}</p>
         </div>
       </div>
-      <div className="pm-wave" aria-hidden="true">
+      <div className={`pm-wave ${speaking ? 'speaking' : ''}`} aria-hidden="true">
         {Array.from({ length: 40 }, (_, index) => (
-          <span key={index} />
+          <span key={index} style={{ '--wave-index': index }} />
         ))}
       </div>
       <button className="pm-action-button pm-action-button--outline" onClick={onTake} type="button">

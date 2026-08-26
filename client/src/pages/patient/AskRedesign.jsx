@@ -119,6 +119,7 @@ export default function AskRedesign() {
   const [conversationLabels, setConversationLabels] = useState(loadConversationLabels);
   const [editingLabelId, setEditingLabelId] = useState(null);
   const [labelDraft, setLabelDraft] = useState('');
+  const [showAllHistory, setShowAllHistory] = useState(false);
   const [draft, setDraft] = useState('');
   const [error, setError] = useState('');
   const [restoringThread, setRestoringThread] = useState(true);
@@ -336,6 +337,8 @@ export default function AskRedesign() {
   }
 
   const savedOpenThread = threads.find((item) => item.status === 'open');
+  const closedThreads = threads.filter((item) => item.status === 'closed');
+  const historyPreviewLimit = closedThreads.length > 2 ? 2 : 1;
   const step = !thread
     ? 1
     : thread.status === 'closed'
@@ -691,11 +694,32 @@ export default function AskRedesign() {
           )}
         </section>
       )}
-      {!restoringThread && threads.some((item) => item.status === 'closed') && (
+      {!restoringThread && closedThreads.length > 0 && (
         <section className="pm-ask-card pm-chat-history">
-          <h2>{tr('Conversation History', 'Kasaysayan ng Usapan')}</h2>
-          {threads
-            .filter((item) => item.status === 'closed')
+          <header className="pm-chat-history-header">
+            <div>
+              <h2>{tr('Conversation History', 'Kasaysayan ng Usapan')}</h2>
+              <small>
+                {tr(
+                  `${closedThreads.length} saved conversation${closedThreads.length === 1 ? '' : 's'}`,
+                  `${closedThreads.length} naka-save na usapan`
+                )}
+              </small>
+            </div>
+            {closedThreads.length > historyPreviewLimit && (
+              <button
+                aria-expanded={showAllHistory}
+                onClick={() => setShowAllHistory((value) => !value)}
+                type="button"
+              >
+                {showAllHistory
+                  ? tr('Show less', 'Mas kaunti')
+                  : tr('See all', 'Tingnan lahat')}
+              </button>
+            )}
+          </header>
+          {closedThreads
+            .slice(0, showAllHistory ? closedThreads.length : historyPreviewLimit)
             .map((item) => (
               <article
                 key={item.id}

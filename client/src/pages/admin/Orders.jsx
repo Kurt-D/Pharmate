@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   CheckCircle2,
   ChevronRight,
@@ -404,7 +405,7 @@ export default function Orders() {
         </footer>
       </div>
 
-      {selected && (
+      {selected && createPortal((
         <div
           className="admin-order-drawer-backdrop"
           onMouseDown={(event) => event.target === event.currentTarget && setSelected(null)}
@@ -501,9 +502,9 @@ export default function Orders() {
             </footer>
           </aside>
         </div>
-      )}
+      ), document.body)}
 
-      {confirmAction && (
+      {confirmAction && createPortal((
         <div className="admin-order-confirm-backdrop">
           <section
             className="admin-order-confirm"
@@ -539,7 +540,7 @@ export default function Orders() {
             </div>
           </section>
         </div>
-      )}
+      ), document.body)}
     </section>
   );
 }

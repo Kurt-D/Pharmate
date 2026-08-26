@@ -1,3 +1,4 @@
+import { useMemo, useState } from 'react';
 import {
   Activity,
   AlertTriangle,
@@ -5,6 +6,7 @@ import {
   BellOff,
   CheckCircle2,
   ChevronDown,
+  ChevronUp,
   ClipboardCheck,
   Clock3,
   Link2,
@@ -86,16 +88,22 @@ export default function CaregiverDashboard({
   onVoiceReminder,
   onSnooze,
   snoozedUntil,
-  refillAlert,
-  onOrderRefill,
+  stockAlerts = [],
   patientLabel,
   onNavigate,
+  notificationCount = 0,
+  onOpenNotifications,
 }) {
+  const [showAllStock, setShowAllStock] = useState(false);
+  const [dismissedStock, setDismissedStock] = useState([]);
   const completed = timeline.filter((dose) => dose.status === 'taken').length;
   const upcoming = timeline.filter((dose) => dose.status === 'upcoming').length;
   const overdue = timeline.filter((dose) => dose.status === 'overdue').length;
   const adherence = timeline.length ? Math.round((completed / timeline.length) * 100) : 0;
-  const nextDue = timeline.find((dose) => dose.status === 'upcoming' || dose.status === 'overdue');
+  const visibleStockAlerts = useMemo(
+    () => stockAlerts.filter((item) => !dismissedStock.includes(item.id)),
+    [dismissedStock, stockAlerts]
+  );
   const urgentDose =
     timeline.find((dose) => dose.status === 'overdue') ||
     timeline.find(
@@ -149,9 +157,19 @@ export default function CaregiverDashboard({
               Hello, Caregiver
             </h1>
           </div>
-          <span className="cg-home-hero__mark">
-            <ShieldCheck className="h-7 w-7" />
-          </span>
+          <button
+            aria-label={`Open notifications${notificationCount ? `, ${notificationCount} unread` : ''}`}
+            className="cg-home-hero__mark relative border-0"
+            onClick={onOpenNotifications}
+            type="button"
+          >
+            <BellRing className="h-6 w-6" />
+            {notificationCount > 0 && (
+              <span className="absolute -right-1 -top-1 grid min-h-[20px] min-w-[20px] place-items-center rounded-full bg-rose-600 px-1 text-[10px] font-bold text-white">
+                {Math.min(99, notificationCount)}
+              </span>
+            )}
+          </button>
         </div>
         <p className="mb-0 mt-1 text-sm font-medium leading-5 text-slate-600">
           Keep {patientLabel || 'your linked patient'} on track today.
@@ -285,26 +303,6 @@ export default function CaregiverDashboard({
             <span className="text-xs font-semibold text-slate-600">Overdue</span>
           </div>
         </div>
-        <div className="mt-4 grid grid-cols-2 gap-3">
-          <button
-            className="flex min-h-[52px] items-center justify-center gap-2 rounded-xl bg-blue-600 px-3 text-sm font-semibold text-white transition hover:bg-blue-700 active:scale-[.98] disabled:cursor-not-allowed disabled:bg-slate-300"
-            disabled={!nextDue}
-            onClick={() => onVoiceReminder(nextDue)}
-            type="button"
-          >
-            <Volume2 className="h-5 w-5 stroke-[2.2]" />
-            Send Voice Reminder
-          </button>
-          <button
-            className="flex min-h-[52px] items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 active:scale-[.98] disabled:cursor-not-allowed disabled:text-slate-400"
-            disabled={!nextDue}
-            onClick={() => onSnooze(nextDue)}
-            type="button"
-          >
-            <BellOff className="h-5 w-5 stroke-[2.2]" />
-            Snooze 15m
-          </button>
-        </div>
         {snoozedUntil && (
           <p className="mb-0 mt-3 rounded-lg bg-slate-50 px-3 py-2 text-center text-xs font-semibold text-slate-600">
             Alerts snoozed until{' '}
@@ -391,12 +389,36 @@ export default function CaregiverDashboard({
         </div>
       </section>
 
-      {refillAlert && (
+      {visibleStockAlerts.length > 0 && (
         <section className="cg-refill-section">
           <div className="mb-2 flex items-center justify-between">
             <h2 className="m-0 text-lg font-bold tracking-tight text-slate-900">Stock attention</h2>
+            <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-bold text-amber-800">
+              {visibleStockAlerts.length}
+            </span>
           </div>
-          <CaregiverRefillAlert item={refillAlert} onOrderRefill={onOrderRefill} />
+          <div className="grid gap-3">
+            {(showAllStock ? visibleStockAlerts : visibleStockAlerts.slice(0, 2)).map((item) => (
+              <CaregiverRefillAlert
+                item={item}
+                key={item.id}
+                onDismiss={() =>
+                  setDismissedStock((current) => [...new Set([...current, item.id])])
+                }
+              />
+            ))}
+          </div>
+          {visibleStockAlerts.length > 2 && (
+            <button
+              aria-expanded={showAllStock}
+              className="mt-3 flex min-h-[50px] w-full items-center justify-center gap-2 rounded-xl border border-blue-200 bg-white px-4 text-sm font-bold text-blue-700"
+              onClick={() => setShowAllStock((value) => !value)}
+              type="button"
+            >
+              {showAllStock ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
+              {showAllStock ? 'Show less' : `See all ${visibleStockAlerts.length} stock alerts`}
+            </button>
+          )}
         </section>
       )}
       <section className="cg-pharmacy-support">

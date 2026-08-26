@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
 import {
-  AlertTriangle,
-  BellRing,
+  CalendarDays,
   CalendarClock,
   CalendarPlus,
   CheckCircle2,
+  ChevronDown,
+  ChevronUp,
   Clock3,
   LockKeyhole,
   Package,
@@ -13,18 +14,71 @@ import {
   Plus,
   ReceiptText,
   Search,
+  Send,
   ShieldCheck,
   Trash2,
   X,
 } from 'lucide-react';
 import CaregiverRefillAlert, { RefillEmptyState } from './CaregiverRefillAlert.jsx';
 
+const DOSE_STYLES = {
+  upcoming: { title: 'Upcoming doses', color: 'text-amber-700', card: 'border-amber-200 bg-amber-50', badge: 'border-amber-200 bg-white text-amber-700' },
+  overdue: { title: 'Missed doses', color: 'text-rose-700', card: 'border-rose-200 bg-rose-50', badge: 'border-rose-200 bg-white text-rose-700' },
+  taken: { title: 'Taken doses', color: 'text-emerald-700', card: 'border-emerald-200 bg-emerald-50', badge: 'border-emerald-200 bg-white text-emerald-700' },
+};
+
+function DoseSection({ status, doses, onReminder }) {
+  const style = DOSE_STYLES[status];
+  return (
+    <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="flex items-center justify-between gap-3">
+        <h2 className={`m-0 text-base font-bold ${style.color}`}>{style.title}</h2>
+        <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-600">{doses.length}</span>
+      </div>
+      <div className="mt-3 grid gap-2">
+        {doses.length ? doses.slice(0, 3).map((dose) => (
+          <article className={`rounded-xl border p-3 ${style.card}`} key={dose.id}>
+            <div className="flex items-start gap-3">
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white text-blue-600"><Pill className="h-5 w-5" /></span>
+              <div className="min-w-0 flex-1">
+                <strong className="block truncate text-sm text-slate-900">{dose.medicine}</strong>
+                <small className="mt-1 block font-medium leading-5 text-slate-600">{dose.instructions}</small>
+                <span className="mt-1 inline-flex items-center gap-1 text-xs font-bold text-slate-700"><Clock3 className="h-3.5 w-3.5" />{dose.time}</span>
+              </div>
+              <span className={`rounded-full border px-2 py-1 text-[10px] font-bold ${style.badge}`}>{status === 'overdue' ? 'Missed' : status === 'taken' ? 'Taken' : 'Upcoming'}</span>
+            </div>
+            {status !== 'taken' && (
+              <button className="mt-3 flex min-h-[46px] w-full items-center justify-center gap-2 rounded-xl border border-blue-200 bg-white px-3 text-sm font-bold text-blue-700 active:scale-[.99]" onClick={() => onReminder(dose)} type="button"><Send className="h-4 w-4" />Send notification reminder</button>
+            )}
+          </article>
+        )) : <p className="m-0 rounded-xl bg-slate-50 p-4 text-center text-sm font-medium text-slate-600">No {style.title.toLowerCase()} today.</p>}
+      </div>
+    </section>
+  );
+}
+
+function DoseCalendar({ timeline, onClose }) {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = now.getMonth();
+  const firstDay = new Date(year, month, 1).getDay();
+  const days = new Date(year, month + 1, 0).getDate();
+  return (
+    <div className="fixed inset-0 z-[85] flex items-end justify-center bg-slate-950/45 sm:items-center sm:p-4" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
+      <section aria-labelledby="caregiver-calendar-title" aria-modal="true" className="w-full max-w-md rounded-t-3xl bg-white p-5 shadow-2xl sm:rounded-3xl" role="dialog">
+        <div className="flex items-start justify-between gap-3"><div><p className="m-0 text-xs font-bold uppercase tracking-wide text-blue-700">Patient schedule</p><h2 className="mb-0 mt-1 text-xl font-bold text-slate-900" id="caregiver-calendar-title">{now.toLocaleDateString([], { month: 'long', year: 'numeric' })}</h2></div><button aria-label="Close calendar" className="grid h-11 w-11 place-items-center rounded-xl bg-slate-100 text-slate-700" onClick={onClose} type="button"><X className="h-5 w-5" /></button></div>
+        <div className="mt-5 grid grid-cols-7 gap-1 text-center text-xs font-bold text-slate-500">{['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map((day) => <span key={day}>{day}</span>)}{Array.from({ length: firstDay }, (_, index) => <span key={`blank-${index}`} />)}{Array.from({ length: days }, (_, index) => { const day = index + 1; const today = day === now.getDate(); return <span className={`grid min-h-[42px] place-items-center rounded-full ${today ? 'bg-blue-600 text-white' : 'text-slate-800'}`} key={day}>{day}</span>; })}</div>
+        <div className="mt-5 rounded-xl border border-blue-100 bg-blue-50 p-4"><strong className="text-sm text-slate-900">Today’s doses</strong><div className="mt-2 flex flex-wrap gap-2"><span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-bold text-amber-800">{timeline.filter((dose) => dose.status === 'upcoming').length} Upcoming</span><span className="rounded-full bg-rose-100 px-2.5 py-1 text-xs font-bold text-rose-800">{timeline.filter((dose) => dose.status === 'overdue').length} Missed</span><span className="rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-800">{timeline.filter((dose) => dose.status === 'taken').length} Taken</span></div></div>
+      </section>
+    </div>
+  );
+}
+
 export default function CaregiverRefills({
   medications,
   stockAlerts,
   orders,
   previewMode,
-  onOrderRefill,
   timeline = [],
   canManageMedications = false,
   onUpdateMedication,
@@ -32,6 +86,7 @@ export default function CaregiverRefills({
   onSearchDrugs,
   onAddMedicine,
   onCreateSuggestedSchedule,
+  onSendReminder,
 }) {
   const [editing, setEditing] = useState(null);
   const [draft, setDraft] = useState({ dosage_instruction: '', frequency: '' });
@@ -44,11 +99,20 @@ export default function CaregiverRefills({
   const [addBusy, setAddBusy] = useState(false);
   const [scheduleBusy, setScheduleBusy] = useState(false);
   const [addError, setAddError] = useState('');
+  const [showAllMedications, setShowAllMedications] = useState(false);
+  const [calendarOpen, setCalendarOpen] = useState(false);
   const [addDraft, setAddDraft] = useState({
     frequency: 'Once daily',
     dosage_instruction: 'Take one dose',
     start_date: new Date().toISOString().slice(0, 10),
   });
+
+  useEffect(() => {
+    if (!canManageMedications) {
+      setAdding(false);
+      setEditing(null);
+    }
+  }, [canManageMedications]);
 
   useEffect(() => {
     const query = drugQuery.trim();
@@ -71,6 +135,7 @@ export default function CaregiverRefills({
   }, [adding, drugQuery, onSearchDrugs, selectedDrug]);
 
   function openEditor(medicine) {
+    if (!canManageMedications) return;
     setEditing(medicine);
     setDraft({
       dosage_instruction: medicine.dosage_instruction || '',
@@ -108,6 +173,7 @@ export default function CaregiverRefills({
   }
 
   async function addMedicine() {
+    if (!canManageMedications) return;
     setAddBusy(true);
     setAddError('');
     try {
@@ -124,6 +190,7 @@ export default function CaregiverRefills({
   }
 
   async function createSchedule() {
+    if (!canManageMedications) return;
     if (
       !medications.length ||
       !window.confirm(
@@ -174,115 +241,66 @@ export default function CaregiverRefills({
           </p>
         </div>
       </section>
-      <section
-        className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm"
-        aria-labelledby="medication-actions-title"
-      >
-        <h2 className="mb-3 mt-0 text-base font-bold text-slate-900" id="medication-actions-title">
-          Medication actions
-        </h2>
-        <div className="grid gap-2">
-          <button
-            className="flex min-h-[64px] w-full items-center gap-3 rounded-xl border border-blue-200 bg-blue-50 p-3 text-left text-slate-900 active:scale-[.99]"
-            onClick={() => setAdding(true)}
-            type="button"
-          >
-            <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-blue-600 text-white">
-              <Plus className="h-6 w-6" />
-            </span>
-            <span className="min-w-0 flex-1">
-              <strong className="block text-sm">Add a medicine</strong>
-              <small className="mt-1 block text-xs font-medium text-slate-600">
-                Choose a verified medicine for patient tracking
-              </small>
-            </span>
-          </button>
-          <button
-            className="flex min-h-[64px] w-full items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-left text-slate-900 active:scale-[.99] disabled:opacity-50"
-            disabled={!medications.length || scheduleBusy}
-            onClick={createSchedule}
-            type="button"
-          >
-            <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-emerald-600 text-white">
-              <CalendarPlus className="h-6 w-6" />
-            </span>
-            <span className="min-w-0 flex-1">
-              <strong className="block text-sm">Create suggested schedule</strong>
-              <small className="mt-1 block text-xs font-medium text-slate-600">
-                {scheduleBusy
-                  ? 'Creating safe reminder times…'
-                  : 'Generate safe reminder times for active medicines'}
-              </small>
-            </span>
-          </button>
-        </div>
-      </section>
+      {canManageMedications && (
+        <section
+          className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm"
+          aria-labelledby="medication-actions-title"
+        >
+          <h2 className="mb-3 mt-0 text-base font-bold text-slate-900" id="medication-actions-title">
+            Medication actions
+          </h2>
+          <div className="grid gap-2">
+            <button
+              className="flex min-h-[64px] w-full items-center gap-3 rounded-xl border border-blue-200 bg-blue-50 p-3 text-left text-slate-900 active:scale-[.99]"
+              onClick={() => setAdding(true)}
+              type="button"
+            >
+              <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-blue-600 text-white">
+                <Plus className="h-6 w-6" />
+              </span>
+              <span className="min-w-0 flex-1">
+                <strong className="block text-sm">Add a medicine</strong>
+                <small className="mt-1 block text-xs font-medium text-slate-600">
+                  Choose a verified medicine for patient tracking
+                </small>
+              </span>
+            </button>
+            <button
+              className="flex min-h-[64px] w-full items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-left text-slate-900 active:scale-[.99] disabled:opacity-50"
+              disabled={!medications.length || scheduleBusy}
+              onClick={createSchedule}
+              type="button"
+            >
+              <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-emerald-600 text-white">
+                <CalendarPlus className="h-6 w-6" />
+              </span>
+              <span className="min-w-0 flex-1">
+                <strong className="block text-sm">Create suggested schedule</strong>
+                <small className="mt-1 block text-xs font-medium text-slate-600">
+                  {scheduleBusy
+                    ? 'Creating safe reminder times…'
+                    : 'Generate safe reminder times for active medicines'}
+                </small>
+              </span>
+            </button>
+          </div>
+        </section>
+      )}
       {previewMode && (
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800">
           Preview stock information is shown while live balance data is unavailable.
         </div>
       )}
-      <section className="cg-smart-reminders rounded-2xl border border-blue-100 bg-white p-4 shadow-sm">
+      <section className="rounded-2xl border border-blue-200 bg-blue-50 p-4">
         <div className="flex items-center justify-between gap-3">
-          <div>
-            <span className="text-xs font-bold uppercase tracking-wide text-blue-700">
-              Smart reminders
-            </span>
-            <h2 className="mb-0 mt-1 text-lg font-bold text-slate-900">
-              Today’s medicine schedule
-            </h2>
-            <p className="mb-0 mt-1 text-sm font-medium text-slate-600">
-              Every dose in one clear monitoring list
-            </p>
-          </div>
-          <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-blue-50 text-blue-600">
-            <BellRing className="h-5 w-5" />
-          </span>
+          <div><span className="text-xs font-bold uppercase tracking-wide text-blue-700">Dose monitoring</span><h2 className="mb-0 mt-1 text-lg font-bold text-slate-900">Today’s medicine schedule</h2><p className="mb-0 mt-1 text-sm font-medium text-slate-600">Send the patient a reminder when a dose is due or missed.</p></div>
+          <button aria-label="View medication calendar" className="grid h-12 w-12 shrink-0 place-items-center rounded-xl border border-blue-200 bg-white text-blue-700" onClick={() => setCalendarOpen(true)} type="button"><CalendarDays className="h-6 w-6" /></button>
         </div>
-        <div className="mt-4 grid gap-2">
-          {timeline.length ? (
-            timeline.slice(0, 5).map((dose) => {
-              const taken = dose.status === 'taken';
-              const overdue = dose.status === 'overdue';
-              const StatusIcon = taken ? CheckCircle2 : overdue ? AlertTriangle : Clock3;
-              return (
-                <article
-                  className={`grid min-h-[78px] grid-cols-[42px_minmax(0,1fr)_auto] items-center gap-3 rounded-xl border p-3 ${overdue ? 'border-rose-200 bg-rose-50' : taken ? 'border-emerald-200 bg-emerald-50' : 'border-slate-200 bg-slate-50'}`}
-                  key={dose.id}
-                >
-                  <span
-                    className={`grid h-10 w-10 place-items-center rounded-xl bg-white ${overdue ? 'text-rose-600' : taken ? 'text-emerald-600' : 'text-blue-600'}`}
-                  >
-                    <Pill className="h-5 w-5" />
-                  </span>
-                  <div className="min-w-0">
-                    <strong className="block truncate text-sm text-slate-900">
-                      {dose.medicine}
-                    </strong>
-                    <small className="mt-1 block truncate font-medium text-slate-600">
-                      {dose.instructions}
-                    </small>
-                    <span className="mt-1 inline-flex items-center gap-1 text-xs font-bold text-slate-600">
-                      <Clock3 className="h-3.5 w-3.5" />
-                      {dose.time}
-                    </span>
-                  </div>
-                  <span
-                    className={`inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[10px] font-bold ${overdue ? 'border-rose-200 bg-white text-rose-700' : taken ? 'border-emerald-200 bg-white text-emerald-700' : 'border-amber-200 bg-amber-50 text-amber-700'}`}
-                  >
-                    <StatusIcon className="h-3.5 w-3.5" />
-                    {taken ? 'Taken' : overdue ? 'Overdue' : 'Upcoming'}
-                  </span>
-                </article>
-              );
-            })
-          ) : (
-            <p className="m-0 rounded-xl bg-slate-50 p-4 text-center text-sm font-medium text-slate-600">
-              No reminders scheduled for today.
-            </p>
-          )}
-        </div>
+        <button className="mt-3 flex min-h-[48px] w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 text-sm font-bold text-white" onClick={() => setCalendarOpen(true)} type="button"><CalendarDays className="h-5 w-5" />View Calendar</button>
       </section>
+      <DoseSection status="upcoming" doses={timeline.filter((dose) => dose.status === 'upcoming')} onReminder={onSendReminder} />
+      <DoseSection status="overdue" doses={timeline.filter((dose) => dose.status === 'overdue')} onReminder={onSendReminder} />
+      <DoseSection status="taken" doses={timeline.filter((dose) => dose.status === 'taken')} onReminder={onSendReminder} />
       <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="flex items-center justify-between gap-3">
           <div>
@@ -297,7 +315,7 @@ export default function CaregiverRefills({
         </div>
         <div className="mt-4 grid gap-2">
           {medications.length ? (
-            medications.map((medicine) => {
+            (showAllMedications ? medications : medications.slice(0, 3)).map((medicine) => {
               const isRx =
                 String(medicine.rx_class || medicine.source || '')
                   .toLowerCase()
@@ -363,7 +381,19 @@ export default function CaregiverRefills({
             </div>
           )}
         </div>
+        {medications.length > 3 && (
+          <button
+            aria-expanded={showAllMedications}
+            className="mt-3 flex min-h-[50px] w-full items-center justify-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 text-sm font-bold text-blue-700"
+            onClick={() => setShowAllMedications((value) => !value)}
+            type="button"
+          >
+            {showAllMedications ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
+            {showAllMedications ? 'Show fewer medications' : `See all ${medications.length} medications`}
+          </button>
+        )}
       </section>
+      {calendarOpen && <DoseCalendar timeline={timeline} onClose={() => setCalendarOpen(false)} />}
       {editing && (
         <div
           className="fixed inset-0 z-[80] flex items-end justify-center bg-slate-950/45 p-0 sm:items-center sm:p-4"
@@ -625,7 +655,7 @@ export default function CaregiverRefills({
         </div>
         {stockAlerts.length ? (
           stockAlerts.map((item) => (
-            <CaregiverRefillAlert item={item} key={item.id} onOrderRefill={onOrderRefill} />
+            <CaregiverRefillAlert item={item} key={item.id} />
           ))
         ) : (
           <RefillEmptyState />

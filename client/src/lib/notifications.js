@@ -128,6 +128,52 @@ export async function scheduleDoseReminders(doses = []) {
 }
 
 /**
+ * Schedule caregiver-facing dose alerts on the native device. These alerts are
+ * stored by Android/iOS, so they can appear even after PharMate is closed.
+ * Patient reminders are left untouched; only prior caregiver alerts are replaced.
+ */
+export async function scheduleCaregiverDoseAlerts(doses = [], patientLabel = 'Linked patient') {
+  if (!isNative) return { supported: false, scheduled: 0 };
+  if (!(await ensurePermission())) return { supported: true, permission: false, scheduled: 0 };
+  const now = Date.now();
+  const upcoming = doses.filter(
+    (dose) =>
+      dose.status === 'upcoming' &&
+      dose.scheduledTime &&
+      new Date(dose.scheduledTime).getTime() > now
+  );
+  try {
+    const pending = await LocalNotifications.getPending();
+    const caregiverAlerts = pending.notifications.filter(
+      (notification) => notification.extra?.type === 'caregiver_dose_alert'
+    );
+    if (caregiverAlerts.length) {
+      await LocalNotifications.cancel({
+        notifications: caregiverAlerts.map((notification) => ({ id: notification.id })),
+      });
+    }
+    if (upcoming.length) {
+      await LocalNotifications.schedule({
+        notifications: upcoming.map((dose) => ({
+          id: notifId(`caregiver:${dose.id}`),
+          title: `${patientLabel} has a dose due`,
+          body: `${dose.medicine} is scheduled now. Open PharMate to send a reminder.`,
+          schedule: { at: new Date(dose.scheduledTime), allowWhileIdle: true },
+          extra: {
+            type: 'caregiver_dose_alert',
+            schedule_id: dose.id,
+            drug_name: dose.medicine,
+          },
+        })),
+      });
+    }
+    return { supported: true, permission: true, scheduled: upcoming.length };
+  } catch {
+    return { supported: true, permission: true, scheduled: 0, error: true };
+  }
+}
+
+/**
  * Speak the medicine name when a scheduled notification fires with the app open
  * (foreground voice prompt). Returns an unsubscribe fn. No-op off-device.
  */

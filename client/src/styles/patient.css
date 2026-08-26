@@ -6725,6 +6725,40 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   display: grid;
   gap: 0.5rem;
 }
+.pm-chat-history-header {
+  align-items: center;
+  display: flex;
+  gap: 0.75rem;
+  justify-content: space-between;
+  margin-bottom: 0.15rem;
+}
+.pm-chat-history-header h2 {
+  margin: 0;
+}
+.pm-chat-history-header small {
+  color: #64748b;
+  display: block;
+  font-size: 0.7rem;
+  margin-top: 0.16rem;
+}
+.pm-chat-history-header > button {
+  background: #fff;
+  border: 1.5px solid #4c8ce4;
+  border-radius: 0.55rem;
+  color: #2a67b8;
+  flex: 0 0 auto;
+  font-size: 0.75rem;
+  font-weight: 800;
+  min-height: 42px;
+  padding: 0.45rem 0.7rem;
+}
+.pm-chat-history-header > button:hover {
+  background: #eef6ff;
+}
+.pm-chat-history-header > button:focus-visible {
+  outline: 3px solid rgba(76, 140, 228, 0.35);
+  outline-offset: 2px;
+}
 .pm-chat-history > button {
   align-items: center;
   background: #f8fafc;
@@ -6838,6 +6872,28 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   height: 16px;
   width: 16px;
 }
+.pm-chat-history > .pm-history-see-all {
+  align-items: center;
+  background: #eef5ff;
+  border: 1.5px solid #a9c8f8;
+  border-radius: 0.65rem;
+  color: #1558c9;
+  display: flex;
+  font-size: 0.84rem;
+  font-weight: 800;
+  justify-content: center;
+  margin-top: 0.15rem;
+  min-height: 50px;
+  padding: 0.65rem 1rem;
+  width: 100%;
+}
+.pm-chat-history > .pm-history-see-all:hover {
+  background: #e2edff;
+}
+.pm-chat-history > .pm-history-see-all:focus-visible {
+  outline: 3px solid #4c8ce4;
+  outline-offset: 2px;
+}
 .pm-history-label-editor {
   background: #fff;
   border: 1px solid #cbd9ec;
@@ -6887,8 +6943,9 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
     grid-column: 1/-1;
   }
 }
-.pm-chat-history > button .pm-history-chat-type {
+.pm-history-chat-type {
   align-items: center;
+  border: 1px solid transparent;
   border-radius: 999px;
   display: inline-flex;
   flex-direction: row;
@@ -6904,13 +6961,14 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   width: 14px;
 }
 .pm-history-chat-type.standard {
-  background: #eef2f7;
-  color: #405474;
+  background: #eaf3ff;
+  border-color: #b9d5f7;
+  color: #245fae;
 }
 .pm-history-chat-type.priority {
-  background: #fff3b8;
-  border: 1px solid #e3c65e;
-  color: #604700;
+  background: #fff7d6;
+  border-color: #ebcf68;
+  color: #705500;
 }
 
 /* Orders storefront — request/status only; branch confirms inventory and payment */

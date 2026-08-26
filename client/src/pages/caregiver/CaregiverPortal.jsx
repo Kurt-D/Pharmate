@@ -6,6 +6,7 @@ import { apiUrl } from '../../config.js';
 import { useAccessibility } from '../../context/AccessibilityContext.jsx';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { useLanguage } from '../../context/LanguageContext.jsx';
+import { scheduleCaregiverDoseAlerts } from '../../lib/notifications.js';
 import CaregiverDashboard from './CaregiverDashboard.jsx';
 import CaregiverNavbar from './CaregiverNavbar.jsx';
 import CaregiverRefills from './CaregiverRefills.jsx';
@@ -14,7 +15,6 @@ import CaregiverPatientInfo from './CaregiverPatientInfo.jsx';
 import CaregiverOrders from './CaregiverOrders.jsx';
 import LinkPatientModal from './LinkPatientModal.jsx';
 import VoiceReminderModal from './VoiceReminderModal.jsx';
-import RefillOrderSheet from './RefillOrderSheet.jsx';
 import '../../styles/caregiver-portal.css';
 
 const MOCK_TIMELINE = [
@@ -117,6 +117,7 @@ function normalizeTimeline(doses) {
           ? 'Scheduled'
           : scheduled.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
         period: Number.isNaN(scheduled.getTime()) ? 'morning' : periodFor(scheduled),
+        scheduledTime: Number.isNaN(scheduled.getTime()) ? null : scheduled.toISOString(),
         ...statusForDose(dose),
       };
     })
@@ -141,13 +142,11 @@ export default function CaregiverPortal() {
   const [medications, setMedications] = useState([]);
   const [timeline, setTimeline] = useState([]);
   const [orders, setOrders] = useState([]);
-  const [branches, setBranches] = useState([]);
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [previewMode, setPreviewMode] = useState(false);
   const [linkOpen, setLinkOpen] = useState(false);
   const [voiceDose, setVoiceDose] = useState(null);
-  const [refillItem, setRefillItem] = useState(null);
   const [snoozedUntil, setSnoozedUntil] = useState(null);
   const [toast, setToast] = useState(null);
   const [caregiverNotifications, setCaregiverNotifications] = useState([]);
@@ -165,15 +164,13 @@ export default function CaregiverPortal() {
   const loadBase = useCallback(async () => {
     setLoading(true);
     try {
-      const [patientResult, branchResult, profileResult, alertResult] = await Promise.allSettled([
+      const [patientResult, profileResult, alertResult] = await Promise.allSettled([
         api('/api/caregiver/patients'),
-        api('/api/directory/branches'),
         api('/api/caregiver/profile'),
         api('/api/caregiver/alerts'),
       ]);
       const linked = patientResult.status === 'fulfilled' ? patientResult.value.data : [];
       setPatients(linked.map((patient) => ({ ...patient, displayLabel: patientLabel(patient) })));
-      setBranches(branchResult.status === 'fulfilled' ? branchResult.value.data : []);
       if (profileResult.status === 'fulfilled') setProfile(profileResult.value.data);
       if (alertResult.status === 'fulfilled') setCaregiverNotifications(alertResult.value.data);
       setSelectedCode((current) => current || linked[0]?.patient_code || '');
@@ -270,6 +267,11 @@ export default function CaregiverPortal() {
   );
   const selectedPatient = patients.find((patient) => patient.patient_code === selectedCode);
 
+  useEffect(() => {
+    if (!selectedCode || previewMode) return;
+    scheduleCaregiverDoseAlerts(timeline, selectedPatient?.displayLabel || 'Linked patient');
+  }, [previewMode, selectedCode, selectedPatient?.displayLabel, timeline]);
+
   async function connectPatient({ code, relationship }) {
     await api('/api/caregiver/link', { method: 'POST', body: { code, relationship } });
     showToast('Patient linked successfully. Monitoring is now available.');
@@ -310,17 +312,6 @@ export default function CaregiverPortal() {
     setSnoozedUntil(until);
     showToast('Caregiver alert window snoozed for 15 minutes.');
     window.setTimeout(() => setSnoozedUntil(null), 15 * 60000);
-  }
-
-  async function submitRefill({ item, branchId }) {
-    if (!item.medicationId)
-      throw new Error('A live medicine record is required before requesting a refill.');
-    await api(`/api/caregiver/patients/${selectedCode}/refills`, {
-      method: 'POST',
-      body: { medication_id: item.medicationId, branch_id: branchId },
-    });
-    showToast(`Refill request for ${item.name} submitted.`);
-    await loadPatient(selectedCode);
   }
 
   async function updatePatientMedication(medicationId, body) {
@@ -399,28 +390,6 @@ export default function CaregiverPortal() {
     <div className="cg-portal min-h-screen bg-slate-50 font-caregiver">
       <div className={accessibilityClasses}>
         <div className="cg-scroll-area">
-          <div className="flex min-h-[64px] items-center justify-between border-b border-slate-200 bg-white px-4 py-2">
-            <div>
-              <strong className="block text-sm font-bold text-blue-700">PharMate Caregiver</strong>
-              <small className="font-medium text-slate-500">Family medication support</small>
-            </div>
-            <button
-              aria-label="Open caregiver notifications"
-              className="relative grid h-12 w-12 place-items-center rounded-full border border-blue-200 bg-blue-50 text-blue-700 active:scale-95"
-              onClick={readCaregiverNotifications}
-              type="button"
-            >
-              <Bell className="h-6 w-6" />
-              {caregiverNotifications.filter((item) => item.status === 'unseen').length > 0 && (
-                <span className="absolute -right-0.5 -top-0.5 grid min-h-[20px] min-w-[20px] place-items-center rounded-full bg-rose-600 px-1 text-[10px] font-bold text-white">
-                  {Math.min(
-                    99,
-                    caregiverNotifications.filter((item) => item.status === 'unseen').length
-                  )}
-                </span>
-              )}
-            </button>
-          </div>
           {loading && !patients.length ? (
             <div className="grid min-h-[70vh] place-items-center px-4">
               <div className="text-center">
@@ -441,13 +410,14 @@ export default function CaregiverPortal() {
                   timeline={timeline}
                   previewMode={previewMode}
                   patientLabel={selectedPatient?.displayLabel}
+                  notificationCount={caregiverNotifications.filter((item) => item.status === 'unseen').length}
+                  onOpenNotifications={readCaregiverNotifications}
                   onVoiceReminder={(dose) =>
                     setVoiceDose(dose || timeline.find((item) => item.status !== 'taken') || null)
                   }
                   onSnooze={snoozeAlert}
                   snoozedUntil={snoozedUntil}
-                  refillAlert={stockAlerts[0]}
-                  onOrderRefill={setRefillItem}
+                  stockAlerts={stockAlerts}
                   onNavigate={changePage}
                 />
               )}
@@ -457,7 +427,6 @@ export default function CaregiverPortal() {
                   stockAlerts={stockAlerts}
                   orders={orders}
                   previewMode={previewMode}
-                  onOrderRefill={setRefillItem}
                   timeline={timeline}
                   canManageMedications={Boolean(selectedPatient?.can_manage_medications)}
                   onUpdateMedication={updatePatientMedication}
@@ -465,6 +434,7 @@ export default function CaregiverPortal() {
                   onSearchDrugs={searchCaregiverDrugs}
                   onAddMedicine={addPatientMedicine}
                   onCreateSuggestedSchedule={createSuggestedSchedule}
+                  onSendReminder={(dose) => setVoiceDose(dose)}
                 />
               )}
               {activePage === 'patient-info' && (
@@ -527,12 +497,6 @@ export default function CaregiverPortal() {
         medicine={voiceDose?.medicine}
         onClose={() => setVoiceDose(null)}
         onSend={sendVoiceAlert}
-      />
-      <RefillOrderSheet
-        item={refillItem}
-        branches={branches}
-        onClose={() => setRefillItem(null)}
-        onSubmit={submitRefill}
       />
       {notificationsOpen && (
         <div
