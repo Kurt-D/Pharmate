@@ -3,7 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { pool } from '../db/connection.js';
 import { requireAuth } from '../middleware/auth.js';
 import { requireRole } from '../middleware/role.js';
-import { canonicalName } from '../services/formulary.js';
+import { canonicalName, searchDrugs } from '../services/formulary.js';
 import {
   approvePrescriptionForSchedule,
   claimValidation,
@@ -121,6 +121,86 @@ router.get('/patients', async (_req, res) => {
         : null,
     }))
   );
+});
+
+// ── GET /api/pharmacist/adherence ────────────────────────────────────────────
+// Seven-day medication adherence monitoring for pharmacist follow-up. The
+// response uses patient codes only and deliberately excludes names, diagnoses,
+// contact details, and caregiver details.
+router.get('/adherence', async (_req, res) => {
+  const [patients] = await pool.execute(
+    `SELECT p.patient_code,
+            COUNT(ms.id) AS scheduled,
+            SUM(ms.status = 'taken') AS taken,
+            SUM(ms.status = 'taken_late') AS taken_late,
+            SUM(ms.status = 'missed') AS missed
+     FROM patients p
+     LEFT JOIN medication_schedules ms
+       ON ms.patient_id = p.id
+      AND ms.scheduled_time >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)
+      AND ms.scheduled_time <= NOW(3)
+     GROUP BY p.id, p.patient_code
+     HAVING scheduled > 0
+     ORDER BY missed DESC, patient_code`
+  );
+  const [trendRows] = await pool.execute(
+    `SELECT DATE_FORMAT(scheduled_time, '%Y-%m-%d') AS date,
+            COUNT(*) AS scheduled,
+            SUM(status IN ('taken','taken_late')) AS completed,
+            SUM(status = 'missed') AS missed
+     FROM medication_schedules
+     WHERE scheduled_time >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)
+       AND scheduled_time <= NOW(3)
+     GROUP BY DATE(scheduled_time)
+     ORDER BY DATE(scheduled_time)`
+  );
+
+  const patientRows = patients.map((row) => {
+    const scheduled = Number(row.scheduled ?? 0);
+    const taken = Number(row.taken ?? 0);
+    const takenLate = Number(row.taken_late ?? 0);
+    const missed = Number(row.missed ?? 0);
+    return {
+      patient_code: row.patient_code,
+      scheduled,
+      taken,
+      taken_late: takenLate,
+      missed,
+      adherence_pct: scheduled ? Math.round(((taken + takenLate) / scheduled) * 100) : 0,
+    };
+  });
+  const totals = patientRows.reduce((result, row) => ({
+    scheduled: result.scheduled + row.scheduled,
+    completed: result.completed + row.taken + row.taken_late,
+    missed: result.missed + row.missed,
+    needs_attention: result.needs_attention + Number(row.missed > 0 || row.adherence_pct < 80),
+  }), { scheduled: 0, completed: 0, missed: 0, needs_attention: 0 });
+  const trendMap = new Map(trendRows.map((row) => [row.date, row]));
+  const trend = Array.from({ length: 7 }, (_, index) => {
+    const date = new Date();
+    date.setHours(12, 0, 0, 0);
+    date.setDate(date.getDate() - (6 - index));
+    const key = date.toISOString().slice(0, 10);
+    const row = trendMap.get(key);
+    const scheduled = Number(row?.scheduled ?? 0);
+    const completed = Number(row?.completed ?? 0);
+    return {
+      date: key,
+      scheduled,
+      completed,
+      missed: Number(row?.missed ?? 0),
+      adherence_pct: scheduled ? Math.round((completed / scheduled) * 100) : 0,
+    };
+  });
+
+  res.json({
+    summary: {
+      ...totals,
+      adherence_pct: totals.scheduled ? Math.round((totals.completed / totals.scheduled) * 100) : 0,
+    },
+    trend,
+    patients: patientRows,
+  });
 });
 
 // ── Ask Your Pharmacist — pharmacist side (D-I) ───────────────────────────────
@@ -272,6 +352,16 @@ router.post('/validate', async (req, res) => {
     return res.status(409).json({ error: 'No safe schedule is available to approve' });
   }
   res.json(result);
+});
+
+// ── GET /api/pharmacist/drugs?q= ──────────────────────────────────────────────
+// Shared medicine catalog used by the pharmacist Drug Database screen.
+router.get('/drugs', async (req, res) => {
+  const results = await searchDrugs(req.query.q, req.query.limit || 500, {
+    rxClass: req.query.rx_class,
+    category: req.query.category,
+  });
+  res.json(results);
 });
 
 // ── GET /api/pharmacist/pending-drugs ─────────────────────────────────────────

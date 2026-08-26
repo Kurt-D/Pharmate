@@ -1,7 +1,7 @@
 /** @type {import('tailwindcss').Config} */
 export default {
   content: ['./index.html', './src/**/*.{js,jsx}'],
-  important: '.cg-portal',
+  important: '.pharmate-app',
   corePlugins: {
     preflight: false,
   },
@@ -14,7 +14,7 @@ export default {
         },
       },
       fontFamily: {
-        caregiver: ['"Plus Jakarta Sans"', 'Poppins', 'system-ui', 'sans-serif'],
+        caregiver: ['Poppins', 'system-ui', 'sans-serif'],
       },
       boxShadow: {
         'health-card': '0 5px 16px rgba(30, 46, 74, 0.07)',

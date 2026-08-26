@@ -548,3 +548,162 @@
     grid-template-columns: 1fr 1fr;
   }
 }
+
+/* Shared formulary on the pharmacist Drug Database page. */
+.pw-drug-catalog {
+  overflow: hidden;
+  padding: 0;
+}
+
+.pw-drug-catalog__header {
+  align-items: flex-end;
+  border-bottom: 1px solid #e7ecf3;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  padding: 1rem 1.1rem;
+}
+
+.pw-drug-catalog__header h3 {
+  color: #1d2d47;
+  font-size: 1rem;
+  font-weight: 800;
+  margin: 0;
+}
+
+.pw-drug-catalog__header p {
+  color: #6d7a8e;
+  font-size: 0.76rem;
+  margin: 0.25rem 0 0;
+}
+
+.pw-drug-catalog__filters {
+  display: grid;
+  gap: 0.55rem;
+  grid-template-columns: minmax(220px, 1fr) 145px;
+  width: min(100%, 470px);
+}
+
+.pw-drug-catalog__filters .form-control,
+.pw-drug-catalog__filters .form-select {
+  border-color: #d3deec;
+  min-height: 38px;
+}
+
+.pw-drug-catalog__count {
+  color: #6d7a8e;
+  font-size: 0.7rem;
+  padding: 0.65rem 1.1rem 0;
+}
+
+.pw-drug-catalog__table-wrap {
+  max-height: 560px;
+  overflow: auto;
+  padding: 0.55rem 1rem 1rem;
+}
+
+.pw-drug-catalog table {
+  min-width: 820px;
+}
+
+.pw-drug-catalog thead {
+  background: #f7f9fc;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.pw-drug-catalog th {
+  border-bottom: 1px solid #dbe3ef;
+  color: #66748a;
+  font-size: 0.67rem;
+  font-weight: 800;
+  letter-spacing: 0.035em;
+  padding: 0.65rem;
+  text-transform: uppercase;
+}
+
+.pw-drug-catalog td {
+  border-color: #edf1f6;
+  color: #425169;
+  font-size: 0.76rem;
+  padding: 0.65rem;
+  vertical-align: middle;
+}
+
+.pw-drug-catalog td:first-child {
+  color: #1d2d47;
+  min-width: 190px;
+}
+
+.pw-drug-catalog td:first-child strong,
+.pw-drug-catalog td:first-child small {
+  display: block;
+}
+
+.pw-drug-catalog td:first-child strong {
+  font-size: 0.8rem;
+  text-transform: capitalize;
+}
+
+.pw-drug-catalog td:first-child small {
+  color: #7b8799;
+  font-size: 0.66rem;
+  margin-top: 0.12rem;
+}
+
+.pw-drug-class,
+.pw-drug-status {
+  border-radius: 999px;
+  display: inline-flex;
+  font-size: 0.64rem;
+  font-weight: 800;
+  justify-content: center;
+  line-height: 1;
+  padding: 0.35rem 0.55rem;
+  white-space: nowrap;
+}
+
+.pw-drug-class.otc {
+  background: #e9f8ee;
+  color: #20753a;
+}
+
+.pw-drug-class.rx {
+  background: #eef4ff;
+  color: #195cc6;
+}
+
+.pw-drug-status.available {
+  background: #eef9f1;
+  color: #24783b;
+}
+
+.pw-drug-status.unavailable {
+  background: #fff0f1;
+  color: #b43843;
+}
+
+.pw-drug-catalog__empty {
+  color: #6d7a8e;
+  font-size: 0.8rem;
+  padding: 2.5rem 1rem;
+  text-align: center;
+}
+
+@media (max-width: 900px) {
+  .pw-drug-catalog__header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .pw-drug-catalog__filters {
+    width: 100%;
+  }
+}
+
+@media (max-width: 560px) {
+  .pw-drug-catalog__filters {
+    grid-template-columns: 1fr;
+  }
+}

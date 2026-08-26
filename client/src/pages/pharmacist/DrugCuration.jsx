@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { api } from '../../api.js';
 
 const EMPTY_FORM = {
@@ -13,6 +13,9 @@ const EMPTY_FORM = {
 
 export default function DrugCuration() {
   const [queue, setQueue] = useState(null);
+  const [catalog, setCatalog] = useState(null);
+  const [catalogSearch, setCatalogSearch] = useState('');
+  const [catalogClass, setCatalogClass] = useState('ALL');
   const [selected, setSelected] = useState(null);
   const [form, setForm] = useState(EMPTY_FORM);
   const [busy, setBusy] = useState(false);
@@ -21,8 +24,12 @@ export default function DrugCuration() {
 
   async function load() {
     try {
-      const r = await api('/api/pharmacist/pending-drugs');
-      setQueue(r.data);
+      const [queueResponse, catalogResponse] = await Promise.all([
+        api('/api/pharmacist/pending-drugs'),
+        api('/api/pharmacist/drugs?q=&limit=500'),
+      ]);
+      setQueue(queueResponse.data);
+      setCatalog(catalogResponse.data);
       setError('');
     } catch (e) {
       setError(e.message);
@@ -75,6 +82,21 @@ export default function DrugCuration() {
   function set(k, v) {
     setForm((f) => ({ ...f, [k]: v }));
   }
+
+  const visibleCatalog = useMemo(() => {
+    if (!catalog) return [];
+    const query = catalogSearch.trim().toLowerCase();
+    return catalog.filter((medicine) => {
+      if (catalogClass !== 'ALL' && medicine.rx_class !== catalogClass) return false;
+      if (!query) return true;
+      return [
+        medicine.generic_name,
+        medicine.therapeutic_category,
+        medicine.drug_class,
+        medicine.common_uses,
+      ].some((value) => String(value || '').toLowerCase().includes(query));
+    });
+  }, [catalog, catalogClass, catalogSearch]);
 
   return (
     <>
@@ -234,6 +256,91 @@ export default function DrugCuration() {
           </div>
         </div>
       </div>
+
+      <section className="pw-card pw-drug-catalog mt-3">
+        <div className="pw-drug-catalog__header">
+          <div>
+            <div className="d-flex align-items-center gap-2">
+              <h3>Medicine Catalog</h3>
+              <span className="badge bg-primary-subtle text-primary">
+                {catalog ? catalog.length : '…'} medicines
+              </span>
+            </div>
+            <p>Shared catalog available to patients, pharmacists, and administrators.</p>
+          </div>
+          <div className="pw-drug-catalog__filters">
+            <input
+              aria-label="Search medicine catalog"
+              className="form-control form-control-sm"
+              onChange={(event) => setCatalogSearch(event.target.value)}
+              placeholder="Search name, category, or use"
+              type="search"
+              value={catalogSearch}
+            />
+            <select
+              aria-label="Filter by prescription class"
+              className="form-select form-select-sm"
+              onChange={(event) => setCatalogClass(event.target.value)}
+              value={catalogClass}
+            >
+              <option value="ALL">All classes</option>
+              <option value="OTC">OTC</option>
+              <option value="RX">Prescription (Rx)</option>
+            </select>
+          </div>
+        </div>
+
+        {catalog === null ? (
+          <div className="pw-drug-catalog__empty">Loading medicine catalog…</div>
+        ) : visibleCatalog.length === 0 ? (
+          <div className="pw-drug-catalog__empty">No medicines match your search.</div>
+        ) : (
+          <>
+            <div className="pw-drug-catalog__count">
+              Showing {visibleCatalog.length} of {catalog.length}
+            </div>
+            <div className="pw-drug-catalog__table-wrap">
+              <table className="table table-sm align-middle mb-0">
+                <thead>
+                  <tr>
+                    <th>Generic medicine</th>
+                    <th>Class</th>
+                    <th>Category</th>
+                    <th>Strength / form</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {visibleCatalog.map((medicine) => (
+                    <tr key={medicine.id}>
+                      <td>
+                        <strong>{medicine.generic_name}</strong>
+                        {medicine.drug_class && <small>{medicine.drug_class}</small>}
+                      </td>
+                      <td>
+                        <span className={`pw-drug-class ${medicine.rx_class === 'OTC' ? 'otc' : 'rx'}`}>
+                          {medicine.rx_class === 'OTC' ? 'OTC' : 'Rx'}
+                        </span>
+                      </td>
+                      <td>{medicine.therapeutic_category || '—'}</td>
+                      <td>
+                        {[medicine.common_strength, medicine.dosage_form]
+                          .filter(Boolean)
+                          .join(' · ') || '—'}
+                      </td>
+                      <td>
+                        <span className={`pw-drug-status ${medicine.availability ? 'available' : 'unavailable'}`}>
+                          {medicine.availability ? 'Available' : 'Unavailable'}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+      </section>
     </>
   );
 }

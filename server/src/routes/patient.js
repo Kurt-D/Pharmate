@@ -273,7 +273,8 @@ router.delete('/invites/:id', async (req, res) => {
 
 router.get('/caregivers', async (req, res) => {
   const [rows] = await pool.execute(
-    `SELECT cp.id, u.email, cp.relationship, cp.linked_at, cp.status
+    `SELECT cp.id, u.email, cp.relationship, cp.linked_at, cp.status,
+            cp.can_manage_medications
      FROM caregiver_patients cp
      JOIN users u ON u.id = cp.caregiver_id
      WHERE cp.patient_id = ? AND cp.status = 'active'
@@ -281,6 +282,20 @@ router.get('/caregivers', async (req, res) => {
     [req.user.sub]
   );
   res.json(rows);
+});
+
+router.patch('/caregivers/:linkId/permissions', async (req, res) => {
+  if (typeof req.body?.can_manage_medications !== 'boolean') {
+    return res.status(400).json({ error: 'can_manage_medications must be true or false' });
+  }
+  const [result] = await pool.execute(
+    `UPDATE caregiver_patients
+     SET can_manage_medications = ?
+     WHERE id = ? AND patient_id = ? AND status = 'active'`,
+    [req.body.can_manage_medications ? 1 : 0, req.params.linkId, req.user.sub]
+  );
+  if (!result.affectedRows) return res.status(404).json({ error: 'Caregiver link not found' });
+  res.json({ can_manage_medications: req.body.can_manage_medications });
 });
 
 router.delete('/caregivers/:linkId', async (req, res) => {

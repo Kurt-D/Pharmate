@@ -77,7 +77,7 @@ export async function searchDrugs(query, limit = 20, filters = {}) {
   const [rows] = await pool.execute(
     `SELECT id, generic_name, brand_names_json, min_interval_hours, max_daily_doses,
             is_prn_default, default_interval_hours, meal_anchor_code, is_restricted,
-            rx_class, is_provisional, therapeutic_category, drug_class, common_uses,
+            availability, rx_class, is_provisional, therapeutic_category, drug_class, common_uses,
             short_description, common_strength, dosage_form
      FROM (
        SELECT dr.*,

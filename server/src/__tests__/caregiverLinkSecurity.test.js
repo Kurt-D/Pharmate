@@ -155,6 +155,7 @@ test('patient lists only privacy-appropriate active caregiver details', async ()
     relationship: 'Daughter',
     linked_at: expect.any(String),
     status: 'active',
+    can_manage_medications: 0,
   });
   activeLinkId = listed.body[0].id;
   expect(JSON.stringify(listed.body)).not.toContain(patientA.id);

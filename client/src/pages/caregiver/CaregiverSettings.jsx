@@ -30,7 +30,7 @@ export default function CaregiverSettings({
 }) {
   return (
     <main className="grid gap-4 px-4 pb-4 pt-5">
-      <header>
+      <header className="cg-page-header">
         <p className="m-0 text-sm font-semibold text-blue-700">Caregiver account</p>
         <h1 className="mb-0 mt-1 text-2xl font-bold tracking-tight text-slate-900">Profile</h1>
         <p className="mb-0 mt-1 text-sm font-medium leading-5 text-slate-600">

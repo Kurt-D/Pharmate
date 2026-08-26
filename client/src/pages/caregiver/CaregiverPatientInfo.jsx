@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import {
   AlertTriangle,
   ContactRound,
-  Droplets,
   HeartPulse,
   Link2,
   Plus,
@@ -17,7 +16,6 @@ import {
 const OBSERVATIONS = [
   { id: 'mood', label: 'Good Mood', icon: Smile },
   { id: 'bp', label: 'BP Checked', icon: HeartPulse },
-  { id: 'hydrated', label: 'Well Hydrated', icon: Droplets },
   { id: 'dizzy', label: 'Mild Dizziness', icon: AlertTriangle },
   { id: 'meals', label: 'Finished Meals', icon: Utensils },
 ];
@@ -70,7 +68,7 @@ export default function CaregiverPatientInfo({ patient, onAddPatient }) {
   if (!patient)
     return (
       <main className="grid gap-4 px-4 pb-4 pt-5">
-        <header>
+        <header className="cg-page-header">
           <p className="m-0 text-sm font-semibold text-blue-700">Patient information</p>
           <h1 className="mb-0 mt-1 text-2xl font-bold tracking-tight text-slate-900">
             Patient Info
@@ -96,7 +94,7 @@ export default function CaregiverPatientInfo({ patient, onAddPatient }) {
 
   return (
     <main className="grid gap-4 px-4 pb-4 pt-5">
-      <header>
+      <header className="cg-page-header">
         <p className="m-0 text-sm font-semibold text-blue-700">Linked patient</p>
         <h1 className="mb-0 mt-1 text-2xl font-bold tracking-tight text-slate-900">Patient Info</h1>
         <p className="mb-0 mt-1 text-sm font-medium leading-5 text-slate-600">

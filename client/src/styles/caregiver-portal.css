@@ -1,0 +1,362 @@
+.cg-portal {
+  width: 100%;
+  min-height: 100vh;
+  background: #f8fafc;
+  color: #1e2e4a;
+  font-family: 'Poppins', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+.cg-portal .cg-shell {
+  width: 100%;
+  max-width: 430px;
+  height: 100vh;
+  height: 100dvh;
+  min-height: 600px;
+  margin-inline: auto;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  background: #f5f7fc;
+  border-inline: 1px solid #e2e8f0;
+  box-shadow: 0 10px 34px rgba(30, 46, 74, 0.1);
+}
+
+.cg-portal .cg-scroll-area {
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding-top: env(safe-area-inset-top);
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: #bfd2ee transparent;
+}
+
+.cg-portal .cg-scroll-area > main {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.cg-portal .cg-scroll-area > main > header h1 {
+  color: #2878df;
+  letter-spacing: -0.025em;
+}
+
+.cg-portal .cg-scroll-area > main > section.bg-white {
+  border-color: #dbe5f1;
+  box-shadow: 0 4px 14px rgba(30, 46, 74, 0.055);
+}
+
+.cg-portal .cg-bottomnav {
+  position: relative !important;
+  inset: auto !important;
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  min-height: 74px;
+  border-top: 1px solid #dbe5f1 !important;
+  background: rgba(255, 255, 255, 0.98) !important;
+  box-shadow: 0 -5px 18px rgba(30, 46, 74, 0.06);
+}
+
+.cg-portal .cg-bottomnav__item {
+  position: relative;
+  min-width: 0;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: #64748b;
+  font-family: inherit;
+  line-height: 1.15;
+}
+
+.cg-portal .cg-bottomnav__item svg {
+  color: currentColor;
+}
+
+.cg-portal .cg-bottomnav__item.is-active {
+  color: #2878df !important;
+}
+
+.cg-portal .cg-bottomnav__item.is-active::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  width: 28px;
+  height: 3px;
+  border-radius: 0 0 999px 999px;
+  background: #4c8ce4;
+}
+
+@media (max-width: 430px) {
+  .cg-portal .cg-shell {
+    border-inline: 0;
+    box-shadow: none;
+  }
+}
+
+@media (min-width: 431px) {
+  .cg-portal {
+    padding-inline: 12px;
+  }
+}
+
+/* Recare-inspired organization with PharMate branding. */
+.cg-portal .cg-shell {
+  background:
+    radial-gradient(circle at 96% 4%, rgba(76, 140, 228, 0.12), transparent 180px),
+    #f5f8fd;
+}
+
+.cg-portal .cg-scroll-area > main {
+  gap: 1rem;
+  padding-left: 1rem;
+  padding-right: 1rem;
+}
+
+.cg-portal .cg-home-hero {
+  position: relative;
+  overflow: hidden;
+  padding: 1.15rem;
+  border: 1px solid #cfe0f6;
+  border-radius: 1.35rem;
+  background: #fff;
+  box-shadow: 0 14px 30px rgba(47, 90, 148, 0.09);
+}
+
+.cg-portal .cg-home-hero::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 5px;
+  background: #4c8ce4;
+}
+
+.cg-portal .cg-home-hero::after {
+  content: '';
+  position: absolute;
+  right: -30px;
+  top: -38px;
+  width: 125px;
+  height: 125px;
+  border-radius: 50%;
+  background: rgba(145, 208, 108, 0.13);
+  pointer-events: none;
+}
+
+.cg-portal .cg-home-hero h1 {
+  color: #2878df !important;
+  font-size: 1.65rem;
+}
+
+.cg-portal .cg-home-hero__mark {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  flex: 0 0 auto;
+  width: 3.25rem;
+  height: 3.25rem;
+  place-items: center;
+  border: 1px solid #bcd6f8;
+  border-radius: 1rem;
+  background: #eaf3ff;
+  color: #2878df;
+  box-shadow: 0 7px 16px rgba(42, 103, 184, 0.12);
+}
+
+.cg-portal .cg-live-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: 0.85rem;
+  padding: 0.38rem 0.65rem;
+  border: 1px solid;
+  border-radius: 999px;
+  font-size: 0.69rem;
+  font-weight: 750;
+}
+
+.cg-portal .cg-live-status.is-live { border-color: #bfe3b1; background: #f0faeb; color: #28751d; }
+.cg-portal .cg-live-status.is-preview { border-color: #f2da89; background: #fff9dc; color: #725c00; }
+
+.cg-portal .cg-patient-switcher,
+.cg-portal .cg-adherence-card,
+.cg-portal .cg-timeline-card,
+.cg-portal .cg-smart-reminders {
+  border-color: #d5e2f1 !important;
+  border-radius: 1.35rem !important;
+  box-shadow: 0 12px 28px rgba(47, 76, 118, 0.075) !important;
+}
+
+.cg-portal .cg-patient-switcher {
+  position: relative;
+  background: linear-gradient(135deg, #fff 0%, #f7fbff 100%) !important;
+}
+
+.cg-portal .cg-patient-switcher select {
+  border-color: #c8d9ef;
+  background: #fff;
+}
+
+.cg-portal .cg-dose-alert {
+  border-radius: 1.35rem !important;
+  box-shadow: 0 14px 30px rgba(185, 28, 28, 0.09) !important;
+}
+
+.cg-portal .cg-adherence-card {
+  position: relative;
+  overflow: hidden;
+}
+
+.cg-portal .cg-adherence-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 1rem;
+  right: 1rem;
+  height: 3px;
+  border-radius: 0 0 999px 999px;
+  background: linear-gradient(90deg, #4c8ce4 0 72%, #91d06c 72% 100%);
+}
+
+.cg-portal .cg-timeline-card > div:last-child > article,
+.cg-portal .cg-smart-reminders article {
+  box-shadow: 0 4px 12px rgba(51, 77, 112, 0.045);
+}
+
+.cg-portal .cg-page-header {
+  position: relative;
+  padding: 0.25rem 0 0.9rem 0.85rem;
+  border-bottom: 1px solid #d8e4f1;
+}
+
+.cg-portal .cg-page-header::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0.28rem;
+  width: 4px;
+  height: 3rem;
+  border-radius: 999px;
+  background: #91d06c;
+}
+
+.cg-portal .cg-page-header h1 { color: #2878df !important; }
+
+.cg-portal .cg-smart-reminders {
+  position: relative;
+  overflow: hidden;
+}
+
+.cg-portal .cg-smart-reminders::after {
+  content: '';
+  position: absolute;
+  right: -35px;
+  top: -42px;
+  width: 100px;
+  height: 100px;
+  border-radius: 50%;
+  background: rgba(76, 140, 228, 0.07);
+  pointer-events: none;
+}
+
+.cg-portal .cg-scroll-area > main > section.bg-white,
+.cg-portal .cg-scroll-area > main > article.bg-white {
+  border-radius: 1.25rem;
+  border-color: #d8e4f1;
+  box-shadow: 0 9px 24px rgba(47, 76, 118, 0.06);
+}
+
+.cg-portal .cg-bottomnav {
+  min-height: 78px;
+  border-top-color: #cad9eb !important;
+  box-shadow: 0 -8px 24px rgba(30, 66, 116, 0.08);
+}
+
+.cg-portal .cg-bottomnav__item svg {
+  box-sizing: content-box;
+  padding: 0.28rem;
+  border-radius: 0.65rem;
+  transition: background 160ms ease, color 160ms ease;
+}
+
+.cg-portal .cg-bottomnav__item.is-active svg {
+  background: #eaf3ff;
+  color: #2878df;
+}
+
+.cg-portal .cg-bottomnav__item.is-active::before { display: none; }
+
+.cg-portal .cg-bottomnav__item.is-active span { font-weight: 800; }
+
+.cg-portal .pm-a11y-dark-mode .cg-home-hero,
+.cg-portal .pm-a11y-dark-mode .cg-patient-switcher,
+.cg-portal .pm-a11y-dark-mode .cg-adherence-card,
+.cg-portal .pm-a11y-dark-mode .cg-timeline-card,
+.cg-portal .pm-a11y-dark-mode .cg-smart-reminders {
+  background: #1b232d !important;
+  border-color: #3b4b5e !important;
+}
+
+@media (max-width: 360px) {
+  .cg-portal .cg-home-hero { padding: 1rem; }
+  .cg-portal .cg-home-hero h1 { font-size: 1.45rem; }
+  .cg-portal .cg-home-hero__mark { width: 2.8rem; height: 2.8rem; }
+}
+
+/* Reference-inspired caregiver home: bright header, floating selector and compact modules. */
+.cg-portal .cg-home-hero {
+  min-height: 160px;
+  padding: 1.35rem 1.25rem 2.65rem;
+  border: 0;
+  border-radius: 0 0 2rem 2rem;
+  background: #4c8ce4;
+  color: #fff;
+  box-shadow: 0 16px 30px rgba(42, 103, 184, 0.22);
+}
+
+.cg-portal .cg-home-hero::before { display: none; }
+.cg-portal .cg-home-hero::after { right: -34px; top: -48px; width: 170px; height: 170px; background: rgba(145, 208, 108, 0.2); }
+.cg-portal .cg-home-hero h1 { color: #fff !important; font-size: 1.7rem; }
+.cg-portal .cg-home-hero > div p,
+.cg-portal .cg-home-hero > p { color: #fff !important; }
+.cg-portal .cg-home-hero > p { max-width: 290px; opacity: 0.9; }
+.cg-portal .cg-home-hero__mark { border-color: rgba(255,255,255,.45); background: rgba(255,255,255,.2); color: #fff; box-shadow: none; }
+.cg-portal .cg-live-status { border-color: rgba(255,255,255,.38) !important; background: rgba(255,255,255,.16) !important; color: #fff !important; }
+
+.cg-portal .cg-patient-switcher {
+  z-index: 2;
+  margin: -2.4rem 0 0;
+  border: 1px solid #d7e3f1 !important;
+  background: #fff !important;
+  box-shadow: 0 16px 32px rgba(45, 75, 116, 0.14) !important;
+}
+
+.cg-portal .cg-adherence-card { background: linear-gradient(145deg,#fff 0%,#f7fbff 100%) !important; }
+.cg-portal .cg-checklist-icon { display: grid; width: 2.7rem; height: 2.7rem; place-items: center; border-radius: .85rem; background: #eaf3ff; color: #2878df; }
+.cg-portal .cg-timeline-card { background: #fff !important; }
+.cg-portal .cg-timeline-card > div:last-child::before { left: 1.22rem; background: #d7e5f4; }
+.cg-portal .cg-timeline-card article { border-radius: 1rem !important; background: #f8fbff; }
+
+.cg-portal .cg-pharmacy-support {
+  display: grid;
+  grid-template-columns: auto minmax(0,1fr);
+  gap: .8rem;
+  padding: 1rem;
+  border: 1px solid #cde4c3;
+  border-radius: 1.3rem;
+  background: linear-gradient(135deg,#f6fcf2,#fff);
+  box-shadow: 0 10px 24px rgba(55, 111, 42, .07);
+}
+.cg-portal .cg-pharmacy-support > span { display: grid; width: 2.8rem; height: 2.8rem; place-items: center; border-radius: .9rem; background: #91d06c; color: #1b4d08; }
+.cg-portal .cg-pharmacy-support small { color: #347722; font-size: .57rem; font-weight: 800; letter-spacing: .07em; }
+.cg-portal .cg-pharmacy-support h2 { margin: .15rem 0 0; color: #1e2e4a; font-size: .8rem; line-height: 1.35; }
+.cg-portal .cg-pharmacy-support p { margin: .25rem 0 0; color: #60708a; font-size: .64rem; line-height: 1.45; }
+.cg-portal .cg-pharmacy-support button { grid-column: 1/-1; display: flex; min-height: 46px; align-items: center; justify-content: center; gap: .4rem; border: 1px solid #bcd8af; border-radius: .8rem; background: #fff; color: #2f7620; font: inherit; font-size: .68rem; font-weight: 800; cursor: pointer; }
+.cg-portal .cg-pharmacy-support button:hover { background: #f1faed; }
+
+.cg-portal .pm-a11y-dark-mode .cg-home-hero { background: #2c68b8 !important; }
+.cg-portal .pm-a11y-dark-mode .cg-pharmacy-support { background: #1b232d; border-color: #3b4b5e; }
+.cg-portal .pm-a11y-dark-mode .cg-pharmacy-support h2 { color: #eef2f7; }

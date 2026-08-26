@@ -11,7 +11,7 @@ const ITEMS = [
 export default function CaregiverNavbar({ active, onChange }) {
   return (
     <nav
-      className="sticky bottom-0 z-40 grid w-full grid-cols-5 border-t border-slate-100 bg-white px-0 pb-[max(.6rem,env(safe-area-inset-bottom))] pt-2"
+      className="cg-bottomnav sticky bottom-0 z-40 grid w-full grid-cols-5 border-t border-slate-100 bg-white px-0 pb-[max(.6rem,env(safe-area-inset-bottom))] pt-2"
       aria-label="Caregiver navigation"
     >
       {ITEMS.map(({ id, label, icon: Icon }) => {
@@ -19,7 +19,7 @@ export default function CaregiverNavbar({ active, onChange }) {
         return (
           <button
             aria-current={selected ? 'page' : undefined}
-            className={`flex min-h-[54px] flex-col items-center justify-center gap-1 border-0 bg-transparent px-0.5 text-[10px] font-semibold transition active:scale-95 ${selected ? 'text-blue-600' : 'text-slate-500 hover:text-slate-800'}`}
+            className={`cg-bottomnav__item flex min-h-[54px] flex-col items-center justify-center gap-1 border-0 bg-transparent px-0.5 text-[10px] font-semibold transition active:scale-95 ${selected ? 'is-active text-blue-600' : 'text-slate-500 hover:text-slate-800'}`}
             key={id}
             onClick={() => onChange(id)}
             type="button"

@@ -31,10 +31,23 @@ function HomeIcon({ name, size = 22 }) {
         <path d="m8.5 15.5 7-7" />
       </>
     ),
+    mic: (
+      <>
+        <rect x="9" y="3" width="6" height="11" rx="3" />
+        <path d="M5 11a7 7 0 0 0 14 0M12 18v3M9 21h6" />
+      </>
+    ),
     profile: (
       <>
         <circle cx="12" cy="8" r="4" />
         <path d="M4 21a8 8 0 0 1 16 0" />
+      </>
+    ),
+    scan: (
+      <>
+        <path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3" />
+        <path d="M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3" />
+        <path d="M8 12h8" />
       </>
     ),
     sound: (
@@ -401,16 +414,10 @@ export default function Today() {
     [doses]
   );
 
-  const nextTime = nextDose
-    ? new Date(nextDose.scheduled_time).toLocaleTimeString([], {
-        hour: 'numeric',
-        minute: '2-digit',
-      })
-    : '';
   const dueNow =
     nextDose && Math.abs(new Date(nextDose.scheduled_time).getTime() - clockNow) <= 30 * 60 * 1000;
   const reminderText = nextDose
-    ? `It is time to take your ${nextDose.drug_name}`
+    ? `It's time to take your ${nextDose.drug_name}`
     : 'You have no medicine due right now';
   const dailyTip = dailyTipFor(new Date());
 
@@ -571,7 +578,14 @@ export default function Today() {
               </span>{' '}
               {tr('Voice Reminder', 'Paalala sa Boses')}
             </h2>
-            <span className="pm-active-pill">{tr('Due now', 'Oras na')}</span>
+            <span className="pm-active-pill">
+              <span className="pm-active-bars" aria-hidden="true">
+                <i />
+                <i />
+                <i />
+              </span>
+              {tr('Active', 'Aktibo')}
+            </span>
           </div>
           <div className="pm-reminder">
             <button
@@ -579,27 +593,24 @@ export default function Today() {
               className="pm-mic"
               onClick={() => speak(reminderText)}
               aria-label={tr('Listen to voice reminder', 'Pakinggan ang paalala sa boses')}
+              title={tr('Play voice reminder', 'I-play ang paalala sa boses')}
             >
-              <HomeIcon name="sound" size={30} />
-              <span>{tr('Listen', 'Pakinggan')}</span>
+              <HomeIcon name="mic" size={34} />
             </button>
-            <div>
+            <div className="pm-reminder__copy">
               <h3>“{reminderText}.”</h3>
-              {nextDose && (
-                <p>
-                  {nextTime} · {nextDose.dosage_instruction || 'Follow your prescribed dose'}
-                </p>
-              )}
-              <small>
+              <p>
                 {tr(
-                  'Listen to the spoken medicine name, dose, and scheduled time.',
-                  'Pakinggan ang pangalan, dose, at oras ng gamot.'
+                  'You can scan your medicine or mark it as taken.',
+                  'Maaari mong i-scan ang gamot o markahan itong nainom na.'
                 )}
-              </small>
+              </p>
             </div>
           </div>
           <div className="pm-wave" aria-hidden="true">
-            ˙│˙││˙│˙│││˙│˙││˙│││˙│˙│
+            {Array.from({ length: 40 }, (_, index) => (
+              <span key={index} />
+            ))}
           </div>
           <button
             type="button"
@@ -623,7 +634,7 @@ export default function Today() {
             Mark as Taken
           </button>
           <button type="button" className="pm-action-button" onClick={() => setScanOpen(true)}>
-            <HomeIcon name="medicine" size={18} /> {tr('Scan Medicine', 'I-scan ang Gamot')}
+            <HomeIcon name="scan" size={18} /> {tr('Scan Medicine', 'I-scan ang Gamot')}
           </button>
           <small className="pm-scan-hint">
             {tr(

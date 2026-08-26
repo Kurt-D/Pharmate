@@ -3,13 +3,15 @@ import {
   AlertTriangle,
   BellRing,
   BellOff,
-  CalendarCheck,
   CheckCircle2,
   ChevronDown,
+  ClipboardCheck,
   Clock3,
   Link2,
   Moon,
+  Package,
   Plus,
+  ShieldCheck,
   Sunrise,
   SunMedium,
   Sunset,
@@ -39,7 +41,7 @@ function StatusBadge({ dose }) {
 function PatientSwitcher({ patients, selectedCode, onSelect, onAdd }) {
   const selected = patients.find((patient) => patient.patient_code === selectedCode) || patients[0];
   return (
-    <section className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
+    <section className="cg-patient-switcher rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
       <div className="flex items-center justify-between gap-3">
         <label className="min-w-0 flex-1">
           <span className="mb-1 block text-xs font-bold uppercase tracking-wide text-blue-700">
@@ -87,6 +89,7 @@ export default function CaregiverDashboard({
   refillAlert,
   onOrderRefill,
   patientLabel,
+  onNavigate,
 }) {
   const completed = timeline.filter((dose) => dose.status === 'taken').length;
   const upcoming = timeline.filter((dose) => dose.status === 'upcoming').length;
@@ -138,24 +141,20 @@ export default function CaregiverDashboard({
 
   return (
     <main className="grid gap-4 px-4 pb-4 pt-5">
-      <header>
+      <header className="cg-home-hero">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <p className="m-0 text-sm font-semibold text-blue-700">Caregiver Portal</p>
+            <p className="m-0 text-sm font-semibold">PharMate Family Care</p>
             <h1 className="mb-0 mt-1 text-2xl font-bold tracking-tight text-slate-900">
-              Today’s monitoring
+              Hello, Caregiver
             </h1>
           </div>
-          <span
-            className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1.5 text-xs font-bold ${previewMode ? 'border-amber-200 bg-amber-50 text-amber-700' : 'border-emerald-200 bg-emerald-50 text-emerald-700'}`}
-          >
-            <Activity className="h-4 w-4" />
-            {previewMode ? 'Preview' : 'Live'}
-          </span>
+          <span className="cg-home-hero__mark"><ShieldCheck className="h-7 w-7" /></span>
         </div>
         <p className="mb-0 mt-1 text-sm font-medium leading-5 text-slate-600">
-          Medicine activity and alerts from the linked patient.
+          Keep {patientLabel || 'your linked patient'} on track today.
         </p>
+        <span className={`cg-live-status ${previewMode ? 'is-preview' : 'is-live'}`}><Activity className="h-4 w-4" />{previewMode ? 'Preview information' : 'Live patient monitoring'}</span>
       </header>
       <PatientSwitcher
         patients={patients}
@@ -165,7 +164,7 @@ export default function CaregiverDashboard({
       />
       {urgentDose && !snoozedUntil && (
         <section
-          className="overflow-hidden rounded-2xl border border-rose-200 bg-white shadow-sm"
+          className="cg-dose-alert overflow-hidden rounded-2xl border border-rose-200 bg-white shadow-sm"
           aria-labelledby="caregiver-dose-alert-title"
         >
           <div className="flex items-start gap-3 bg-rose-50 p-4">
@@ -224,7 +223,7 @@ export default function CaregiverDashboard({
 
       <section
         aria-labelledby="patient-adherence-summary"
-        className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm"
+        className="cg-adherence-card rounded-2xl border border-slate-100 bg-white p-4 shadow-sm"
       >
         <div className="flex items-center justify-between gap-3">
           <div>
@@ -232,7 +231,7 @@ export default function CaregiverDashboard({
               className="m-0 text-lg font-bold tracking-tight text-slate-900"
               id="patient-adherence-summary"
             >
-              Patient adherence summary
+              Today’s care summary
             </h2>
             <p className="mb-0 mt-1 text-sm font-medium text-slate-600">
               Today’s scheduled medicines
@@ -309,17 +308,17 @@ export default function CaregiverDashboard({
         )}
       </section>
 
-      <section className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
+      <section className="cg-timeline-card rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
         <div className="flex items-center justify-between gap-3">
           <div>
             <h2 className="m-0 text-lg font-bold tracking-tight text-slate-900">
-              Medication timeline
+              Today’s Dose Checklist
             </h2>
             <p className="mb-0 mt-1 text-sm font-medium text-slate-600">
               Chronological schedule for today
             </p>
           </div>
-          <CalendarCheck className="h-6 w-6 text-blue-600" />
+          <span className="cg-checklist-icon"><ClipboardCheck className="h-6 w-6" /></span>
         </div>
         <div className="relative mt-4 grid gap-3 before:absolute before:bottom-5 before:left-[19px] before:top-5 before:w-px before:bg-slate-200">
           {timeline.length ? (
@@ -386,13 +385,18 @@ export default function CaregiverDashboard({
       </section>
 
       {refillAlert && (
-        <section>
+        <section className="cg-refill-section">
           <div className="mb-2 flex items-center justify-between">
             <h2 className="m-0 text-lg font-bold tracking-tight text-slate-900">Stock attention</h2>
           </div>
           <CaregiverRefillAlert item={refillAlert} onOrderRefill={onOrderRefill} />
         </section>
       )}
+      <section className="cg-pharmacy-support">
+        <span><ShieldCheck className="h-6 w-6" /></span>
+        <div><small>PHARMATE SUPPORT</small><h2>Medication care with pharmacist safeguards</h2><p>Prescription refills and medicine concerns remain pharmacist-reviewed for patient safety.</p></div>
+        <button onClick={() => onNavigate('medication')} type="button"><Package className="h-4 w-4" /> View medicine care</button>
+      </section>
     </main>
   );
 }

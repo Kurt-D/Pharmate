@@ -721,3 +721,494 @@
     font-size: 1.22rem;
   }
 }
+
+/* Homepage voice reminder: focused, calm, and easy to act on. */
+.pm-home .pm-voice-card {
+  background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
+  border: 1px solid #d6e0ec;
+  border-radius: 1rem;
+  box-shadow: 0 7px 20px rgba(30, 71, 135, 0.08);
+  overflow: hidden;
+  padding: 0.8rem 0.85rem 0.75rem;
+}
+
+.pm-home .pm-voice-card .pm-section-heading {
+  border: 0;
+  margin: 0 0 0.55rem;
+  padding: 0;
+}
+
+.pm-home .pm-voice-card .pm-section-heading h2 {
+  align-items: center;
+  color: #1769f5;
+  display: flex;
+  font-size: 0.82rem;
+  font-weight: 800;
+  gap: 0.48rem;
+  letter-spacing: -0.01em;
+}
+
+.pm-home .pm-voice-card .pm-section-heading h2 > span {
+  align-items: center;
+  background: #eef4ff;
+  border-radius: 50%;
+  display: inline-flex;
+  height: 2rem;
+  justify-content: center;
+  margin: 0;
+  width: 2rem;
+}
+
+.pm-home .pm-voice-card .pm-section-heading h2 svg {
+  height: 1.05rem;
+  width: 1.05rem;
+}
+
+.pm-home .pm-voice-card .pm-active-pill {
+  align-items: center;
+  background: #eaf8ec;
+  border: 0;
+  border-radius: 999px;
+  color: #2a9b45 !important;
+  display: inline-flex;
+  font-size: 0.65rem !important;
+  font-weight: 700;
+  gap: 0.3rem;
+  line-height: 1;
+  min-height: 1.55rem !important;
+  padding: 0.25rem 0.55rem;
+}
+
+.pm-active-bars {
+  align-items: center;
+  display: inline-flex;
+  gap: 2px;
+  height: 0.8rem;
+}
+
+.pm-active-bars i {
+  background: currentColor;
+  border-radius: 999px;
+  display: block;
+  height: 0.45rem;
+  width: 1.5px;
+}
+
+.pm-active-bars i:nth-child(2) {
+  height: 0.75rem;
+}
+
+.pm-home .pm-voice-card .pm-reminder {
+  align-items: center;
+  gap: 0.95rem;
+  grid-template-columns: 5.65rem minmax(0, 1fr);
+  padding: 0.55rem 0.3rem 0.4rem;
+}
+
+.pm-home .pm-voice-card .pm-mic {
+  align-items: center;
+  background: linear-gradient(145deg, #2a7aff 0%, #0758e9 100%);
+  border: 0.42rem solid #dceaff;
+  border-radius: 50%;
+  box-shadow:
+    0 0 0 0.48rem #f0f6ff,
+    0 7px 16px rgba(23, 105, 245, 0.23);
+  color: #fff;
+  cursor: pointer;
+  display: inline-flex;
+  height: 4.55rem;
+  justify-content: center;
+  min-height: 4.55rem;
+  min-width: 4.55rem;
+  padding: 0;
+  transition:
+    transform 160ms ease,
+    box-shadow 160ms ease;
+  width: 4.55rem;
+}
+
+.pm-home .pm-voice-card .pm-mic:hover {
+  box-shadow:
+    0 0 0 0.52rem #e7f1ff,
+    0 9px 20px rgba(23, 105, 245, 0.28);
+  transform: translateY(-1px);
+}
+
+.pm-home .pm-voice-card .pm-mic:active {
+  transform: scale(0.97);
+}
+
+.pm-home .pm-voice-card .pm-mic svg {
+  height: 2rem;
+  margin: 0;
+  stroke-width: 2;
+  width: 2rem;
+}
+
+.pm-home .pm-voice-card .pm-reminder__copy {
+  min-width: 0;
+}
+
+.pm-home .pm-voice-card .pm-reminder h3 {
+  color: #111827;
+  font-size: 0.9rem;
+  font-weight: 800;
+  letter-spacing: -0.015em;
+  line-height: 1.35;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.pm-home .pm-voice-card .pm-reminder p {
+  color: #46556d;
+  font-size: 0.7rem;
+  line-height: 1.45;
+  margin: 0.35rem 0 0;
+}
+
+.pm-home .pm-voice-card .pm-wave {
+  align-items: center;
+  display: flex;
+  gap: 0.17rem;
+  height: 1.8rem;
+  justify-content: center;
+  margin: 0.05rem 0 0.2rem;
+  overflow: hidden;
+  padding: 0 0.15rem;
+}
+
+.pm-home .pm-voice-card .pm-wave span {
+  background: #a9c9ff;
+  border-radius: 999px;
+  display: block;
+  flex: 1 1 0;
+  height: 0.45rem;
+  max-width: 0.18rem;
+  min-width: 0.11rem;
+}
+
+.pm-home .pm-voice-card .pm-wave span:nth-child(4n + 1) {
+  height: 0.8rem;
+}
+
+.pm-home .pm-voice-card .pm-wave span:nth-child(4n + 2) {
+  height: 1.25rem;
+}
+
+.pm-home .pm-voice-card .pm-wave span:nth-child(7n) {
+  height: 1.6rem;
+}
+
+.pm-home .pm-voice-card .pm-action-button {
+  background: linear-gradient(90deg, #1769f5 0%, #075ceb 100%);
+  border: 1.5px solid #1769f5;
+  border-radius: 0.5rem;
+  box-shadow: 0 3px 8px rgba(23, 105, 245, 0.16);
+  color: #fff;
+  font-size: 0.9rem;
+  font-weight: 750;
+  height: 2.45rem;
+  margin-top: 0.35rem;
+  min-height: 2.45rem;
+  transition:
+    background 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease;
+}
+
+.pm-home .pm-voice-card .pm-action-button:hover:not(:disabled) {
+  background: #0758df;
+  box-shadow: 0 5px 12px rgba(23, 105, 245, 0.22);
+  transform: translateY(-1px);
+}
+
+.pm-home .pm-voice-card .pm-action-button--outline,
+.pm-home .pm-voice-card .pm-action-button--outline:hover:not(:disabled) {
+  background: #fff;
+  box-shadow: none;
+  color: #1769f5;
+}
+
+.pm-home .pm-voice-card .pm-action-button--outline:hover:not(:disabled) {
+  background: #f4f8ff;
+}
+
+.pm-home .pm-voice-card .pm-action-button svg {
+  height: 1.15rem;
+  margin-right: 0.45rem;
+  width: 1.15rem;
+}
+
+.pm-home .pm-voice-card .pm-scan-hint {
+  color: #1769f5;
+  font-size: 0.63rem;
+  font-weight: 600;
+  line-height: 1.35;
+  margin-top: 0.35rem;
+}
+
+@media (max-width: 390px) {
+  .pm-home .pm-voice-card {
+    padding-left: 0.75rem;
+    padding-right: 0.75rem;
+  }
+
+  .pm-home .pm-voice-card .pm-reminder {
+    gap: 0.8rem;
+    grid-template-columns: 5rem minmax(0, 1fr);
+    padding-left: 0.1rem;
+    padding-right: 0.1rem;
+  }
+
+  .pm-home .pm-voice-card .pm-mic {
+    height: 4.15rem;
+    min-height: 4.15rem;
+    min-width: 4.15rem;
+    width: 4.15rem;
+  }
+
+  .pm-home .pm-voice-card .pm-reminder h3 {
+    font-size: 0.83rem;
+  }
+}
+
+body.pm-a11y-dark-mode .pm-home .pm-voice-card {
+  background: #111c2e !important;
+  border-color: #40506a !important;
+}
+
+body.pm-a11y-dark-mode .pm-home .pm-voice-card .pm-reminder h3 {
+  color: #f8fafc !important;
+}
+
+body.pm-a11y-dark-mode .pm-home .pm-voice-card .pm-reminder p {
+  color: #cbd5e1 !important;
+}
+
+body.pm-a11y-reduce-motion .pm-home .pm-voice-card .pm-mic,
+body.pm-a11y-reduce-motion .pm-home .pm-voice-card .pm-action-button {
+  transition: none;
+}
+
+/* Compact caregiver reminder dialog. */
+.pm-caregiver-alert-backdrop {
+  background: rgba(15, 23, 42, 0.58);
+  backdrop-filter: blur(3px);
+  padding: 1rem;
+}
+
+.pm-caregiver-alert {
+  border: 1px solid #d8e2ef;
+  border-radius: 1.1rem;
+  box-shadow: 0 20px 50px rgba(15, 23, 42, 0.28);
+  max-height: calc(100dvh - 2rem);
+  max-width: 370px;
+  padding: 1rem;
+}
+
+.pm-caregiver-alert > header {
+  align-items: center;
+  border-bottom: 1px solid #edf1f6;
+  gap: 0.65rem;
+  grid-template-columns: 2.35rem minmax(0, 1fr) 2.35rem;
+  padding-bottom: 0.75rem;
+}
+
+.pm-caregiver-alert > header > span {
+  background: #eef5ff;
+  border-radius: 0.65rem;
+  height: 2.35rem;
+  width: 2.35rem;
+}
+
+.pm-caregiver-alert > header > span svg {
+  height: 1.2rem;
+  width: 1.2rem;
+}
+
+.pm-caregiver-alert header small {
+  color: #1769f5;
+  font-size: 0.62rem;
+  font-weight: 750;
+  letter-spacing: 0.055em;
+}
+
+.pm-caregiver-alert h2 {
+  color: #1e2e4a;
+  font-size: 1rem;
+  letter-spacing: -0.015em;
+  line-height: 1.3;
+  margin-top: 0.08rem;
+}
+
+.pm-caregiver-alert header button {
+  background: transparent;
+  border: 0;
+  border-radius: 50%;
+  height: 2.35rem;
+  min-height: 2.35rem;
+  transition: background 150ms ease;
+  width: 2.35rem;
+}
+
+.pm-caregiver-alert header button:hover {
+  background: #f1f5f9;
+}
+
+.pm-caregiver-alert header button svg {
+  height: 1.15rem;
+  width: 1.15rem;
+}
+
+.pm-caregiver-alert__medicine {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  gap: 0.75rem;
+  grid-template-columns: 2.85rem minmax(0, 1fr);
+  margin-top: 0.8rem;
+  padding: 0.15rem 0.25rem;
+}
+
+.pm-caregiver-alert__medicine > span {
+  background: #1769f5;
+  box-shadow: 0 0 0 4px #eaf2ff;
+  height: 2.55rem;
+  margin: 0.15rem;
+  width: 2.55rem;
+}
+
+.pm-caregiver-alert__medicine > span.speaking {
+  animation: pm-caregiver-voice-pulse-compact 1.4s ease-in-out infinite;
+}
+
+.pm-caregiver-alert__medicine svg {
+  height: 1.25rem;
+  width: 1.25rem;
+}
+
+.pm-caregiver-alert__medicine small {
+  color: #6b7890;
+  font-size: 0.68rem;
+  font-weight: 600;
+}
+
+.pm-caregiver-alert__medicine strong {
+  color: #1e2e4a;
+  font-size: 0.95rem;
+  line-height: 1.35;
+  margin-top: 0.08rem;
+}
+
+.pm-caregiver-alert__medicine time {
+  color: #1769f5;
+  font-size: 0.7rem;
+  margin-top: 0.1rem;
+}
+
+.pm-caregiver-alert blockquote {
+  background: #f6f9fd;
+  border-left: 3px solid #7aaaf8;
+  border-radius: 0.6rem;
+  color: #26364f;
+  font-size: 0.88rem;
+  font-weight: 650;
+  line-height: 1.5;
+  margin: 0.8rem 0 0;
+  padding: 0.7rem 0.75rem;
+}
+
+.pm-caregiver-alert__actions {
+  gap: 0.55rem;
+  margin-top: 0.8rem;
+}
+
+.pm-caregiver-alert__actions > .take {
+  border-radius: 0.65rem;
+  font-size: 0.88rem;
+  font-weight: 750;
+  min-height: 2.8rem;
+  padding: 0.55rem;
+  transition:
+    background 150ms ease,
+    transform 150ms ease;
+}
+
+.pm-caregiver-alert__actions > .take:hover {
+  background: #1d7a34;
+  transform: translateY(-1px);
+}
+
+.pm-caregiver-alert__actions > .take svg {
+  height: 1.15rem;
+  width: 1.15rem;
+}
+
+.pm-caregiver-alert__secondary {
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: 1fr 1fr;
+}
+
+.pm-caregiver-alert__actions .pm-caregiver-alert__secondary button {
+  background: #fff;
+  border: 1px solid #d4deec;
+  border-radius: 0.6rem;
+  color: #40516b;
+  font-size: 0.74rem;
+  font-weight: 700;
+  gap: 0.35rem;
+  min-height: 2.5rem;
+  padding: 0.45rem 0.35rem;
+  transition:
+    background 150ms ease,
+    border-color 150ms ease;
+}
+
+.pm-caregiver-alert__actions .pm-caregiver-alert__secondary button:hover {
+  background: #f7faff;
+  border-color: #9ebce8;
+}
+
+.pm-caregiver-alert__actions .pm-caregiver-alert__secondary svg {
+  color: #1769f5;
+  height: 1rem;
+  width: 1rem;
+}
+
+.pm-caregiver-alert > p {
+  color: #7a8799;
+  font-size: 0.64rem;
+  line-height: 1.4;
+  margin: 0.65rem 0 0;
+}
+
+@keyframes pm-caregiver-voice-pulse-compact {
+  0%,
+  100% {
+    box-shadow: 0 0 0 4px #eaf2ff;
+  }
+  50% {
+    box-shadow: 0 0 0 7px #dbe9ff;
+  }
+}
+
+@media (max-width: 360px) {
+  .pm-caregiver-alert {
+    padding: 0.85rem;
+  }
+
+  .pm-caregiver-alert__secondary {
+    grid-template-columns: 1fr;
+  }
+}
+
+.pm-phone.pm-a11y-dark-mode .pm-caregiver-alert__secondary button {
+  background: #111827 !important;
+  border-color: #475569 !important;
+  color: #e2e8f0 !important;
+}
+
+.pm-phone.pm-a11y-dark-mode .pm-caregiver-alert blockquote {
+  border-left-color: #7aaaf8 !important;
+}

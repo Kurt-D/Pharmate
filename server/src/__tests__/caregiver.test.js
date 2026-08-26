@@ -74,6 +74,61 @@ describe('Linked-patient scope (patient_code only, no PII)', () => {
   });
 });
 
+describe('Caregiver medicine and schedule setup', () => {
+  test('an actively linked caregiver can add a tracked medicine and create a suggested schedule', async () => {
+    const added = await request(app)
+      .post(`/api/caregiver/patients/${patientCode}/medications`)
+      .set(auth(caregiverToken))
+      .send({
+        drug_name: 'paracetamol',
+        frequency: 'Once daily',
+        dosage_instruction: 'Take one dose after breakfast',
+      });
+    expect(added.status).toBe(201);
+    expect(added.body.status).toBe('active');
+
+    const scheduled = await request(app)
+      .post(`/api/caregiver/patients/${patientCode}/schedule/suggested`)
+      .set(auth(caregiverToken));
+    expect(scheduled.status).toBe(201);
+    expect(scheduled.body.count).toBeGreaterThan(0);
+  });
+});
+
+describe('Patient-authorized medication management', () => {
+  test('caregiver edits only after the patient grants permission', async () => {
+    const created = await request(app)
+      .post('/api/patient/medications')
+      .set(auth(patientToken))
+      .send({ drug_name: 'paracetamol', frequency: 'BID', source: 'OTC_SELF' });
+    const medicines = await request(app)
+      .get(`/api/caregiver/patients/${patientCode}/medications`)
+      .set(auth(caregiverToken));
+    const medicine = medicines.body.find((item) => item.id === created.body.id);
+
+    const denied = await request(app)
+      .patch(`/api/caregiver/patients/${patientCode}/medications/${medicine.id}`)
+      .set(auth(caregiverToken))
+      .send({ dosage_instruction: 'Take after breakfast', expected_updated_at: medicine.updated_at });
+    expect(denied.status).toBe(403);
+    expect(denied.body.code).toBe('caregiver_medication_permission_required');
+
+    const links = await request(app).get('/api/patient/caregivers').set(auth(patientToken));
+    const granted = await request(app)
+      .patch(`/api/patient/caregivers/${links.body[0].id}/permissions`)
+      .set(auth(patientToken))
+      .send({ can_manage_medications: true });
+    expect(granted.status).toBe(200);
+
+    const updated = await request(app)
+      .patch(`/api/caregiver/patients/${patientCode}/medications/${medicine.id}`)
+      .set(auth(caregiverToken))
+      .send({ dosage_instruction: 'Take after breakfast', expected_updated_at: medicine.updated_at });
+    expect(updated.status).toBe(200);
+    expect(updated.body.medication.dosage_instruction).toBe('Take after breakfast');
+  });
+});
+
 describe('UC-09 — refill / delivery on the patient’s behalf', () => {
   test('an OTC medicine can be refilled for the patient', async () => {
     await request(app)

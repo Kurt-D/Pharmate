@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Check, Droplets, HeartPulse, Pill, Volume2, X } from 'lucide-react';
+import { Check, HeartPulse, Pill, Volume2, X } from 'lucide-react';
 
 function reminderPresets(patientLabel, medicine) {
   const patient = String(patientLabel || 'Patient')
@@ -11,11 +11,6 @@ function reminderPresets(patientLabel, medicine) {
       id: 'medicine',
       icon: Pill,
       message: `${patient}, oras na po para inumin ang inyong ${drug} pagkatapos kumain.`,
-    },
-    {
-      id: 'water',
-      icon: Droplets,
-      message: 'Paalala po: Uminom ng gamot at uminom ng sapat na tubig.',
     },
     {
       id: 'maintenance',

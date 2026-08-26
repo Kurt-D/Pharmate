@@ -189,6 +189,30 @@ export default function ProfileRedesign() {
       setBusy(false);
     }
   }
+  async function setMedicationPermission(linkId, allowed) {
+    setBusy(true);
+    setError('');
+    try {
+      await api(`/api/patient/caregivers/${linkId}/permissions`, {
+        method: 'PATCH',
+        body: { can_manage_medications: allowed },
+      });
+      setCaregivers((current) =>
+        current.map((item) =>
+          item.id === linkId ? { ...item, can_manage_medications: allowed ? 1 : 0 } : item
+        )
+      );
+      setMessage(
+        allowed
+          ? 'This caregiver can now edit your OTC medicines and schedules.'
+          : 'Medication editing access was removed.'
+      );
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  }
   async function copyCode() {
     if (!invite?.code) return;
     await navigator.clipboard.writeText(invite.code);
@@ -415,8 +439,21 @@ export default function ProfileRedesign() {
             <strong>{t('profile.linked')}</strong>
             {caregivers.map((item) => (
               <span key={item.id}>
-                <b>{item.email}</b>
-                <small>{item.relationship || tr('Caregiver', 'Caregiver')}</small>
+                <span>
+                  <b>{item.email}</b>
+                  <small>{item.relationship || tr('Caregiver', 'Caregiver')}</small>
+                </span>
+                <button
+                  className={item.can_manage_medications ? 'is-authorized' : ''}
+                  disabled={busy}
+                  onClick={() => setMedicationPermission(item.id, !item.can_manage_medications)}
+                  type="button"
+                >
+                  <Icon name={item.can_manage_medications ? 'check' : 'lock'} size={16} />
+                  {item.can_manage_medications
+                    ? tr('Medication access on', 'May access sa gamot')
+                    : tr('Allow medication edits', 'Payagan mag-edit ng gamot')}
+                </button>
               </span>
             ))}
           </div>

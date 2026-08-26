@@ -17,6 +17,9 @@ export default function PatientVoiceAlert({ alert, dose, onTake, onSnooze, onDis
 
   if (!alert) return null;
   const medicine = dose?.drug_name || alert.medicine || 'your scheduled medicine';
+  const caregiverTitle = alert.caregiverName
+    ? `Paalala mula kay ${alert.caregiverName}`
+    : 'Paalala mula sa caregiver';
 
   return (
     <div className="pm-caregiver-alert-backdrop" role="presentation">
@@ -32,10 +35,8 @@ export default function PatientVoiceAlert({ alert, dose, onTake, onSnooze, onDis
             <BellRing />
           </span>
           <div>
-            <small>Caregiver voice alert</small>
-            <h2 id="caregiver-voice-alert-title">
-              Paalala mula kay {alert.caregiverName || 'your caregiver'}
-            </h2>
+            <small>Caregiver reminder</small>
+            <h2 id="caregiver-voice-alert-title">{caregiverTitle}</h2>
           </div>
           <button aria-label="Close caregiver reminder" onClick={onDismiss} type="button">
             <X />
@@ -59,31 +60,33 @@ export default function PatientVoiceAlert({ alert, dose, onTake, onSnooze, onDis
           </div>
         </div>
         <blockquote id="caregiver-voice-alert-message">“{alert.message}”</blockquote>
-        <button
-          className="pm-caregiver-alert__listen"
-          onClick={() =>
-            speak(alert.message, {
-              onStart: () => setSpeaking(true),
-              onEnd: () => setSpeaking(false),
-              onError: () => setSpeaking(false),
-            })
-          }
-          type="button"
-        >
-          <Volume2 />
-          {speaking ? 'Playing reminder…' : 'Listen Again'}
-        </button>
         <div className="pm-caregiver-alert__actions">
           <button className="take" onClick={onTake} type="button">
             <CheckCircle2 />
-            Nainom Ko Na / I Took This
+            Nainom Ko Na · I Took This
           </button>
-          <button className="snooze" onClick={onSnooze} type="button">
-            <Clock3 />
-            I-snooze ng 15 Mins
-          </button>
+          <div className="pm-caregiver-alert__secondary">
+            <button
+              className="pm-caregiver-alert__listen"
+              onClick={() =>
+                speak(alert.message, {
+                  onStart: () => setSpeaking(true),
+                  onEnd: () => setSpeaking(false),
+                  onError: () => setSpeaking(false),
+                })
+              }
+              type="button"
+            >
+              <Volume2 />
+              {speaking ? 'Playing…' : 'Listen again'}
+            </button>
+            <button className="snooze" onClick={onSnooze} type="button">
+              <Clock3 />
+              Snooze 15 min
+            </button>
+          </div>
         </div>
-        <p>This reminder was sent from the linked caregiver portal.</p>
+        <p>Sent from your linked caregiver.</p>
       </section>
     </div>
   );

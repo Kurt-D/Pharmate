@@ -35,6 +35,8 @@ export default function PharmacistLayout() {
     navigate('/login', { replace: true });
   }
 
+  if (page === 'dashboard') return <Outlet />;
+
   return (
     <div className="pw-shell">
       <nav className="pw-sidebar">

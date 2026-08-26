@@ -24,16 +24,15 @@ import Validation from './pages/pharmacist/Validation.jsx';
 import Inquiries from './pages/pharmacist/InquiriesRedesign.jsx';
 import OrdersQueue from './pages/pharmacist/OrdersQueue.jsx';
 import Patients from './pages/pharmacist/PatientsRedesign.jsx';
-import PharmacistDashboard from './pages/pharmacist/DashboardRedesign.jsx';
+import PharmacistDashboard from './pages/pharmacist/PharmacistDashboard.jsx';
 import PharmacistAlerts from './pages/pharmacist/Alerts.jsx';
 import AdminLayout from './pages/admin/AdminLayout.jsx';
 import AdminDashboard from './pages/admin/DashboardRedesign.jsx';
 import AdminUsers from './pages/admin/UsersRedesign.jsx';
 import AdminMedicines from './pages/admin/Medicines.jsx';
 import AdminOrders from './pages/admin/Orders.jsx';
-import AdminPriority from './pages/admin/Priority.jsx';
 import AdminAlerts from './pages/admin/Alerts.jsx';
-import AdminReports from './pages/admin/Reports.jsx';
+import AdminAccessibility from './pages/admin/Accessibility.jsx';
 import CaregiverPortal from './pages/caregiver/CaregiverPortal.jsx';
 import ProtectedRoute from './components/ProtectedRoute.jsx';
 import './App.css';
@@ -45,7 +44,8 @@ export default function App() {
       <AccessibilityProvider>
         <AuthProvider>
           <BrowserRouter>
-            <Routes>
+            <div className="pharmate-app">
+              <Routes>
               <Route path="/login" element={<Login />} />
               <Route path="/reset-password" element={<Login />} />
               <Route path="/signup" element={<Signup />} />
@@ -90,9 +90,9 @@ export default function App() {
                   </ProtectedRoute>
                 }
               >
-                <Route index element={<Navigate to="/pharmacist/verification-queue" replace />} />
+                <Route index element={<Navigate to="/pharmacist/dashboard" replace />} />
                 <Route path="dashboard" element={<PharmacistDashboard />} />
-                <Route path="verification-queue" element={<Validation />} />
+                <Route path="verification-queue" element={<Navigate to="/pharmacist/dashboard" replace />} />
                 <Route path="curation" element={<DrugCuration />} />
                 <Route path="validation" element={<Validation />} />
                 <Route path="inquiries" element={<Inquiries />} />
@@ -114,9 +114,10 @@ export default function App() {
                 <Route path="users" element={<AdminUsers />} />
                 <Route path="medicines" element={<AdminMedicines />} />
                 <Route path="orders" element={<AdminOrders />} />
-                <Route path="priority" element={<AdminPriority />} />
+                <Route path="priority" element={<Navigate to="/admin/dashboard" replace />} />
                 <Route path="alerts" element={<AdminAlerts />} />
-                <Route path="reports" element={<AdminReports />} />
+                <Route path="settings" element={<AdminAccessibility />} />
+                <Route path="reports" element={<Navigate to="/admin/dashboard" replace />} />
               </Route>
               <Route
                 path="/caregiver/*"
@@ -129,7 +130,8 @@ export default function App() {
 
               <Route path="/" element={<Navigate to="/login" replace />} />
               <Route path="*" element={<Navigate to="/login" replace />} />
-            </Routes>
+              </Routes>
+            </div>
           </BrowserRouter>
         </AuthProvider>
       </AccessibilityProvider>

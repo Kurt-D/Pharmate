@@ -1,6 +1,6 @@
 export const ROLE_HOME = Object.freeze({
   admin: '/admin/dashboard',
-  pharmacist: '/pharmacist/verification-queue',
+  pharmacist: '/pharmacist/dashboard',
   patient: '/patient/today',
   caregiver: '/caregiver/overview',
 });

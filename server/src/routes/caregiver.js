@@ -16,6 +16,14 @@ import {
   normalizeCaregiverCode,
 } from '../utils/caregiverInvite.js';
 import { publishCaregiverEvent, subscribeCaregiver } from '../services/caregiverEvents.js';
+import { parseFrequency } from '../../engine/frequencyParser.js';
+import { findRestricted, resolveDrug, searchDrugs } from '../services/formulary.js';
+import { confirmForPatient } from '../services/schedule.js';
+import {
+  stopMedication,
+  updateMedication,
+  validateMedicationPatch,
+} from '../services/patientMedications.js';
 
 const router = Router();
 
@@ -120,11 +128,21 @@ router.get('/alerts', async (req, res) => {
   res.json(await caregiverAlerts(req.user.sub));
 });
 
+router.patch('/alerts/read-all', async (req, res) => {
+  await pool.execute(
+    `UPDATE caregiver_alerts SET status = 'resolved'
+     WHERE caregiver_id = ? AND channel = 'caregiver' AND status = 'unseen'`,
+    [req.user.sub]
+  );
+  res.json({ message: 'Caregiver notifications marked as read' });
+});
+
 // ── GET /api/caregiver/patients ───────────────────────────────────────────────
 // The caregiver's linked patients, by patient_code only (no PII).
 router.get('/patients', async (req, res) => {
   const [rows] = await pool.execute(
-    `SELECT p.patient_code, cp.relationship, cp.linked_at
+    `SELECT p.patient_code, cp.relationship, cp.linked_at,
+            cp.can_manage_medications
      FROM caregiver_patients cp
      JOIN patients p ON p.id = cp.patient_id
      WHERE cp.caregiver_id = ? AND cp.status = 'active'
@@ -142,7 +160,7 @@ router.get('/patients/:code/medications', async (req, res) => {
   if (!patientId) return res.status(404).json({ error: 'Patient not linked' });
   const [rows] = await pool.execute(
     `SELECT m.id, m.drug_name_raw, m.status, m.source, m.dosage_instruction,
-            m.frequency, dr.rx_class
+            m.frequency, m.start_date, m.end_date, m.updated_at, dr.rx_class
      FROM medications m
      LEFT JOIN drug_reference dr ON dr.id = m.drug_id
      WHERE m.patient_id = ? AND m.status = 'active'
@@ -150,6 +168,106 @@ router.get('/patients/:code/medications', async (req, res) => {
     [patientId]
   );
   res.json(rows);
+});
+
+router.get('/drugs', async (req, res) => {
+  res.json(await searchDrugs(req.query.q, req.query.limit || 20));
+});
+
+router.post('/patients/:code/medications', async (req, res) => {
+  const patientId = await linkedPatientId(req.user.sub, req.params.code);
+  if (!patientId) return res.status(404).json({ error: 'Patient not linked' });
+  const drugName = String(req.body?.drug_name || '').trim();
+  const frequency = String(req.body?.frequency || '').trim();
+  const dosageInstruction = String(req.body?.dosage_instruction || '').trim();
+  if (!drugName || !frequency || !dosageInstruction) {
+    return res.status(400).json({ error: 'Medicine, frequency, and dose instructions are required' });
+  }
+  if (await findRestricted(drugName)) {
+    return res.status(403).json({
+      error: 'restricted_substance',
+      message: 'This medicine must be handled in person at a pharmacy branch.',
+    });
+  }
+  const drug = await resolveDrug(drugName);
+  if (!drug) return res.status(400).json({ error: 'Choose a verified medicine from the list' });
+  const frequencyCode = parseFrequency(frequency);
+  if (frequencyCode === 'CONSULT') {
+    return res.status(400).json({ error: 'Choose a supported medicine frequency' });
+  }
+  const id = uuidv4();
+  await pool.execute(
+    `INSERT INTO medications
+       (id, patient_id, drug_id, drug_name_raw, source, is_prn, frequency,
+        frequency_code, dosage_instruction, start_date, status)
+     VALUES (?, ?, ?, ?, 'OTC_SELF', 0, ?, ?, ?, ?, 'active')`,
+    [
+      id,
+      patientId,
+      drug.id,
+      drugName,
+      frequency,
+      frequencyCode,
+      dosageInstruction,
+      req.body?.start_date || new Date().toISOString().slice(0, 10),
+    ]
+  );
+  publishCaregiverEvent(req.user.sub, 'adherence-updated', { patient_code: req.params.code });
+  res.status(201).json({ id, status: 'active', rx_class: drug.rx_class });
+});
+
+router.post('/patients/:code/schedule/suggested', async (req, res) => {
+  const patientId = await linkedPatientId(req.user.sub, req.params.code);
+  if (!patientId) return res.status(404).json({ error: 'Patient not linked' });
+  const result = await confirmForPatient(patientId);
+  if (result.error === 'invalid_layout') {
+    return res.status(409).json({ error: 'A medicine spacing rule could not be satisfied' });
+  }
+  if (result.error) return res.status(400).json({ error: result.error });
+  publishCaregiverEvent(req.user.sub, 'adherence-updated', { patient_code: req.params.code });
+  res.status(201).json({ message: 'Suggested schedule created', ...result });
+});
+
+async function medicationManagementPatient(req, res) {
+  const [[row]] = await pool.execute(
+    `SELECT p.id, cp.can_manage_medications
+     FROM caregiver_patients cp
+     JOIN patients p ON p.id = cp.patient_id
+     WHERE cp.caregiver_id = ? AND cp.status = 'active' AND p.patient_code = ?`,
+    [req.user.sub, String(req.params.code || '').toUpperCase()]
+  );
+  if (!row) {
+    res.status(404).json({ error: 'Patient not linked' });
+    return null;
+  }
+  if (!row.can_manage_medications) {
+    res.status(403).json({
+      error: 'Medication management is not authorized by the patient',
+      code: 'caregiver_medication_permission_required',
+    });
+    return null;
+  }
+  return row.id;
+}
+
+router.patch('/patients/:code/medications/:id', async (req, res) => {
+  const patientId = await medicationManagementPatient(req, res);
+  if (!patientId) return;
+  const parsed = validateMedicationPatch(req.body);
+  if (parsed.error) return res.status(parsed.error.status).json(parsed.error);
+  const result = await updateMedication(patientId, req.params.id, parsed);
+  if (result.error) return res.status(result.error.status).json(result.error);
+  publishCaregiverEvent(req.user.sub, 'adherence-updated', { patient_code: req.params.code });
+  res.json(result);
+});
+
+router.post('/patients/:code/medications/:id/stop', async (req, res) => {
+  const patientId = await medicationManagementPatient(req, res);
+  if (!patientId) return;
+  const result = await stopMedication(patientId, req.params.id, req.body?.expected_updated_at);
+  if (result.error) return res.status(result.error.status).json(result.error);
+  publishCaregiverEvent(req.user.sub, 'adherence-updated', { patient_code: req.params.code });
+  res.json(result);
 });
 
 // Send a real reminder to the linked patient's notification inbox.

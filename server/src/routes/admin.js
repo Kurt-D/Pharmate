@@ -6,10 +6,12 @@
  * availability. CSV exports key on patient_code only.
  */
 import { Router } from 'express';
+import { v4 as uuidv4 } from 'uuid';
 import { pool } from '../db/connection.js';
 import { requireAuth } from '../middleware/auth.js';
 import { requireRole } from '../middleware/role.js';
 import { adherenceReport, doseLogReport, toCsv } from '../services/adherence.js';
+import { updateOrderStatus } from '../services/orders.js';
 
 const router = Router();
 router.use(requireAuth, requireRole('admin'));
@@ -63,9 +65,80 @@ router.get('/aggregates', async (_req, res) => {
 // Generic-drug availability management (not PII).
 router.get('/medicines', async (_req, res) => {
   const [rows] = await pool.execute(
-    'SELECT id, generic_name, availability, is_restricted FROM drug_reference ORDER BY generic_name'
+    `SELECT id, generic_name, common_strength, dosage_form, short_description,
+            rx_class, availability, stock_quantity, is_restricted, is_provisional
+     FROM drug_reference ORDER BY generic_name`
   );
   res.json(rows);
+});
+
+// ── POST /api/admin/medicines ────────────────────────────────────────────────
+router.post('/medicines', async (req, res) => {
+  const genericName = String(req.body?.generic_name || '').trim();
+  const strength = String(req.body?.common_strength || '').trim();
+  const form = String(req.body?.dosage_form || '').trim();
+  const description = String(req.body?.short_description || '').trim();
+  const rxClass = req.body?.rx_class === 'OTC' ? 'OTC' : 'RX';
+  const stock = Number(req.body?.stock_quantity);
+  if (!genericName || !strength || !form || !description) {
+    return res.status(400).json({ error: 'Name, strength, form, and description are required' });
+  }
+  if (!Number.isInteger(stock) || stock < 0 || stock > 1000000) {
+    return res.status(400).json({ error: 'Stock must be a whole number between 0 and 1,000,000' });
+  }
+  const [[duplicate]] = await pool.execute(
+    'SELECT id FROM drug_reference WHERE LOWER(generic_name) = LOWER(?) AND common_strength = ? LIMIT 1',
+    [genericName, strength]
+  );
+  if (duplicate) return res.status(409).json({ error: 'This medicine and strength already exist' });
+  const id = uuidv4();
+  await pool.execute(
+    `INSERT INTO drug_reference
+       (id, generic_name, common_strength, dosage_form, short_description,
+        rx_class, availability, stock_quantity, is_provisional)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)`,
+    [id, genericName, strength, form, description, rxClass, stock > 0 ? 1 : 0, stock]
+  );
+  res.status(201).json({ id });
+});
+
+// ── PUT /api/admin/medicines/:id ─────────────────────────────────────────────
+router.put('/medicines/:id', async (req, res) => {
+  const genericName = String(req.body?.generic_name || '').trim();
+  const strength = String(req.body?.common_strength || '').trim();
+  const form = String(req.body?.dosage_form || '').trim();
+  const description = String(req.body?.short_description || '').trim();
+  const rxClass = req.body?.rx_class === 'OTC' ? 'OTC' : 'RX';
+  const stock = Number(req.body?.stock_quantity);
+  if (!genericName || !strength || !form || !description) {
+    return res.status(400).json({ error: 'Name, strength, form, and description are required' });
+  }
+  if (!Number.isInteger(stock) || stock < 0 || stock > 1000000) {
+    return res.status(400).json({ error: 'Stock must be a whole number between 0 and 1,000,000' });
+  }
+  const [result] = await pool.execute(
+    `UPDATE drug_reference
+     SET generic_name = ?, common_strength = ?, dosage_form = ?, short_description = ?,
+         rx_class = ?, stock_quantity = ?, availability = ?
+     WHERE id = ?`,
+    [genericName, strength, form, description, rxClass, stock, stock > 0 ? 1 : 0, req.params.id]
+  );
+  if (!result.affectedRows) return res.status(404).json({ error: 'Medicine not found' });
+  res.json({ id: req.params.id });
+});
+
+// Delete only unused references; patient medication history must never be erased.
+router.delete('/medicines/:id', async (req, res) => {
+  const [[usage]] = await pool.execute(
+    'SELECT COUNT(*) AS count FROM medications WHERE drug_id = ?',
+    [req.params.id]
+  );
+  if (Number(usage.count) > 0) {
+    return res.status(409).json({ error: 'This medicine is in use and cannot be deleted. Set its stock to 0 instead.' });
+  }
+  const [result] = await pool.execute('DELETE FROM drug_reference WHERE id = ?', [req.params.id]);
+  if (!result.affectedRows) return res.status(404).json({ error: 'Medicine not found' });
+  res.status(204).end();
 });
 
 // ── PUT /api/admin/medicines/:id/availability ─────────────────────────────────
@@ -176,33 +249,88 @@ router.put('/users/:id/active', async (req, res) => {
 // Orders management (Fig 53). No payment amount (D-4). Patient by code only.
 router.get('/orders', async (_req, res) => {
   const [refills] = await pool.execute(
-    `SELECT r.id, 'refill' AS kind, r.status, r.requested_at, p.patient_code, m.drug_name_raw AS drug
+    `SELECT r.id, 'refill' AS kind, r.status, r.requested_at, r.updated_at,
+            p.patient_code, m.drug_name_raw AS drug, m.source, dr.rx_class,
+            b.name AS branch
      FROM refill_requests r JOIN patients p ON p.id = r.patient_id
      JOIN medications m ON m.id = r.medication_id
+     LEFT JOIN drug_reference dr ON dr.id = m.drug_id
+     JOIN pharmacy_branches b ON b.id = r.branch_id
      ORDER BY r.requested_at DESC LIMIT 100`
   );
   const [deliveries] = await pool.execute(
-    `SELECT d.id, 'delivery' AS kind, d.status, d.requested_at, p.patient_code, m.drug_name_raw AS drug
+    `SELECT d.id, 'delivery' AS kind, d.status, d.requested_at, d.updated_at,
+            p.patient_code, m.drug_name_raw AS drug, m.source, dr.rx_class,
+            b.name AS branch
      FROM delivery_requests d JOIN patients p ON p.id = d.patient_id
      JOIN medications m ON m.id = d.medication_id
+     LEFT JOIN drug_reference dr ON dr.id = m.drug_id
+     JOIN pharmacy_branches b ON b.id = d.branch_id
      ORDER BY d.requested_at DESC LIMIT 100`
   );
   const all = [...refills, ...deliveries].sort(
     (a, b) => new Date(b.requested_at) - new Date(a.requested_at)
   );
-  const counts = { total: all.length, pending: 0, out_for_delivery: 0, delivered: 0 };
+  const counts = {
+    total: all.length,
+    pending: 0,
+    processing: 0,
+    ready: 0,
+    out_for_delivery: 0,
+    completed: 0,
+    cancelled: 0,
+  };
   for (const o of all) {
-    if (o.status === 'pending') counts.pending++;
-    if (o.status === 'out_for_delivery') counts.out_for_delivery++;
-    if (o.status === 'delivered') counts.delivered++;
+    if (Object.hasOwn(counts, o.status)) counts[o.status]++;
+    if (o.status === 'delivered' || o.status === 'ready') counts.completed++;
   }
   res.json({ counts, orders: all.slice(0, 100) });
 });
 
+// ── POST /api/admin/orders/:kind/:id/status ──────────────────────────────────
+// Admins coordinate fulfilment, but cannot skip or reverse operational stages.
+// Prescription approval remains in the pharmacist validation workspace; an Rx
+// request can only exist here after the service-level prescription gate passes.
+router.post('/orders/:kind/:id/status', async (req, res) => {
+  const { kind, id } = req.params;
+  if (!['refill', 'delivery'].includes(kind)) {
+    return res.status(400).json({ error: 'kind must be refill or delivery' });
+  }
+
+  const table = kind === 'delivery' ? 'delivery_requests' : 'refill_requests';
+  const [[order]] = await pool.execute(`SELECT status FROM ${table} WHERE id = ?`, [id]);
+  if (!order) return res.status(404).json({ error: 'Order not found' });
+
+  const requestedStatus = String(req.body?.status || '');
+  const transitions =
+    kind === 'delivery'
+      ? {
+          pending: ['processing', 'cancelled'],
+          processing: ['out_for_delivery', 'cancelled'],
+          out_for_delivery: ['delivered', 'cancelled'],
+        }
+      : {
+          pending: ['processing', 'cancelled'],
+          processing: ['ready', 'cancelled'],
+        };
+  if (!(transitions[order.status] || []).includes(requestedStatus)) {
+    return res.status(409).json({
+      error: `Cannot move a ${kind} order from ${order.status} to ${requestedStatus}`,
+    });
+  }
+
+  const result = await updateOrderStatus(kind, id, requestedStatus);
+  if (result.error === 'bad_status') return res.status(400).json({ error: 'Invalid status' });
+  if (result.error === 'not_found') return res.status(404).json({ error: 'Order not found' });
+  res.json(result);
+});
+
 // ── GET /api/admin/alerts ─────────────────────────────────────────────────────
-// Missed-dose alerts (Fig 49-style). patient_code only, no PII.
+// Unified, privacy-safe operations feed. It combines adherence, fulfilment,
+// inventory, prescription, and account conditions without exposing names,
+// diagnoses, addresses, or prescription images.
 router.get('/alerts', async (_req, res) => {
-  const [rows] = await pool.execute(
+  const [adherence] = await pool.execute(
     `SELECT ca.id, ca.channel, ca.status, ca.created_at, p.patient_code,
             m.drug_name_raw AS drug, ms.scheduled_time
      FROM caregiver_alerts ca JOIN patients p ON p.id = ca.patient_id
@@ -210,7 +338,120 @@ router.get('/alerts', async (_req, res) => {
      LEFT JOIN medications m ON m.id = ms.medication_id
      ORDER BY ca.created_at DESC LIMIT 100`
   );
-  res.json(rows);
+  const [refills] = await pool.execute(
+    `SELECT r.id, r.status, r.requested_at AS created_at, p.patient_code,
+            m.drug_name_raw AS drug
+     FROM refill_requests r JOIN patients p ON p.id = r.patient_id
+     JOIN medications m ON m.id = r.medication_id
+     WHERE r.status IN ('pending','processing') ORDER BY r.requested_at DESC LIMIT 50`
+  );
+  const [deliveries] = await pool.execute(
+    `SELECT d.id, d.status, d.requested_at AS created_at, p.patient_code,
+            m.drug_name_raw AS drug
+     FROM delivery_requests d JOIN patients p ON p.id = d.patient_id
+     JOIN medications m ON m.id = d.medication_id
+     WHERE d.status IN ('pending','processing','out_for_delivery')
+     ORDER BY d.requested_at DESC LIMIT 50`
+  );
+  const [inventory] = await pool.execute(
+    `SELECT id, generic_name, stock_quantity, created_at
+     FROM drug_reference WHERE stock_quantity <= 10
+     ORDER BY stock_quantity ASC, generic_name LIMIT 50`
+  );
+  const [prescriptions] = await pool.execute(
+    `SELECT pp.id, pp.status, pp.created_at, p.patient_code, m.drug_name_raw AS drug
+     FROM prescription_photos pp JOIN medications m ON m.id = pp.medication_id
+     JOIN patients p ON p.id = m.patient_id
+     WHERE pp.status IN ('pending','needs_clearer')
+     ORDER BY pp.created_at DESC LIMIT 50`
+  );
+  const [[accounts]] = await pool.execute(
+    `SELECT COUNT(*) AS count, MAX(created_at) AS created_at
+     FROM users WHERE is_active = 0`
+  );
+
+  const now = Date.now();
+  const ageSeverity = (createdAt, warningHours = 24) =>
+    now - new Date(createdAt).getTime() >= warningHours * 3600000 ? 'critical' : 'warning';
+  const alerts = [
+    ...adherence.map((row) => ({
+      id: `adherence:${row.id}`,
+      type: 'adherence',
+      severity: row.status === 'unseen' ? 'critical' : 'info',
+      title: `${row.patient_code} missed ${row.drug || 'a scheduled dose'}`,
+      description: `Follow-up is assigned to the ${row.channel} channel.`,
+      status: row.status,
+      patient_code: row.patient_code,
+      created_at: row.created_at,
+      navigate_to: '/admin/alerts',
+    })),
+    ...refills.map((row) => ({
+      id: `refill:${row.id}`,
+      type: 'order',
+      severity: ageSeverity(row.created_at),
+      title: `${row.status === 'pending' ? 'Refill waiting for acceptance' : 'Refill being prepared'}`,
+      description: `${row.patient_code} · ${row.drug}`,
+      status: row.status,
+      patient_code: row.patient_code,
+      created_at: row.created_at,
+      navigate_to: '/admin/orders',
+    })),
+    ...deliveries.map((row) => ({
+      id: `delivery:${row.id}`,
+      type: 'order',
+      severity: ageSeverity(row.created_at),
+      title: row.status === 'out_for_delivery' ? 'Delivery currently in transit' : 'Delivery requires processing',
+      description: `${row.patient_code} · ${row.drug}`,
+      status: row.status,
+      patient_code: row.patient_code,
+      created_at: row.created_at,
+      navigate_to: '/admin/orders',
+    })),
+    ...inventory.map((row) => ({
+      id: `inventory:${row.id}`,
+      type: 'inventory',
+      severity: Number(row.stock_quantity) === 0 ? 'critical' : 'warning',
+      title: Number(row.stock_quantity) === 0 ? `${row.generic_name} is out of stock` : `${row.generic_name} is running low`,
+      description: `${Number(row.stock_quantity)} units currently available.`,
+      status: Number(row.stock_quantity) === 0 ? 'out_of_stock' : 'low_stock',
+      created_at: row.created_at,
+      navigate_to: '/admin/medicines',
+    })),
+    ...prescriptions.map((row) => ({
+      id: `prescription:${row.id}`,
+      type: 'prescription',
+      severity: row.status === 'needs_clearer' ? 'critical' : ageSeverity(row.created_at, 12),
+      title: row.status === 'needs_clearer' ? 'Prescription needs patient resubmission' : 'Prescription awaiting pharmacist review',
+      description: `${row.patient_code} · ${row.drug}`,
+      status: row.status,
+      patient_code: row.patient_code,
+      created_at: row.created_at,
+      navigate_to: '/admin/alerts',
+    })),
+  ];
+  if (Number(accounts.count) > 0) {
+    alerts.push({
+      id: 'accounts:inactive',
+      type: 'account',
+      severity: 'info',
+      title: `${Number(accounts.count)} inactive account${Number(accounts.count) === 1 ? '' : 's'}`,
+      description: 'Review account status in User Management.',
+      status: 'inactive',
+      created_at: accounts.created_at || new Date(),
+      navigate_to: '/admin/users',
+    });
+  }
+  alerts.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+  const counts = alerts.reduce(
+    (result, alert) => {
+      result.total += 1;
+      result[alert.severity] = (result[alert.severity] || 0) + 1;
+      result[alert.type] = (result[alert.type] || 0) + 1;
+      return result;
+    },
+    { total: 0, critical: 0, warning: 0, info: 0 }
+  );
+  res.json({ counts, alerts: alerts.slice(0, 200) });
 });
 
 // ── GET /api/admin/adherence-trend?days= ──────────────────────────────────────
@@ -243,10 +484,41 @@ router.get('/priority', async (_req, res) => {
             COUNT(*)              AS total
      FROM patients`
   );
+  const [[chats]] = await pool.execute(
+    `SELECT COUNT(*) AS total,
+            SUM(priority = 'high' AND status = 'open') AS priority_open,
+            SUM(priority = 'high') AS priority_total,
+            SUM(priority = 'normal' AND status = 'open') AS standard_open
+     FROM inquiry_threads`
+  );
+  const [activity] = await pool.execute(
+    `SELECT DATE(opened_at) AS date,
+            SUM(priority = 'high') AS priority,
+            SUM(priority = 'normal') AS standard
+     FROM inquiry_threads
+     WHERE opened_at >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)
+     GROUP BY DATE(opened_at) ORDER BY date`
+  );
   res.json({
     priority: Number(c.priority ?? 0),
     standard: Number(c.standard ?? 0),
     total: Number(c.total ?? 0),
+    chats: {
+      total: Number(chats.total ?? 0),
+      priority_open: Number(chats.priority_open ?? 0),
+      priority_total: Number(chats.priority_total ?? 0),
+      standard_open: Number(chats.standard_open ?? 0),
+    },
+    activity: activity.map((row) => ({
+      date: row.date,
+      priority: Number(row.priority ?? 0),
+      standard: Number(row.standard ?? 0),
+    })),
+    reward_policy: [
+      { day: 3, tokens: 1 },
+      { day: 6, tokens: 1 },
+      { day: 7, tokens: 2 },
+    ],
   });
 });
 
