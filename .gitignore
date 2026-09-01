@@ -1,3 +1,6 @@
 node_modules
 npm --prefix server run migrate
 .npm-cache/
+
+# Runtime/test prescription uploads can contain sensitive patient data.
+/server/uploads/rx_*.png

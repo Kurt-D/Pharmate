@@ -283,9 +283,10 @@ describe('D-4 — no payment flow exists anywhere', () => {
     const { execSync } = await import('node:child_process');
     let hits = '';
     try {
-      // Scan our source only — dependency manifests carry unrelated funding URLs.
+      // Scan text-based source only. Binary assets can contain arbitrary byte
+      // sequences that git grep may misidentify as payment-related words.
       hits = execSync(
-        'git grep -liE "stripe|paypal|card_number|cardnumber|payment_intent|checkout_session|\\bcvv\\b" -- . ":!*.test.js" ":!*package-lock.json" ":!*package.json"',
+        'git grep -liE "stripe|paypal|card_number|cardnumber|payment_intent|checkout_session|\\bcvv\\b" -- "*.js" "*.jsx" "*.ts" "*.tsx" "*.css" "*.html" "*.sql" "*.md" "*.json" "*.yml" "*.yaml" ":!*.test.js" ":!*package-lock.json" ":!*package.json"',
         { cwd: process.cwd() + '/..' }
       ).toString();
     } catch {
