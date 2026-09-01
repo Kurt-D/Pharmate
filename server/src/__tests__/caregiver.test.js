@@ -56,7 +56,14 @@ beforeAll(async () => {
     .post('/api/caregiver/link')
     .set(auth(caregiverToken))
     .send({ code: invite.body.code });
-  expect(link.status).toBe(201);
+  expect(link.status).toBe(202);
+  const requests = await request(app).get('/api/patient/caregiver-requests').set(auth(patientToken));
+  expect(requests.body).toHaveLength(1);
+  const approved = await request(app)
+    .post(`/api/patient/caregiver-requests/${requests.body[0].id}/decision`)
+    .set(auth(patientToken))
+    .send({ approve: true });
+  expect(approved.status).toBe(200);
 });
 
 afterAll(async () => {
@@ -76,6 +83,11 @@ describe('Linked-patient scope (patient_code only, no PII)', () => {
 
 describe('Caregiver medicine and schedule setup', () => {
   test('an actively linked caregiver can add a tracked medicine and create a suggested schedule', async () => {
+    const links = await request(app).get('/api/patient/caregivers').set(auth(patientToken));
+    await request(app)
+      .patch(`/api/patient/caregivers/${links.body[0].id}/permissions`)
+      .set(auth(patientToken))
+      .send({ can_manage_medications: true });
     const added = await request(app)
       .post(`/api/caregiver/patients/${patientCode}/medications`)
       .set(auth(caregiverToken))
@@ -92,6 +104,10 @@ describe('Caregiver medicine and schedule setup', () => {
       .set(auth(caregiverToken));
     expect(scheduled.status).toBe(201);
     expect(scheduled.body.count).toBeGreaterThan(0);
+    await request(app)
+      .patch(`/api/patient/caregivers/${links.body[0].id}/permissions`)
+      .set(auth(patientToken))
+      .send({ can_manage_medications: false });
   });
 });
 

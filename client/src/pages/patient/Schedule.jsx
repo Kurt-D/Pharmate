@@ -154,6 +154,7 @@ export default function Schedule() {
   const [removedRows, setRemovedRows] = useState(() => new Set());
   const [deleting, setDeleting] = useState(false);
   const [scheduleError, setScheduleError] = useState('');
+  const [loadRevision, setLoadRevision] = useState(0);
   const source = localStorage.getItem('pm_medication_schedule_source') || 'suggested';
   const scheduleHidden = localStorage.getItem('pm_schedule_hidden') === '1';
   const hasSavedSchedule =
@@ -202,17 +203,32 @@ export default function Schedule() {
             )
         ),
       ];
-      const historyRows = doseData.filter(
-        (dose) => !['scheduled', 'snoozed'].includes(dose.status)
+      const serverActiveRows = doseData.filter((dose) =>
+        ['scheduled', 'snoozed'].includes(dose.status)
       );
-      const activeRows = savedRows.length
-        ? savedRows
-        : doseData.filter((dose) => ['scheduled', 'snoozed'].includes(dose.status));
+      // Match the medication dashboard: the server's current upcoming doses are
+      // authoritative. Local rows are only an offline fallback.
+      const activeRows = serverActiveRows.length ? serverActiveRows : savedRows;
       setMedicines(combinedMedicines);
-      setDoses([...activeRows, ...historyRows]);
+      setDoses(activeRows);
       setProposal(proposalData);
       setLoading(false);
     });
+  }, [loadRevision]);
+
+  useEffect(() => {
+    const refresh = () => setLoadRevision((value) => value + 1);
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === 'visible') refresh();
+    };
+    const timer = window.setInterval(refresh, 30000);
+    window.addEventListener('pm-domain-updated', refresh);
+    document.addEventListener('visibilitychange', refreshWhenVisible);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener('pm-domain-updated', refresh);
+      document.removeEventListener('visibilitychange', refreshWhenVisible);
+    };
   }, []);
 
   const rows = useMemo(
@@ -221,29 +237,39 @@ export default function Schedule() {
   );
   const visibleRows = rows.filter((row) => !removedRows.has(String(row.rowKey)));
   const hasOngoingSchedule = hasSavedSchedule && visibleRows.length > 0;
-  const groups = [
-    {
-      id: 'morning',
-      icon: 'medicine',
-      label: tr('Morning', 'Umaga'),
-      range: tr('Before 12:00 PM', 'Bago mag-12:00 PM'),
-      rows: visibleRows.filter((row) => row.date.getHours() < 12),
-    },
-    {
-      id: 'afternoon',
-      icon: 'medicine',
-      label: tr('Afternoon', 'Hapon'),
-      range: tr('12:00 PM to 5:59 PM', '12:00 PM hanggang 5:59 PM'),
-      rows: visibleRows.filter((row) => row.date.getHours() >= 12 && row.date.getHours() < 18),
-    },
-    {
-      id: 'evening',
-      icon: 'medicine',
-      label: tr('Night', 'Gabi'),
-      range: tr('6:00 PM onward', 'Mula 6:00 PM'),
-      rows: visibleRows.filter((row) => row.date.getHours() >= 18),
-    },
-  ].filter((group) => group.rows.length);
+  const groups = Object.values(
+    visibleRows.reduce((result, row) => {
+      const dayKey = `${row.date.getFullYear()}-${String(row.date.getMonth() + 1).padStart(2, '0')}-${String(row.date.getDate()).padStart(2, '0')}`;
+      if (!result[dayKey]) {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const rowDay = new Date(row.date);
+        rowDay.setHours(0, 0, 0, 0);
+        const dayDifference = Math.round((rowDay - today) / 86400000);
+        result[dayKey] = {
+          id: dayKey,
+          icon: 'calendar',
+          label:
+            dayDifference === 0
+              ? tr('Today', 'Ngayon')
+              : dayDifference === 1
+                ? tr('Tomorrow', 'Bukas')
+                : row.date.toLocaleDateString(language === 'fil' ? 'fil-PH' : 'en-PH', {
+                    month: 'short',
+                    day: 'numeric',
+                  }),
+          range: row.date.toLocaleDateString(language === 'fil' ? 'fil-PH' : 'en-PH', {
+            weekday: 'long',
+            month: 'long',
+            day: 'numeric',
+          }),
+          rows: [],
+        };
+      }
+      result[dayKey].rows.push(row);
+      return result;
+    }, {})
+  );
 
   function editSchedule() {
     sessionStorage.setItem('pm_open_schedule_editor', '1');
@@ -410,6 +436,14 @@ export default function Schedule() {
                 )}
           </p>
         </div>
+        <button
+          className="pm-schedule-calendar-link"
+          onClick={() => navigate('/patient/calendar')}
+          type="button"
+        >
+          <Icon name="calendar" size={18} />
+          <span>{tr('View Calendar', 'Tingnan ang Kalendaryo')}</span>
+        </button>
       </header>
       {scheduleError && (
         <div className="pm-banner pm-banner--warn" role="alert">
@@ -525,8 +559,11 @@ export default function Schedule() {
                     <span className="pm-saved-med-icon">
                       <Icon name="medicine" />
                     </span>
-                    <div>
-                      <h3>{medicineName(row)}</h3>
+                    <div className="pm-schedule-medicine-copy">
+                      <header>
+                        <h3>{medicineName(row)}</h3>
+                        <em>{tr('Upcoming', 'Paparating')}</em>
+                      </header>
                       <p>{doseText(row)}</p>
                       <small>
                         {row.reason ||

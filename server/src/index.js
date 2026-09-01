@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import express from 'express';
+import { createServer } from 'node:http';
 import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
@@ -14,7 +15,11 @@ import pharmacistRouter from './routes/pharmacist.js';
 import adminRouter from './routes/admin.js';
 import surveysRouter from './routes/surveys.js';
 import directoryRouter from './routes/directory.js';
+import realtimeRouter from './routes/realtime.js';
+import medicationRouter from './routes/medication.js';
+import notificationsRouter from './routes/notifications.js';
 import { trustedOrigins, validateEnvironment } from './config/environment.js';
+import { initializeSocketServer } from './realtime/socketServer.js';
 
 validateEnvironment();
 
@@ -25,6 +30,7 @@ app.use(helmet());
 const allowedOrigins = trustedOrigins();
 app.use(
   cors({
+    credentials: true,
     origin(origin, callback) {
       if (!origin || allowedOrigins.has(origin)) return callback(null, true);
       const error = new Error('Origin not allowed');
@@ -33,7 +39,9 @@ app.use(
     },
   })
 );
-app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
+if (process.env.NODE_ENV !== 'test') {
+  app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
+}
 app.use(express.json({ limit: process.env.JSON_BODY_LIMIT || '32kb' }));
 
 app.use('/api', healthRouter);
@@ -44,6 +52,9 @@ app.use('/api/pharmacist', pharmacistRouter);
 app.use('/api/admin', adminRouter);
 app.use('/api/surveys', surveysRouter);
 app.use('/api/directory', directoryRouter);
+app.use('/api/realtime', realtimeRouter);
+app.use('/api/medications', medicationRouter);
+app.use('/api/notifications', notificationsRouter);
 
 // 404 handler
 app.use((_req, res) => {
@@ -62,7 +73,9 @@ app.use((err, _req, res, _next) => {
 // own ephemeral server; listening here would double-bind the port (EADDRINUSE).
 if (process.env.NODE_ENV !== 'test') {
   createUploadsDir();
-  app.listen(PORT, () => {
+  const server = createServer(app);
+  initializeSocketServer(server, allowedOrigins);
+  server.listen(PORT, () => {
     console.log(`PharMate server listening on http://localhost:${PORT}`);
   });
   startScheduler(); // reminder + missed-sweep + photo-purge cron pipeline

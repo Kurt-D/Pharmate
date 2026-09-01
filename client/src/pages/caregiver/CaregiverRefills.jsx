@@ -1,25 +1,15 @@
 import { useEffect, useState } from 'react';
 import {
   CalendarDays,
-  CalendarClock,
   CalendarPlus,
   CheckCircle2,
-  ChevronDown,
-  ChevronUp,
   Clock3,
-  LockKeyhole,
-  Package,
-  Pencil,
   Pill,
   Plus,
-  ReceiptText,
   Search,
   Send,
-  ShieldCheck,
-  Trash2,
   X,
 } from 'lucide-react';
-import CaregiverRefillAlert, { RefillEmptyState } from './CaregiverRefillAlert.jsx';
 
 const DOSE_STYLES = {
   upcoming: { title: 'Upcoming doses', color: 'text-amber-700', card: 'border-amber-200 bg-amber-50', badge: 'border-amber-200 bg-white text-amber-700' },
@@ -28,6 +18,7 @@ const DOSE_STYLES = {
 };
 
 function DoseSection({ status, doses, onReminder }) {
+  if (!doses.length) return null;
   const style = DOSE_STYLES[status];
   return (
     <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -36,7 +27,7 @@ function DoseSection({ status, doses, onReminder }) {
         <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-600">{doses.length}</span>
       </div>
       <div className="mt-3 grid gap-2">
-        {doses.length ? doses.slice(0, 3).map((dose) => (
+        {doses.slice(0, 3).map((dose) => (
           <article className={`rounded-xl border p-3 ${style.card}`} key={dose.id}>
             <div className="flex items-start gap-3">
               <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white text-blue-600"><Pill className="h-5 w-5" /></span>
@@ -51,7 +42,7 @@ function DoseSection({ status, doses, onReminder }) {
               <button className="mt-3 flex min-h-[46px] w-full items-center justify-center gap-2 rounded-xl border border-blue-200 bg-white px-3 text-sm font-bold text-blue-700 active:scale-[.99]" onClick={() => onReminder(dose)} type="button"><Send className="h-4 w-4" />Send notification reminder</button>
             )}
           </article>
-        )) : <p className="m-0 rounded-xl bg-slate-50 p-4 text-center text-sm font-medium text-slate-600">No {style.title.toLowerCase()} today.</p>}
+        ))}
       </div>
     </section>
   );
@@ -76,22 +67,14 @@ function DoseCalendar({ timeline, onClose }) {
 
 export default function CaregiverRefills({
   medications,
-  stockAlerts,
-  orders,
   previewMode,
   timeline = [],
   canManageMedications = false,
-  onUpdateMedication,
-  onStopMedication,
   onSearchDrugs,
   onAddMedicine,
   onCreateSuggestedSchedule,
   onSendReminder,
 }) {
-  const [editing, setEditing] = useState(null);
-  const [draft, setDraft] = useState({ dosage_instruction: '', frequency: '' });
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState('');
   const [adding, setAdding] = useState(false);
   const [drugQuery, setDrugQuery] = useState('');
   const [drugResults, setDrugResults] = useState([]);
@@ -99,7 +82,6 @@ export default function CaregiverRefills({
   const [addBusy, setAddBusy] = useState(false);
   const [scheduleBusy, setScheduleBusy] = useState(false);
   const [addError, setAddError] = useState('');
-  const [showAllMedications, setShowAllMedications] = useState(false);
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [addDraft, setAddDraft] = useState({
     frequency: 'Once daily',
@@ -110,7 +92,6 @@ export default function CaregiverRefills({
   useEffect(() => {
     if (!canManageMedications) {
       setAdding(false);
-      setEditing(null);
     }
   }, [canManageMedications]);
 
@@ -134,43 +115,6 @@ export default function CaregiverRefills({
     return () => window.clearTimeout(timer);
   }, [adding, drugQuery, onSearchDrugs, selectedDrug]);
 
-  function openEditor(medicine) {
-    if (!canManageMedications) return;
-    setEditing(medicine);
-    setDraft({
-      dosage_instruction: medicine.dosage_instruction || '',
-      frequency: medicine.frequency || 'Once daily',
-    });
-    setError('');
-  }
-
-  async function saveEdit() {
-    setSaving(true);
-    setError('');
-    try {
-      await onUpdateMedication(editing.id, { ...draft, expected_updated_at: editing.updated_at });
-      setEditing(null);
-    } catch (requestError) {
-      setError(requestError.message);
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function stopMedicine() {
-    if (!window.confirm(`Remove ${editing.drug_name_raw} from the active medication schedule?`))
-      return;
-    setSaving(true);
-    setError('');
-    try {
-      await onStopMedication(editing);
-      setEditing(null);
-    } catch (requestError) {
-      setError(requestError.message);
-    } finally {
-      setSaving(false);
-    }
-  }
 
   async function addMedicine() {
     if (!canManageMedications) return;
@@ -216,31 +160,6 @@ export default function CaregiverRefills({
           Review prescriptions, schedules, medicine supply, and refill alerts.
         </p>
       </header>
-      <section
-        className={`flex items-start gap-3 rounded-2xl border p-4 shadow-sm ${canManageMedications ? 'border-emerald-200 bg-emerald-50' : 'border-slate-200 bg-white'}`}
-      >
-        <span
-          className={`grid h-11 w-11 shrink-0 place-items-center rounded-xl ${canManageMedications ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'}`}
-        >
-          {canManageMedications ? (
-            <ShieldCheck className="h-5 w-5" />
-          ) : (
-            <LockKeyhole className="h-5 w-5" />
-          )}
-        </span>
-        <div>
-          <strong className="block text-sm text-slate-900">
-            {canManageMedications
-              ? 'Medication management authorized'
-              : 'View-only medication access'}
-          </strong>
-          <p className="mb-0 mt-1 text-xs font-medium leading-5 text-slate-600">
-            {canManageMedications
-              ? 'The patient allowed you to edit OTC directions and remove medicines from the active schedule.'
-              : 'The patient must enable medication editing from their Profile before changes can be made.'}
-          </p>
-        </div>
-      </section>
       {canManageMedications && (
         <section
           className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm"
@@ -301,6 +220,7 @@ export default function CaregiverRefills({
       <DoseSection status="upcoming" doses={timeline.filter((dose) => dose.status === 'upcoming')} onReminder={onSendReminder} />
       <DoseSection status="overdue" doses={timeline.filter((dose) => dose.status === 'overdue')} onReminder={onSendReminder} />
       <DoseSection status="taken" doses={timeline.filter((dose) => dose.status === 'taken')} onReminder={onSendReminder} />
+      {/* Active medicines were intentionally removed from the caregiver Medication page.
       <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="flex items-center justify-between gap-3">
           <div>
@@ -393,7 +313,9 @@ export default function CaregiverRefills({
           </button>
         )}
       </section>
+      */}
       {calendarOpen && <DoseCalendar timeline={timeline} onClose={() => setCalendarOpen(false)} />}
+      {/* The medicine editor belonged to the removed Active medicines section.
       {editing && (
         <div
           className="fixed inset-0 z-[80] flex items-end justify-center bg-slate-950/45 p-0 sm:items-center sm:p-4"
@@ -487,6 +409,7 @@ export default function CaregiverRefills({
           </section>
         </div>
       )}
+      */}
       {adding && (
         <div
           className="fixed inset-0 z-[80] flex items-end justify-center bg-slate-950/45 p-0 sm:items-center sm:p-4"
@@ -646,6 +569,7 @@ export default function CaregiverRefills({
           </section>
         </div>
       )}
+      {/* Inventory, pill-balance, and refill-request panels are intentionally omitted.
       <section className="grid gap-3">
         <div className="flex items-center justify-between">
           <h2 className="m-0 text-lg font-bold text-slate-900">Pill balance and refills</h2>
@@ -710,6 +634,7 @@ export default function CaregiverRefills({
           Prescription refills remain pharmacist-gated before fulfillment.
         </div>
       </section>
+      */}
     </main>
   );
 }

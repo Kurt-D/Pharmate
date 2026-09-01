@@ -73,9 +73,10 @@ try {
     if (existing) {
       await conn.execute(
         `UPDATE drug_reference SET therapeutic_category=?,drug_class=?,common_uses=?,short_description=?,
-         common_strength=?,dosage_form=?,catalog_source=?,rx_class=COALESCE(rx_class,?),availability=1
+         common_strength=?,dosage_form=?,catalog_source=?,rx_class=COALESCE(rx_class,?),availability=1,
+         catalog_status=CASE WHEN ? IS NOT NULL AND ? IS NOT NULL THEN 'VERIFIED' ELSE 'INCOMPLETE' END
          WHERE id=?`,
-        [...metadata, rxClass, existing.id]
+        [...metadata, rxClass, row.common_strength || null, row.dosage_form || null, existing.id]
       );
       if (existing.is_provisional) report.updated++;
       else report.preserved_verified++;
@@ -83,13 +84,43 @@ try {
       await conn.execute(
         `INSERT INTO drug_reference
          (generic_name,brand_names_json,category,therapeutic_category,drug_class,common_uses,
-          short_description,common_strength,dosage_form,catalog_source,is_restricted,availability,rx_class,is_provisional)
-         VALUES (?,JSON_ARRAY(),?,?,?,?,?,?,?,?,0,1,?,1)`,
-        [name, row.therapeutic_category || null, ...metadata, rxClass]
+          short_description,common_strength,dosage_form,catalog_source,is_restricted,availability,rx_class,is_provisional,
+          catalog_status)
+         VALUES (?,JSON_ARRAY(),?,?,?,?,?,?,?,?,0,1,?,1,?)`,
+        [name, row.therapeutic_category || null, ...metadata, rxClass,
+          row.common_strength && row.dosage_form ? 'VERIFIED' : 'INCOMPLETE']
       );
       report.inserted++;
     }
+    // Preserve the official timing guidance used by the deterministic scheduler
+    // when the external catalog is imported after migrations on a fresh setup.
+    if (name === 'acarbose') {
+      await conn.execute(
+        `UPDATE drug_reference
+         SET dosage_form='tablet',
+             common_strength=CASE
+               WHEN common_strength IS NULL OR common_strength='' THEN '25 mg'
+               ELSE common_strength
+             END,
+             meal_instruction='with the first bite of a main meal',
+             administration_instruction='Take at the start of each main meal, with the first bite of food.',
+             guidance_do='Follow the prescription label and take each scheduled dose with the first bite of a main meal.',
+             guidance_dont='Do not change the prescribed dose or frequency, and do not double a missed dose.',
+             evidence_source_url='https://dailymed.nlm.nih.gov/dailymed/fda/fdaDrugXsl.cfm?setid=29939129-7d09-4c22-bf3e-491a8a97f4c4',
+             evidence_reviewed_at='2026-08-29'
+         WHERE LOWER(TRIM(generic_name))='acarbose'`
+      );
+    }
   }
+  await conn.execute(
+    `INSERT INTO medication_rule_variants
+       (id,drug_id,strength,dosage_form,schedule_rule_status,rule_version)
+     SELECT UUID(),drug.id,NULLIF(drug.common_strength,''),NULLIF(drug.dosage_form,''),
+            drug.clinical_rule_status,drug.rule_version
+     FROM drug_reference drug
+     WHERE drug.availability=1
+       AND NOT EXISTS (SELECT 1 FROM medication_rule_variants rule_record WHERE rule_record.drug_id=drug.id)`
+  );
   await conn.commit();
   console.log(JSON.stringify(report, null, 2));
 } catch (error) {

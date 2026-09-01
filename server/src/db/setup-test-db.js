@@ -1,9 +1,8 @@
 /**
- * Prepare the dedicated test database — `npm run db:test:setup`.
+ * Prepare the dedicated disposable test database — `npm run db:test:setup`.
  *
- * Creates pharmate_test (if needed), runs all migrations, and seeds the
- * formulary — all against the TEST database, never the dev one. Keeps the
- * throwaway accounts the Jest suite creates out of the dev `pharmate` DB.
+ * Recreates the test database, runs all migrations, and seeds the formulary —
+ * never touching the dev database. The database name must end in `_test`.
  *
  * Runs the existing migrate/seed scripts as child processes with DB_NAME
  * overridden, so those scripts stay untouched.
@@ -15,21 +14,34 @@ import { fileURLToPath } from 'node:url';
 import mysql from 'mysql2/promise';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DB = process.env.TEST_DB_NAME || 'pharmate_test';
+const DB = process.env.TEST_DB_NAME || 'pharmate_jest_test';
+
+function assertSafeTestDatabaseName(name) {
+  // This script is destructive by design. Refuse every name that does not
+  // clearly identify a disposable test database.
+  if (!/^[a-zA-Z0-9_]+$/.test(name) || !name.toLowerCase().endsWith('_test')) {
+    throw new Error(`Refusing to reset non-test database: ${name}`);
+  }
+}
 
 async function main() {
-  // 1. Create the database (idempotent).
+  assertSafeTestDatabaseName(DB);
+
+  // 1. Recreate the disposable database. A clean schema prevents stale
+  // migration metadata and orphaned InnoDB dictionary entries from turning
+  // one setup issue into hundreds of misleading test failures.
   const conn = await mysql.createConnection({
     host: process.env.DB_HOST || 'localhost',
     port: Number(process.env.DB_PORT) || 3306,
     user: process.env.DB_USER || 'pharmate',
     password: process.env.DB_PASS || '',
   });
+  await conn.query(`DROP DATABASE IF EXISTS \`${DB}\``);
   await conn.query(
-    `CREATE DATABASE IF NOT EXISTS \`${DB}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`
+    `CREATE DATABASE \`${DB}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`
   );
   await conn.end();
-  console.log(`Ensured database \`${DB}\` exists.`);
+  console.log(`Recreated disposable database \`${DB}\`.`);
 
   // 2. Migrate + seed the test DB (existing scripts, DB_NAME overridden).
   const env = { ...process.env, DB_NAME: DB };

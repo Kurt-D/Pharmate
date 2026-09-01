@@ -3,11 +3,12 @@ import { AuthProvider } from './context/AuthContext.jsx';
 import { LanguageProvider } from './context/LanguageContext.jsx';
 import { AccessibilityProvider } from './context/AccessibilityContext.jsx';
 import Login from './pages/LoginRedesign.jsx';
+import ForgotPassword from './pages/ForgotPassword.jsx';
 import Signup from './pages/SignupRedesign.jsx';
 import IdentifyUser from './pages/IdentifyUser.jsx';
 import AnchorOnboarding from './pages/AnchorOnboarding.jsx';
 import PatientLayout from './pages/patient/PatientLayout.jsx';
-import Medications from './pages/patient/Medications.jsx';
+import Medications, { MedicineCalendarPage } from './pages/patient/Medications.jsx';
 import AddMedicine from './pages/patient/AddMedicine.jsx';
 import Schedule from './pages/patient/Schedule.jsx';
 import PrescriptionUpload from './pages/patient/PrescriptionUpload.jsx';
@@ -18,6 +19,7 @@ import Orders from './pages/patient/OrdersRedesign.jsx';
 import Shop from './pages/patient/Shop.jsx';
 import Profile from './pages/patient/ProfileRedesign.jsx';
 import AccessibilitySettings from './pages/patient/AccessibilitySettings.jsx';
+import { HelpCenterPage } from './components/TutorialCenterScreen.jsx';
 import PharmacistLayout from './pages/pharmacist/PharmacistLayout.jsx';
 import DrugCuration from './pages/pharmacist/DrugCuration.jsx';
 import Validation from './pages/pharmacist/Validation.jsx';
@@ -47,7 +49,8 @@ export default function App() {
             <div className="pharmate-app">
               <Routes>
                 <Route path="/login" element={<Login />} />
-                <Route path="/reset-password" element={<Login />} />
+                <Route path="/forgot-password" element={<ForgotPassword />} />
+                <Route path="/reset-password" element={<ForgotPassword />} />
                 <Route path="/signup" element={<Signup />} />
                 <Route path="/identify" element={<IdentifyUser />} />
 
@@ -72,6 +75,7 @@ export default function App() {
                   <Route path="home" element={<Today />} />
                   <Route path="streak" element={<StreakDetails />} />
                   <Route path="medications" element={<Medications />} />
+                  <Route path="calendar" element={<MedicineCalendarPage />} />
                   <Route path="medications/add" element={<AddMedicine />} />
                   <Route path="medications/prescription" element={<PrescriptionUpload />} />
                   <Route path="schedule" element={<Schedule />} />
@@ -81,6 +85,7 @@ export default function App() {
                   <Route path="shop" element={<Shop />} />
                   <Route path="profile" element={<Profile />} />
                   <Route path="accessibility" element={<AccessibilitySettings />} />
+                  <Route path="help" element={<HelpCenterPage />} />
                 </Route>
                 <Route
                   path="/pharmacist"

@@ -10,15 +10,8 @@ export function setPasswordResetDeliveryForTests(delivery) {
   testDelivery = delivery;
 }
 
-function resetUrl(rawToken) {
-  const url = new URL('/reset-password', process.env.PUBLIC_APP_URL);
-  url.searchParams.set('token', rawToken);
-  return url.toString();
-}
-
-export async function deliverPasswordReset({ email, rawToken }) {
-  const url = resetUrl(rawToken);
-  if (testDelivery) return testDelivery({ email, url, rawToken });
+export async function deliverPasswordReset({ email, pin }) {
+  if (testDelivery) return testDelivery({ email, pin });
 
   if (
     process.env.NODE_ENV === 'development' &&
@@ -27,7 +20,7 @@ export async function deliverPasswordReset({ email, rawToken }) {
     console.warn(
       'SECURITY WARNING: password-reset token logging is enabled for local development only.'
     );
-    console.warn(`Password reset link for ${email}: ${url}`);
+    console.warn(`Password reset PIN for ${email}: ${pin}`);
     return;
   }
 
@@ -36,13 +29,33 @@ export async function deliverPasswordReset({ email, rawToken }) {
     host: process.env.SMTP_HOST,
     port: Number(process.env.SMTP_PORT),
     secure: Number(process.env.SMTP_PORT) === 465,
-    auth: { user: process.env.SMTP_USERNAME, pass: process.env.SMTP_PASSWORD },
+    auth: {
+      user: process.env.SMTP_USER || process.env.SMTP_USERNAME,
+      pass: process.env.SMTP_PASS || process.env.SMTP_PASSWORD,
+    },
   });
   await transporter.sendMail({
-    from: process.env.SMTP_SENDER,
+    from:
+      process.env.SMTP_FROM ||
+      process.env.SMTP_SENDER ||
+      `PharMate Security <${process.env.SMTP_USER || process.env.SMTP_USERNAME}>`,
     to: email,
-    subject: 'Reset your PharMate password',
-    text: `Use this link within 30 minutes to reset your password: ${url}`,
-    html: `<p>Use the link below within 30 minutes to reset your password.</p><p><a href="${url}">Reset password</a></p>`,
+    subject: 'Your PharMate password reset PIN',
+    text: `Your PharMate password reset PIN is ${pin}. It expires in 10 minutes. If you did not request this, you can ignore this email.`,
+    html: `
+      <div style="font-family:Arial,sans-serif;max-width:520px;margin:auto;color:#1e2e4a">
+        <div style="border:1px solid #d7e3f2;border-radius:16px;overflow:hidden">
+          <div style="background:#4c8ce4;color:#fff;padding:22px 26px">
+            <strong style="font-size:22px">PharMate</strong>
+            <div style="font-size:13px;margin-top:4px">Secure account recovery</div>
+          </div>
+          <div style="padding:26px">
+            <h1 style="font-size:20px;margin:0 0 12px">Reset your password</h1>
+            <p style="line-height:1.6">Enter this one-time PIN in PharMate. It expires in 10 minutes.</p>
+            <div style="font-size:32px;font-weight:800;letter-spacing:10px;text-align:center;background:#f0f6ff;border-radius:12px;padding:18px;color:#2a67b8">${pin}</div>
+            <p style="font-size:13px;line-height:1.6;color:#64748b">Never share this PIN. PharMate staff will not ask you for it. If you did not request a reset, ignore this email.</p>
+          </div>
+        </div>
+      </div>`,
   });
 }

@@ -16,6 +16,10 @@ import { pushConfigured } from '../services/notifications.js';
 import { sweepMissed } from '../services/doses.js';
 import { purgeExpiredPhotos } from '../services/prescription.js';
 import { purgeReadNotifications } from '../services/patientNotifications.js';
+import {
+  dispatchMorningStreakLifecycle,
+  dispatchStreakWarnings,
+} from '../services/streakNotifications.js';
 
 const MANILA_TZ = 'Asia/Manila';
 
@@ -74,6 +78,30 @@ export function startScheduler() {
       {
         timezone: MANILA_TZ,
       }
+    ),
+    cron.schedule(
+      '0 20 * * *',
+      guard('streak-gentle-warning', async () => {
+        const result = await dispatchStreakWarnings('gentle');
+        console.log(`[cron:streak-gentle] created=${result.created} sent=${result.sent}`);
+      }),
+      { timezone: MANILA_TZ }
+    ),
+    cron.schedule(
+      '30 22 * * *',
+      guard('streak-urgent-warning', async () => {
+        const result = await dispatchStreakWarnings('urgent');
+        console.log(`[cron:streak-urgent] created=${result.created} sent=${result.sent}`);
+      }),
+      { timezone: MANILA_TZ }
+    ),
+    cron.schedule(
+      '0 8 * * *',
+      guard('streak-morning-lifecycle', async () => {
+        const result = await dispatchMorningStreakLifecycle();
+        console.log(`[cron:streak-morning] evaluated=${result.evaluated} sent=${result.sent}`);
+      }),
+      { timezone: MANILA_TZ }
     ),
   ];
 

@@ -46,6 +46,22 @@ describe('GET /api/patient/doses/today', () => {
       expect(d.status).toBe('scheduled');
     });
   });
+
+  test('does not include taken or missed history from another day', async () => {
+    const [dose] = await today();
+    const futureId = `future-${Date.now()}`;
+    await pool.execute(
+      `INSERT INTO medication_schedules
+       (id,medication_id,patient_id,scheduled_time,generated_reason,is_confirmed,schedule_version,status)
+       SELECT ?,medication_id,patient_id,DATE_ADD(scheduled_time, INTERVAL 1 DAY),
+              'future boundary test',1,schedule_version,'taken'
+         FROM medication_schedules WHERE id=?`,
+      [futureId, dose.schedule_id]
+    );
+    const result = await today();
+    expect(result.some((item) => item.schedule_id === futureId)).toBe(false);
+    await pool.execute('DELETE FROM medication_schedules WHERE id=?', [futureId]);
+  });
 });
 
 describe('Dose logging — the 30-min / 2-hour rule (D-C)', () => {
@@ -64,6 +80,30 @@ describe('Dose logging — the 30-min / 2-hour rule (D-C)', () => {
       [dose.schedule_id]
     );
     expect(log.confirmation_method).toBe('manual');
+  });
+
+  test('calendar can show only taken doses for the selected day', async () => {
+    const doses = await today();
+    const takenDose = doses.find((item) => item.status === 'taken');
+    const day = new Date(new Date(takenDose.scheduled_time).getTime() + 8 * 3600000)
+      .toISOString()
+      .slice(0, 10);
+    const res = await request(app)
+      .get(`/api/patient/doses/calendar?date=${day}&status=taken`)
+      .set(auth())
+      .expect(200);
+    expect(res.body.length).toBeGreaterThan(0);
+    expect(res.body.every((item) => ['taken', 'taken_late'].includes(item.status))).toBe(true);
+    expect(res.body[0].logged_at).toBeTruthy();
+  });
+
+  test('taken doses are read-only and have no edit endpoint', async () => {
+    const dose = (await today()).find((item) => item.status === 'taken');
+    await request(app)
+      .patch(`/api/patient/doses/${dose.schedule_id}/taken`)
+      .set(auth())
+      .send({ logged_at: dose.logged_at })
+      .expect(404);
   });
 
   test('logged 31 min late → taken_late (never plain taken) + reflow suggestion', async () => {

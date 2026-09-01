@@ -231,7 +231,7 @@ export default function PrescriptionShop() {
           </div>
         ) : (
           <ul>
-            <li>Doctor’s name and PRC license number</li>
+            <li>Prescription details and license information are readable</li>
             <li>Prescription date and patient name</li>
             <li>Medicine, strength, dosage, and quantity</li>
           </ul>
@@ -259,7 +259,7 @@ export default function PrescriptionShop() {
           <section className="pm-rx-medicines">
             <header>
               <h2>Prescription Medicines</h2>
-              <p>Quantities cannot exceed the doctor-prescribed balance.</p>
+              <p>Quantities cannot exceed the remaining validated prescription balance.</p>
             </header>
             {RX_PRODUCTS.map((product) => {
               const remaining = product.total - product.purchased;

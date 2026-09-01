@@ -4,9 +4,8 @@ import 'dotenv/config';
 // NEVER polluted by throwaway accounts. Load local database credentials first,
 // then override only the database name and cryptographic secrets used by tests.
 //
-// Override with TEST_DB_NAME if you want a different name; CI already sets
-// DB_NAME=pharmate_test, which this matches.
-process.env.DB_NAME = process.env.TEST_DB_NAME || 'pharmate_test';
+// Override with TEST_DB_NAME if CI uses a different disposable database.
+process.env.DB_NAME = process.env.TEST_DB_NAME || 'pharmate_jest_test';
 process.env.DB_HOST ||= 'localhost';
 process.env.DB_USER ||= 'pharmate';
 process.env.JWT_SECRET = 'test-access-secret-'.padEnd(64, 'a');

@@ -30,27 +30,48 @@ export function validateEnvironment(env = process.env) {
     errors.push('AES_KEY must be exactly 64 hexadecimal characters');
   }
 
+  if (env.NODE_ENV === 'production') {
+    if (!env.GOOGLE_CLIENT_ID?.trim()) errors.push('GOOGLE_CLIENT_ID is required in production');
+  }
+  const captchaProvider = String(env.CAPTCHA_PROVIDER || 'turnstile').trim().toLowerCase();
+  const captchaDisabledInDevelopment =
+    env.NODE_ENV === 'development' && env.DISABLE_CAPTCHA === 'true';
+  if (
+    env.DISABLE_CAPTCHA === 'true' &&
+    !['development', 'test'].includes(env.NODE_ENV)
+  ) {
+    errors.push('DISABLE_CAPTCHA is allowed only when NODE_ENV=development');
+  }
+  if (!['turnstile', 'self-hosted'].includes(captchaProvider)) {
+    errors.push('CAPTCHA_PROVIDER must be turnstile or self-hosted');
+  }
+  if (
+    !captchaDisabledInDevelopment &&
+    captchaProvider === 'turnstile' &&
+    (env.NODE_ENV === 'production' || env.CAPTCHA_PROVIDER) &&
+    !env.TURNSTILE_SECRET_KEY?.trim()
+  ) {
+    errors.push('TURNSTILE_SECRET_KEY is required when CAPTCHA_PROVIDER=turnstile');
+  }
+  if (env.CAPTCHA_SIGNING_SECRET && env.CAPTCHA_SIGNING_SECRET.length < 64) {
+    errors.push('CAPTCHA_SIGNING_SECRET must be at least 64 characters');
+  }
+  if (env.PASSWORD_RESET_JWT_SECRET && env.PASSWORD_RESET_JWT_SECRET.length < 64) {
+    errors.push('PASSWORD_RESET_JWT_SECRET must be at least 64 characters');
+  }
+  if (env.RESET_TOKEN_SECRET && env.RESET_TOKEN_SECRET.length < 64) {
+    errors.push('RESET_TOKEN_SECRET must be at least 64 characters');
+  }
+
   if (env.PASSWORD_RESET_EMAIL_ENABLED === 'true' && env.NODE_ENV !== 'test') {
-    const smtpRequired = [
-      'SMTP_HOST',
-      'SMTP_PORT',
-      'SMTP_USERNAME',
-      'SMTP_PASSWORD',
-      'SMTP_SENDER',
-      'PUBLIC_APP_URL',
-    ];
+    const smtpRequired = ['SMTP_HOST', 'SMTP_PORT'];
     const missingSmtp = smtpRequired.filter((name) => !env[name]?.trim());
+    if (!(env.SMTP_USER || env.SMTP_USERNAME)?.trim()) missingSmtp.push('SMTP_USER');
+    if (!(env.SMTP_PASS || env.SMTP_PASSWORD)?.trim()) missingSmtp.push('SMTP_PASS');
     if (missingSmtp.length) {
       errors.push(`Missing password-reset email variables: ${missingSmtp.join(', ')}`);
     }
     if (env.SMTP_PORT && !/^\d+$/.test(env.SMTP_PORT)) errors.push('SMTP_PORT must be numeric');
-    if (env.PUBLIC_APP_URL) {
-      try {
-        new URL(env.PUBLIC_APP_URL);
-      } catch {
-        errors.push('PUBLIC_APP_URL must be a valid URL');
-      }
-    }
   }
   if (env.PASSWORD_RESET_DEV_LOG_TOKEN === 'true' && env.NODE_ENV !== 'development') {
     errors.push('PASSWORD_RESET_DEV_LOG_TOKEN is allowed only when NODE_ENV=development');

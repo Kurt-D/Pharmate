@@ -216,27 +216,46 @@
 }
 
 .auth-password-field input {
-  padding-right: 3rem;
+  padding-right: 6.1rem;
 }
 
 .auth-password-field button {
   align-items: center;
-  background: transparent;
-  border: 0;
-  color: #778197;
+  background: #f4f8fe;
+  border: 1px solid #d7e3f2;
+  border-radius: 0.52rem;
+  color: #2a67b8;
   display: flex;
-  height: 46px;
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 750;
+  gap: 0.32rem;
+  height: 40px;
   justify-content: center;
   min-height: 0;
-  padding: 0;
+  min-width: 5.15rem;
+  padding: 0 0.58rem;
   position: absolute;
-  right: 0.2rem;
-  top: 2px;
-  width: 2.7rem;
+  right: 0.3rem;
+  top: 5px;
+  width: auto;
 }
 
 .auth-password-field button:hover {
-  color: var(--auth-blue);
+  background: #eaf3ff;
+  border-color: #a9c8f3;
+  color: #1f5da8;
+}
+
+.auth-password-field button:focus-visible {
+  box-shadow: 0 0 0 3px rgba(76, 140, 228, 0.22);
+  outline: 2px solid #4c8ce4;
+  outline-offset: 1px;
+}
+
+.auth-password-field button.is-visible {
+  background: #eaf3ff;
+  border-color: #9fc1ef;
 }
 
 .auth-password-field button:disabled {
@@ -252,6 +271,11 @@
   stroke-linejoin: round;
   stroke-width: 1.8;
   width: 19px;
+}
+
+.auth-password-field button > span {
+  line-height: 1;
+  white-space: nowrap;
 }
 
 .auth-options,
@@ -340,6 +364,122 @@
 .auth-captcha:has(input:checked) .auth-captcha-mark {
   background: var(--auth-green);
   color: #fff;
+}
+
+.auth-recaptcha {
+  align-items: center;
+  background: #f8fafc;
+  border: 1px solid var(--auth-border);
+  border-radius: 0.72rem;
+  display: flex;
+  justify-content: center;
+  min-height: 86px;
+  overflow: hidden;
+  padding: 0.55rem;
+}
+
+.auth-turnstile-label {
+  align-items: center;
+  color: #526176;
+  display: flex;
+  font-size: 0.68rem;
+  font-weight: 700;
+  gap: 0.35rem;
+}
+
+.auth-turnstile-label svg {
+  color: #4c8ce4;
+  height: 16px;
+  width: 16px;
+}
+
+.auth-self-captcha {
+  background: #f8fafc;
+  border: 1px solid var(--auth-border);
+  border-radius: 0.72rem;
+  display: grid;
+  gap: 0.75rem;
+  padding: 0.75rem;
+}
+
+.auth-self-captcha__image {
+  align-items: center;
+  display: flex;
+  gap: 0.6rem;
+  justify-content: center;
+  min-height: 72px;
+}
+
+.auth-self-captcha__image img {
+  background: #fff;
+  border: 1px solid #d7e3f2;
+  border-radius: 0.55rem;
+  display: block;
+  height: 72px;
+  max-width: calc(100% - 52px);
+  object-fit: contain;
+  width: 230px;
+}
+
+.auth-self-captcha__image > span {
+  color: var(--auth-muted);
+  flex: 1;
+  font-size: 0.72rem;
+  text-align: center;
+}
+
+.auth-self-captcha__image button {
+  align-items: center;
+  background: #fff;
+  border: 1px solid #c8d8ed;
+  border-radius: 0.55rem;
+  color: #2a67b8;
+  display: flex;
+  flex: 0 0 44px;
+  height: 44px;
+  justify-content: center;
+}
+
+.auth-self-captcha__image button svg {
+  height: 20px;
+  width: 20px;
+}
+
+.auth-self-captcha > label {
+  color: var(--auth-ink);
+  display: grid;
+  font-size: 0.76rem;
+  font-weight: 700;
+  gap: 0.4rem;
+}
+
+.auth-security-notice {
+  background: #f4f8fe;
+  border: 1px solid #d5e3f5;
+  border-radius: 0.68rem;
+  color: #526176;
+  font-size: 0.7rem;
+  line-height: 1.45;
+  padding: 0.72rem 0.8rem;
+}
+
+.auth-google-button {
+  display: flex;
+  justify-content: center;
+  min-height: 44px;
+  overflow: hidden;
+  width: 100%;
+}
+
+.auth-google-disabled {
+  background: #f6f8fb;
+  border: 1px solid var(--auth-border);
+  border-radius: 0.68rem;
+  color: #7c8798;
+  font: inherit;
+  font-size: 0.76rem;
+  min-height: 48px;
+  width: 100%;
 }
 
 .auth-text-button,
@@ -636,11 +776,31 @@
   color: #3b8b16;
 }
 
-.auth-pin {
-  font-size: 1.4rem !important;
-  font-weight: 750 !important;
-  letter-spacing: 0.55em;
-  padding-left: 1.35em !important;
+.auth-pin-fieldset {
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+
+.auth-pin-fieldset legend {
+  color: var(--auth-ink);
+  font-size: 0.8rem;
+  font-weight: 700;
+  margin-bottom: 0.5rem;
+}
+
+.auth-pin-boxes {
+  display: grid;
+  gap: clamp(0.35rem, 2vw, 0.55rem);
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
+.auth-pin-boxes input {
+  font-size: 1.2rem;
+  font-weight: 800;
+  min-height: 52px;
+  min-width: 0;
+  padding: 0;
   text-align: center;
 }
 
@@ -764,6 +924,17 @@
   .auth-logo {
     height: 100px;
     width: 100px;
+  }
+
+  .auth-recaptcha > div {
+    max-width: 100%;
+  }
+}
+
+@media (max-width: 350px) {
+  .auth-recaptcha > div {
+    transform: scale(0.86);
+    transform-origin: center;
   }
 }
 

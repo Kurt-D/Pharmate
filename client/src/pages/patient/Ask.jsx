@@ -6,7 +6,7 @@ import { api } from '../../api.js';
 // only while it's open and deletes it when you close it. Transport is polling.
 const SCOPE_NOTICE =
   'Pharmacy-level medication questions only (dosing, timing, interactions, ' +
-  'availability). For diagnosis or clinical advice, please see a physician.';
+  'availability). PharMate pharmacists provide medication guidance and do not diagnose medical conditions.';
 
 export default function Ask() {
   const [branches, setBranches] = useState([]);

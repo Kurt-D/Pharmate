@@ -1,4 +1,6 @@
+import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { api } from '../../api.js';
 import { useLanguage } from '../../context/LanguageContext.jsx';
 
 function Icon({ name, size = 23 }) {
@@ -67,9 +69,43 @@ export default function StreakDetails() {
   const navigate = useNavigate();
   const { language } = useLanguage();
   const tr = (en, fil) => (language === 'fil' ? fil : en);
-  const streak = loadStreak();
+  const [streak, setStreak] = useState(loadStreak);
   const days = Math.min(7, Number(streak.days || 0));
   const remaining = Math.max(0, 7 - days);
+
+  useEffect(() => {
+    let active = true;
+    async function loadServerStreak() {
+      try {
+        const response = await api('/api/patient/streak/status');
+        const next = {
+          days: response.data.current_days,
+          tokens: response.data.priority_tokens,
+          lastTaken: new Date().toISOString(),
+        };
+        if (!active) return;
+        setStreak(next);
+        localStorage.setItem('pm_priority_streak', JSON.stringify(next));
+
+        // Opening the reward screen counts as viewing an earned-token notice.
+        const notices = await api(
+          '/api/patient/notifications?type=reward_earned&unread_only=true&limit=20'
+        );
+        await Promise.all(
+          (notices.data.notifications || []).map((item) =>
+            api(`/api/patient/notifications/${item.id}/read`, { method: 'PATCH' })
+          )
+        );
+        window.dispatchEvent(new Event('pm-streak-updated'));
+      } catch {
+        // The locally cached value remains available when the device is offline.
+      }
+    }
+    loadServerStreak();
+    return () => {
+      active = false;
+    };
+  }, []);
 
   return (
     <main className="pm-streak-page">

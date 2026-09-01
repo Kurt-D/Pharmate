@@ -230,7 +230,7 @@ export default function OrdersQueue() {
                       )}
                     </div>
                     <ul>
-                      <li>Doctor’s name and PRC number are visible</li>
+                      <li>Prescription details and license information are readable</li>
                       <li>Patient name and prescription date are valid</li>
                       <li>Signature, strength, dosage, and quantity match</li>
                     </ul>

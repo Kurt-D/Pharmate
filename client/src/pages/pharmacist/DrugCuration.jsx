@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api } from '../../api.js';
 
 const EMPTY_FORM = {
@@ -106,7 +106,8 @@ export default function DrugCuration() {
     <>
       <h2 className="h4 fw-bold mb-1">Drug Curation</h2>
       <p className="text-muted">
-        Review drugs patients encoded that aren&apos;t in the verified formulary yet (D-D).
+        Review medicines patients entered that are not yet in the pharmacy catalog. Adding a
+        catalog entry does not verify its clinical scheduling rule.
         Approving adds the drug — pharmacist-signed — and makes the patient&apos;s medication
         schedulable.
       </p>
@@ -245,7 +246,7 @@ export default function DrugCuration() {
                     disabled={busy || !form.generic_name.trim()}
                     onClick={() => act('approve')}
                   >
-                    {busy ? 'Saving…' : 'Approve & add to formulary'}
+                    {busy ? 'Saving…' : 'Approve catalog entry'}
                   </button>
                   <button
                     className="btn btn-outline-danger"
@@ -349,6 +350,156 @@ export default function DrugCuration() {
           </>
         )}
       </section>
+      <ClinicalRuleVerification />
     </>
+  );
+}
+
+const RULE_FIELDS = [
+  ['common_strength', 'Strength', 'text'],
+  ['dosage_form', 'Dosage form', 'text'],
+  ['administration_route', 'Administration route', 'text'],
+  ['supported_frequency_codes', 'Supported frequency codes (comma separated)', 'text'],
+  ['frequency_default', 'Frequency code', 'text'],
+  ['max_daily_doses', 'Maximum reminders per day', 'number'],
+  ['min_interval_hours', 'Minimum interval (hours)', 'number'],
+  ['administration_instruction', 'Administration instruction', 'text'],
+  ['clinical_rationale', 'Patient-friendly timing explanation', 'text'],
+  ['guidance_do', 'Verified Do guidance', 'text'],
+  ['guidance_dont', 'Verified Don’t guidance', 'text'],
+  ['clinical_source_name', 'Source organization/document', 'text'],
+  ['evidence_source_url', 'Evidence URL (HTTPS)', 'url'],
+  ['source_revision_date', 'Source revision date', 'date'],
+  ['evidence_reviewed_at', 'Review date', 'date'],
+];
+
+function dateValue(value) {
+  return value ? String(value).slice(0, 10) : '';
+}
+
+function frequencyCodesValue(value) {
+  if (Array.isArray(value)) return value.join(', ');
+  try {
+    const parsed = JSON.parse(String(value || '[]'));
+    return Array.isArray(parsed) ? parsed.join(', ') : '';
+  } catch { return String(value || ''); }
+}
+
+function ClinicalRuleVerification() {
+  const [rules, setRules] = useState(null);
+  const [report, setReport] = useState(null);
+  const [selectedRule, setSelectedRule] = useState(null);
+  const [ruleForm, setRuleForm] = useState(null);
+  const [status, setStatus] = useState('UNVERIFIED');
+  const [query, setQuery] = useState('');
+  const [reason, setReason] = useState('');
+  const [working, setWorking] = useState(false);
+  const [message, setMessage] = useState('');
+  const [revisions, setRevisions] = useState([]);
+
+  const loadRules = useCallback(async () => {
+    const [rulesResponse, reportResponse] = await Promise.all([
+      api(`/api/pharmacist/clinical-rules?status=${status}&q=${encodeURIComponent(query)}`),
+      api('/api/pharmacist/clinical-rules/report'),
+    ]);
+    setRules(rulesResponse.data);
+    setReport(reportResponse.data.summary);
+  }, [query, status]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => loadRules().catch((error) => setMessage(error.message)), 200);
+    return () => window.clearTimeout(timer);
+  }, [loadRules]);
+
+  function pickRule(rule) {
+    setSelectedRule(rule);
+    setRuleForm({
+      ...rule,
+      source_revision_date: dateValue(rule.source_revision_date),
+      evidence_reviewed_at: dateValue(rule.evidence_reviewed_at),
+      supported_frequency_codes: frequencyCodesValue(rule.supported_frequency_codes),
+    });
+    setReason('');
+    setMessage('');
+    api(`/api/pharmacist/clinical-rules/${rule.id}/revisions`)
+      .then((response) => setRevisions(response.data))
+      .catch((error) => setMessage(error.message));
+  }
+
+  async function decide(action) {
+    setWorking(true);
+    setMessage('');
+    try {
+      const response = await api(`/api/pharmacist/clinical-rules/${selectedRule.id}/decision`, {
+        method: 'POST', body: { ...ruleForm, action, reason },
+      });
+      setMessage(action === 'VERIFY' ? 'Clinical scheduling rule verified.' : action === 'REJECT' ? 'Rule rejected with an audit reason.' : action === 'RETIRE' ? 'Rule retired with an audit reason.' : 'Rule saved for review.');
+      setSelectedRule(null);
+      setRuleForm(null);
+      await loadRules();
+      return response;
+    } catch (error) {
+      const consistency = error.body?.consistency;
+      setMessage(consistency
+        ? `Cannot verify. Missing: ${consistency.missing_fields.join(', ') || 'none'}. Conflicts: ${consistency.conflicts.join(', ') || 'none'}.`
+        : error.message);
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  return (
+    <section className="pw-card mt-3 p-3">
+      <div className="d-flex flex-wrap justify-content-between gap-2 align-items-start mb-3">
+        <div>
+          <h3 className="h5 mb-1">Clinical Rule Verification</h3>
+          <p className="text-muted mb-0">One-time evidence review for formulary scheduling rules. This does not approve an individual patient schedule.</p>
+        </div>
+        {report && <div className="d-flex flex-wrap gap-2">
+          <span className="badge bg-secondary">{report.total} total</span>
+          <span className="badge bg-success">{report.schedule_verified} verified</span>
+          <span className="badge bg-warning text-dark">{report.in_review} in review</span>
+          <span className="badge bg-light text-dark">{report.incomplete_rules} incomplete</span>
+          <span className="badge bg-info text-dark">{report.rule_records} rule records</span>
+          {report.missing_rule_records > 0 && <span className="badge bg-danger">{report.missing_rule_records} missing records</span>}
+          {report.duplicate_variants > 0 && <span className="badge bg-danger">{report.duplicate_variants} duplicate variants</span>}
+        </div>}
+      </div>
+      {message && <div className="alert alert-info py-2" role="status">{message}</div>}
+      <div className="row g-3">
+        <div className="col-lg-5">
+          <div className="d-flex gap-2 mb-2">
+            <input className="form-control" onChange={(event) => setQuery(event.target.value)} placeholder="Search medicine" value={query} />
+            <select className="form-select" onChange={(event) => setStatus(event.target.value)} value={status}>
+              <option value="IN_REVIEW">In review</option><option value="UNVERIFIED">Unverified</option>
+              <option value="REJECTED">Rejected</option><option value="VERIFIED">Verified</option>
+              <option value="RETIRED">Retired</option>
+            </select>
+          </div>
+          <div className="list-group" style={{ maxHeight: 560, overflowY: 'auto' }}>
+            {rules?.map((rule) => <button className={`list-group-item list-group-item-action ${selectedRule?.id === rule.id ? 'active' : ''}`} key={rule.id} onClick={() => pickRule(rule)} type="button">
+              <strong>{rule.generic_name}</strong><small className="d-block">{rule.common_strength || 'No strength'} · {rule.dosage_form || 'No form'}</small>
+              {!rule.consistency.valid && <small className="d-block mt-1">{rule.consistency.missing_fields.length} missing · {rule.consistency.conflicts.length} conflicts</small>}
+            </button>)}
+            {rules?.length === 0 && <div className="text-muted text-center p-4">No medicines in this status.</div>}
+          </div>
+        </div>
+        <div className="col-lg-7">
+          {!ruleForm ? <div className="text-muted text-center p-5">Select a medicine to review its evidence and scheduling rule.</div> : <div className="row g-2">
+            <div className="col-12"><strong>{ruleForm.generic_name}</strong><div className="small text-muted">Catalog: {ruleForm.catalog_status} · Rule version {ruleForm.rule_version}</div></div>
+            {RULE_FIELDS.map(([field,label,type]) => <div className={field.includes('instruction') || field.includes('url') || field.includes('source_name') ? 'col-12' : 'col-md-6'} key={field}>
+              <label className="form-label small fw-semibold">{label}</label>
+              <input className="form-control" min={type === 'number' ? '0' : undefined} onChange={(event) => setRuleForm((current) => ({ ...current, [field]: event.target.value }))} step={field === 'min_interval_hours' ? '0.25' : undefined} type={type} value={ruleForm[field] ?? ''} />
+            </div>)}
+            <div className="col-md-6"><label className="form-label small fw-semibold">Food rule</label><select className="form-select" onChange={(event) => setRuleForm((current) => ({ ...current, food_rule: event.target.value }))} value={ruleForm.food_rule || 'NONE'}><option>NONE</option><option>WITH_MEAL</option><option>EMPTY_STOMACH</option><option>BEFORE_MEAL</option><option>AFTER_MEAL</option><option>BEDTIME</option></select></div>
+            <div className="col-md-6"><label className="form-label small fw-semibold">Release type</label><select className="form-select" onChange={(event) => setRuleForm((current) => ({ ...current, release_type: event.target.value }))} value={ruleForm.release_type || ''}><option value="">Choose formulation</option><option value="IMMEDIATE_RELEASE">Immediate release</option><option value="EXTENDED_RELEASE">Extended release</option><option value="DELAYED_RELEASE">Delayed release</option><option value="NOT_APPLICABLE">Not applicable</option><option value="UNKNOWN">Unknown (cannot verify)</option></select></div>
+            {ruleForm.evidence_source_url && <div className="col-12"><a href={ruleForm.evidence_source_url} rel="noreferrer" target="_blank">Open authoritative source in a new tab</a></div>}
+            <div className="col-12"><label className="form-label small fw-semibold">Decision reason (required for rejection or retirement)</label><textarea className="form-control" maxLength="500" onChange={(event) => setReason(event.target.value)} rows="2" value={reason} /></div>
+            <div className="col-12 d-flex flex-wrap gap-2 mt-3"><button className="btn btn-outline-primary" disabled={working} onClick={() => decide('SUBMIT')} type="button">Save for Review</button><button className="btn btn-success" disabled={working} onClick={() => decide('VERIFY')} type="button">Run Checks & Verify</button><button className="btn btn-outline-danger" disabled={working || !reason.trim()} onClick={() => decide('REJECT')} type="button">Reject Rule</button><button className="btn btn-outline-secondary" disabled={working || !reason.trim()} onClick={() => decide('RETIRE')} type="button">Retire Rule</button></div>
+            <div className="col-12 mt-3"><h4 className="h6">Revision history</h4>{revisions.length ? <ul className="list-group">{revisions.map((revision) => <li className="list-group-item" key={revision.id}><strong>Version {revision.rule_version} · {revision.action}</strong><span className="d-block small text-muted">{revision.reviewed_by_name} · {new Date(revision.created_at).toLocaleString()}</span>{revision.reason && <span className="d-block small">{revision.reason}</span>}</li>)}</ul> : <p className="text-muted small">No decisions recorded yet.</p>}</div>
+          </div>}
+        </div>
+      </div>
+    </section>
   );
 }

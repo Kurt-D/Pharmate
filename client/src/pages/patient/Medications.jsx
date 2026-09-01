@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { api } from '../../api.js';
 import { speak } from '../../lib/notifications.js';
 import { newLogId } from '../../lib/doseOutbox.js';
 import { useLanguage } from '../../context/LanguageContext.jsx';
+import { FriendlyTimePicker } from './AutomatedAddMedication.jsx';
 
 function Icon({ name, size = 22 }) {
   const paths = {
@@ -303,13 +304,12 @@ export default function Medications() {
   const navigate = useNavigate();
   const location = useLocation();
   const { language } = useLanguage();
-  const tr = (en, fil) => (language === 'fil' ? fil : en);
+  const tr = useCallback((en, fil) => (language === 'fil' ? fil : en), [language]);
   const [meds, setMeds] = useState(null),
     [doses, setDoses] = useState([]);
   const [view, setView] = useState('loading'),
     [modal, setModal] = useState(null);
-  const [selectedDate, setSelectedDate] = useState(new Date()),
-    [logged, setLogged] = useState(null);
+  const [logged, setLogged] = useState(null);
   const [error, setError] = useState('');
   const [clockNow, setClockNow] = useState(() => Date.now());
   const [scanOpen, setScanOpen] = useState(false);
@@ -321,8 +321,18 @@ export default function Medications() {
   const [doseToConfirm, setDoseToConfirm] = useState(null);
   const [medicineToManage, setMedicineToManage] = useState(null);
   const [savedSchedule, setSavedSchedule] = useState(null);
+  const [medicineAddedSuccess, setMedicineAddedSuccess] = useState(false);
+  const [scheduleCreatedSuccess, setScheduleCreatedSuccess] = useState(false);
+  const [scheduleProposal, setScheduleProposal] = useState(null);
+  const [scheduleSafety, setScheduleSafety] = useState(null);
+  const [scheduleBusy, setScheduleBusy] = useState(false);
+  const [scheduleTargetIds, setScheduleTargetIds] = useState([]);
+  const [scheduleReviewConfirmed, setScheduleReviewConfirmed] = useState(false);
   const [scanProgress, setScanProgress] = useState(0);
   const [scanConfidence, setScanConfidence] = useState(0);
+  const [tourAddMode, setTourAddMode] = useState(false);
+  const [loadRevision, setLoadRevision] = useState(0);
+  const viewBeforeTourRef = useRef(null);
   const cameraInputRef = useRef(null);
   const galleryInputRef = useRef(null);
   const [form, setForm] = useState({
@@ -333,32 +343,49 @@ export default function Medications() {
   });
 
   useEffect(() => {
-    Promise.all([
-      api('/api/patient/medications')
-        .then((r) => r.data)
-        .catch(() => []),
-      api('/api/patient/doses/today')
-        .then((r) => r.data)
-        .catch(() => []),
-    ]).then(([m, d]) => {
-      let frontendMedicines = [];
-      try {
-        frontendMedicines =
-          JSON.parse(localStorage.getItem('pm_frontend_medications') || '[]') || [];
-      } catch {
-        frontendMedicines = [];
+    Promise.allSettled([
+      api('/api/patient/medications'),
+      api('/api/patient/doses/today'),
+    ]).then(([medicineResult, doseResult]) => {
+      if (medicineResult.status === 'rejected') {
+        setMeds(null);
+        setError(
+          medicineResult.reason?.message ||
+            tr('Unable to load your medicines. Please reconnect and try again.', 'Hindi ma-load ang iyong mga gamot. Kumonekta muli at subukan ulit.')
+        );
+        setView('load-error');
+        return;
       }
-      const combinedMedicines = [
-        ...m,
-        ...frontendMedicines.filter(
-          (draft) =>
-            !m.some(
-              (medicine) =>
-                medicine.id === draft.id ||
-                medName(medicine).toLowerCase() === medName(draft).toLowerCase()
-            )
-        ),
-      ];
+      const m = medicineResult.value.data;
+      const d = doseResult.status === 'fulfilled' ? doseResult.value.data : [];
+      setError(
+        doseResult.status === 'rejected'
+          ? doseResult.reason?.message || tr('Dose history is temporarily unavailable.', 'Pansamantalang hindi available ang kasaysayan ng dose.')
+          : ''
+      );
+      const openingForTour = sessionStorage.getItem('pm_tour_add_mode') === '1';
+      localStorage.removeItem('pm_frontend_medications');
+      const combinedMedicines = m;
+      setMedicineAddedSuccess(sessionStorage.getItem('pm_medicine_added_success') === '1');
+      const scheduleWasJustCreated = new URLSearchParams(location.search).get('created') === '1';
+      setScheduleCreatedSuccess(scheduleWasJustCreated);
+      if (scheduleWasJustCreated) {
+        localStorage.removeItem('pm_schedule_hidden');
+        localStorage.removeItem('pm_saved_schedule_rows');
+        localStorage.removeItem('pm_removed_schedule_rows');
+        localStorage.setItem('pm_has_medication_schedule', '1');
+      }
+      sessionStorage.removeItem('pm_medicine_added_success');
+      let selectedScheduleIds = [];
+      try {
+        selectedScheduleIds =
+          JSON.parse(sessionStorage.getItem('pm_schedule_target_medication_ids') || '[]') || [];
+        selectedScheduleIds = selectedScheduleIds.map(String).filter(Boolean);
+        setScheduleTargetIds(selectedScheduleIds);
+      } catch {
+        selectedScheduleIds = [];
+        setScheduleTargetIds([]);
+      }
       let savedScheduleRows = [];
       try {
         savedScheduleRows =
@@ -367,27 +394,38 @@ export default function Medications() {
         savedScheduleRows = [];
       }
       const historyDoses = d.filter((dose) => !['scheduled', 'snoozed'].includes(dose.status));
-      const activeDoses = savedScheduleRows.length
-        ? savedScheduleRows.map((row) => ({ ...row, status: row.status || 'scheduled' }))
-        : d.filter((dose) => ['scheduled', 'snoozed'].includes(dose.status));
+      const serverActiveDoses = d.filter((dose) => ['scheduled', 'snoozed'].includes(dose.status));
+      const activeDoses = serverActiveDoses.length
+        ? serverActiveDoses
+        : savedScheduleRows.map((row) => ({ ...row, status: row.status || 'scheduled' }));
       const combinedDoses = [...activeDoses, ...historyDoses];
       setMeds(combinedMedicines);
       setDoses(combinedDoses);
-      if (combinedMedicines.length)
+      if (openingForTour) setTourAddMode(true);
+      if (combinedMedicines.length) {
+        const selectedMedicine =
+          combinedMedicines.find((medicine) =>
+            selectedScheduleIds.includes(String(medicine.id))
+          ) || combinedMedicines[0];
         setForm((current) =>
           current.entries.some((entry) => entry.medicineId)
             ? current
             : {
                 ...current,
-                entries: [manualEntryFromMedicine(combinedMedicines[0], 'manual-entry-1')],
+                entries: [manualEntryFromMedicine(selectedMedicine, 'manual-entry-1')],
               }
         );
+      }
       if (!combinedMedicines.length) {
         localStorage.removeItem('pm_has_medication_schedule');
         setView('empty');
         return;
       }
-      const scheduleHidden = localStorage.getItem('pm_schedule_hidden') === '1';
+      if (openingForTour) {
+        setView('empty');
+        return;
+      }
+      const scheduleHidden = !scheduleWasJustCreated && localStorage.getItem('pm_schedule_hidden') === '1';
       const hasSchedule =
         !scheduleHidden &&
         (combinedDoses.length > 0 || localStorage.getItem('pm_has_medication_schedule') === '1');
@@ -411,11 +449,15 @@ export default function Medications() {
       sessionStorage.removeItem('pm_choose_schedule_after_add');
       sessionStorage.removeItem('pm_open_manual_after_add');
       sessionStorage.removeItem('pm_manual_schedule_draft');
-      setView(
+      const nextView =
         requestedSetupView === 'manual'
           ? 'manual'
+          : requestedSetupView === 'suggested'
+            ? 'loading'
           : requestedSetupView === 'choice'
             ? 'choice'
+            : requestedSetupView === 'medicines'
+              ? 'choice'
             : openManualAfterAdd
               ? 'manual'
               : chooseAfterAdd
@@ -424,15 +466,42 @@ export default function Medications() {
                   ? 'edit'
                   : hasSchedule
                     ? 'dashboard'
-                    : 'medicines'
-      );
+                    : 'empty';
+      setView(nextView);
+      if (requestedSetupView === 'suggested') openSuggestedSchedule(selectedScheduleIds);
       if (openTaken && hasSchedule) setModal('taken');
     });
-  }, [location.search]);
+  }, [location.search, loadRevision, tr]);
+
+  useEffect(() => {
+    const refresh = () => setLoadRevision((value) => value + 1);
+    window.addEventListener('pm-domain-updated', refresh);
+    return () => window.removeEventListener('pm-domain-updated', refresh);
+  }, []);
 
   useEffect(() => {
     const timer = window.setInterval(() => setClockNow(Date.now()), 30000);
     return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    const showTourControl = (event) => {
+      if (event.detail?.id === 'create-schedule') {
+        setView((current) => {
+          if (viewBeforeTourRef.current === null) viewBeforeTourRef.current = current;
+          return 'empty';
+        });
+        setTourAddMode(true);
+        return;
+      }
+      if (viewBeforeTourRef.current !== null) {
+        setView(viewBeforeTourRef.current);
+        viewBeforeTourRef.current = null;
+      }
+      setTourAddMode(false);
+    };
+    window.addEventListener('pm-tour-step', showTourControl);
+    return () => window.removeEventListener('pm-tour-step', showTourControl);
   }, []);
 
   useEffect(() => {
@@ -489,8 +558,16 @@ export default function Medications() {
     [doses, meds]
   );
   const suggestions = useMemo(
-    () =>
-      (meds || []).flatMap((m) => {
+    () => {
+      if (scheduleProposal) {
+        return scheduleProposal.slots.map((slot, index) => ({
+          ...(meds || []).find((medicine) => medicine.id === slot.medication_id),
+          ...slot,
+          schedule_id: `proposal-${slot.medication_id}-${index}`,
+          reason: slot.generated_reason,
+        }));
+      }
+      return (meds || []).flatMap((m) => {
         const matches = doses.filter((d) => medName(d) === medName(m));
         if (matches.length) return matches;
         let preference = {};
@@ -508,8 +585,9 @@ export default function Medications() {
           reason: suggestionReason(preference, m.frequency),
           generated_reason: suggestionReason(preference, m.frequency),
         }));
-      }),
-    [meds, doses]
+      });
+    },
+    [meds, doses, scheduleProposal]
   );
   const manualPreviewRows = useMemo(
     () =>
@@ -528,13 +606,62 @@ export default function Medications() {
   );
 
   const addMedicine = () => navigate('/patient/medications/add');
+  async function openSuggestedSchedule(targetIds = scheduleTargetIds) {
+    setScheduleBusy(true);
+    setError('');
+    setScheduleReviewConfirmed(false);
+    try {
+      const query = targetIds.length
+        ? `?medication_ids=${encodeURIComponent(targetIds.join(','))}`
+        : '';
+      const response = await api(`/api/patient/schedule${query}`);
+      setScheduleProposal(response.data);
+      setScheduleSafety(response.data.safety || null);
+      setView('suggested');
+    } catch (requestError) {
+      setError(requestError.message);
+    } finally {
+      setScheduleBusy(false);
+    }
+  }
   const addMedicineFromManual = () => {
     sessionStorage.setItem('pm_manual_schedule_draft', JSON.stringify(form));
     sessionStorage.setItem('pm_return_to_manual_after_add', '1');
     navigate('/patient/medications/add');
   };
+  const addMedicineFromSuggested = () => {
+    sessionStorage.setItem(
+      'pm_schedule_target_medication_ids',
+      JSON.stringify(scheduleTargetIds)
+    );
+    navigate('/patient/medications/add?return=suggested&append=1');
+  };
   const scanner = () => setScanOpen(true);
-  const finishSchedule = (source = 'manual') => {
+  const finishSchedule = async (source = 'manual') => {
+    if (!scheduleReviewConfirmed) {
+      setError(tr('Review the schedule and confirm it before saving.', 'Suriin at kumpirmahin ang iskedyul bago i-save.'));
+      return;
+    }
+    setScheduleBusy(true);
+    setError('');
+    const safetySlots = (source === 'manual' ? manualPreviewRows : suggestions).map((row) => ({
+      medication_id: row.medication_id || row.id,
+      minute: new Date(row.scheduled_time).getHours() * 60 + new Date(row.scheduled_time).getMinutes(),
+      generated_reason: row.generated_reason || row.reason || 'Patient selected reminder time',
+    }));
+    try {
+      if (source !== 'manual' && scheduleSafety && !scheduleSafety.can_save) {
+        setError(
+          'This schedule cannot be saved because a verified time-gap rule is violated or required verified information is unavailable. Edit the times, create the schedule manually, review the medicine information, or ask a pharmacist.'
+        );
+        return;
+      }
+      await api('/api/patient/schedule/confirm', {
+        method: 'POST',
+        body: source === 'manual'
+          ? { source: 'manual', slots: safetySlots, medication_ids: [...new Set(safetySlots.map((slot) => slot.medication_id))], review_confirmed: true }
+          : { medication_ids: scheduleTargetIds, review_confirmed: true },
+      });
     localStorage.removeItem('pm_schedule_hidden');
     localStorage.removeItem('pm_removed_schedule_rows');
     localStorage.setItem('pm_has_medication_schedule', '1');
@@ -548,12 +675,29 @@ export default function Medications() {
         schedule_id: row.schedule_id || `saved-${index}`,
       })
     );
-    localStorage.setItem('pm_saved_schedule_rows', JSON.stringify(scheduleRows));
+    const savedMedicineIds = new Set(
+      scheduleRows.map((row) => String(row.medication_id || row.id)).filter(Boolean)
+    );
+    const retainedScheduleRows = doses.filter(
+      (dose) =>
+        ['scheduled', 'snoozed'].includes(dose.status) &&
+        !savedMedicineIds.has(String(dose.medication_id || dose.id))
+    );
+    const allScheduleRows = [...retainedScheduleRows, ...scheduleRows];
+    localStorage.setItem('pm_saved_schedule_rows', JSON.stringify(allScheduleRows));
     setDoses((current) => [
-      ...scheduleRows,
+      ...allScheduleRows,
       ...current.filter((dose) => !['scheduled', 'snoozed'].includes(dose.status)),
     ]);
     setSavedSchedule({ source, rows: scheduleRows });
+    setScheduleCreatedSuccess(true);
+    sessionStorage.removeItem('pm_schedule_target_medication_ids');
+    setScheduleTargetIds([]);
+    } catch (requestError) {
+      setError(requestError.message);
+    } finally {
+      setScheduleBusy(false);
+    }
   };
   function removeFromFrontendState(medicineId) {
     let frontendMedicines = [];
@@ -580,7 +724,11 @@ export default function Medications() {
     );
     setMeds((items) => items.filter((item) => String(item.id) !== String(medicineId)));
     setDoses((items) =>
-      items.filter((dose) => String(dose.medication_id || dose.id) !== String(medicineId))
+      items.filter(
+        (dose) =>
+          String(dose.medication_id || dose.id) !== String(medicineId) ||
+          ['taken', 'taken_late', 'missed'].includes(dose.status)
+      )
     );
   }
   async function removeMedicine(medicine) {
@@ -590,12 +738,12 @@ export default function Medications() {
         `Tanggalin ang ${medName(medicine)} at ang mga paparating nitong paalala?`
       )
     );
-    if (!confirmed) return;
+    if (!confirmed) return false;
     const medicineId = medicine.medication_id || medicine.id;
     if (String(medicineId).startsWith('frontend-')) {
       removeFromFrontendState(medicineId);
       setMedicineToManage(null);
-      return;
+      return true;
     }
     try {
       const detail = await api(`/api/patient/medications/${medicineId}`);
@@ -606,9 +754,27 @@ export default function Medications() {
       removeFromFrontendState(medicineId);
       setMedicineToManage(null);
       setError('');
+      return true;
     } catch (requestError) {
       setError(requestError.message);
+      return false;
     }
+  }
+  async function removeSuggestedMedicine(medicine) {
+    const removed = await removeMedicine(medicine);
+    if (!removed) return;
+    const medicineId = String(medicine.id || medicine.medication_id);
+    const remainingIds = scheduleTargetIds.filter((id) => String(id) !== medicineId);
+    setScheduleTargetIds(remainingIds);
+    sessionStorage.setItem('pm_schedule_target_medication_ids', JSON.stringify(remainingIds));
+    if (!remainingIds.length) {
+      setScheduleProposal(null);
+      setScheduleSafety(null);
+      setView('empty');
+      navigate('/patient/medications', { replace: true });
+      return;
+    }
+    await openSuggestedSchedule(remainingIds);
   }
   async function logDose(dose, method = 'manual') {
     if (!dose || doseLogBusy) return false;
@@ -811,7 +977,7 @@ export default function Medications() {
           <p>{tr('Track your medications.', 'Subaybayan ang iyong mga gamot.')}</p>
         </div>
       </header>
-      {['medicines', 'choice', 'suggested', 'manual', 'manual-review'].includes(view) && (
+      {['choice', 'suggested', 'manual', 'manual-review'].includes(view) && (
         <MedicationSetupSteps view={savedSchedule ? 'complete' : view} tr={tr} />
       )}
       {error && (
@@ -819,10 +985,33 @@ export default function Medications() {
           {error}
         </div>
       )}
+      {scheduleCreatedSuccess && (
+        <div className="pm-success-strip pm-schedule-created-strip" role="status">
+          <Icon name="check" />
+          <div>
+            <strong>{tr('Medication and reminders saved successfully.', 'Matagumpay na nai-save ang gamot at mga paalala.')}</strong>
+            <span>{tr('Your reminders will begin on the selected start date.', 'Magsisimula ang mga paalala sa napiling petsa.')}</span>
+          </div>
+          <button aria-label={tr('Dismiss', 'Isara')} onClick={() => setScheduleCreatedSuccess(false)} type="button">×</button>
+        </div>
+      )}
       {view === 'loading' && (
         <div className="pm-med-loading">
           {tr('Loading your medicines…', 'Nilo-load ang iyong mga gamot…')}
         </div>
+      )}
+
+      {view === 'load-error' && (
+        <section className="pm-med-setup-empty" role="alert">
+          <div className="pm-med-empty-visual">
+            <span><Icon name="info" size={44} /></span>
+          </div>
+          <h2>{tr('Your medicines could not be loaded', 'Hindi ma-load ang iyong mga gamot')}</h2>
+          <p>{tr('Your saved records were not removed. Check the server connection and try again.', 'Hindi nabura ang iyong mga tala. Suriin ang koneksyon sa server at subukan ulit.')}</p>
+          <Primary onClick={() => setLoadRevision((value) => value + 1)}>
+            {tr('Try Again', 'Subukan Muli')}
+          </Primary>
+        </section>
       )}
 
       {view === 'empty' && (
@@ -840,16 +1029,36 @@ export default function Medications() {
               <Icon name="add" />
             </i>
           </div>
-          <h2>{tr('No medicines added yet', 'Wala pang gamot na idinagdag')}</h2>
+          <h2>
+            {tourAddMode && meds?.length
+              ? tr('Add another medicine', 'Magdagdag pa ng gamot')
+              : tr('No medicines added yet', 'Wala pang gamot na idinagdag')}
+          </h2>
           <p>
-            {tr(
-              'Add your medicines first to get started with your schedule.',
-              'Idagdag muna ang iyong gamot upang makapagsimula sa iskedyul.'
-            )}
+            {tourAddMode && meds?.length
+              ? tr(
+                  'Use Add Medicine whenever a new medicine needs its own schedule.',
+                  'Gamitin ang Add Medicine kapag may bagong gamot na kailangang iskedyul.'
+                )
+              : tr(
+                  'Add your medicines first to get started with your schedule.',
+                  'Idagdag muna ang iyong gamot upang makapagsimula sa iskedyul.'
+                )}
           </p>
           <Primary onClick={addMedicine}>
             <Icon name="add" /> {tr('Add Medicine', 'Magdagdag ng Gamot')}
           </Primary>
+          <button className="pm-secondary-large" onClick={() => navigate('/patient/calendar')} type="button">
+            <Icon name="calendar" /> {tr('View Dose History', 'Tingnan ang Dose History')}
+          </button>
+          {doses.some((dose) => ['taken', 'taken_late', 'missed'].includes(dose.status)) && (
+            <Info title={tr('Your history is saved', 'Naka-save ang iyong history')}>
+              {tr(
+                'Removing a medicine stops its reminders but keeps your Taken and Missed records in the Calendar.',
+                'Ang pag-alis ng gamot ay humihinto sa paalala ngunit nananatili sa Kalendaryo ang Nainom at Hindi Nainom na tala.'
+              )}
+            </Info>
+          )}
           <Info title={tr('Why add medicines first?', 'Bakit gamot muna?')}>
             {tr(
               'Adding medicines first helps create accurate schedules for the right medicines.',
@@ -862,10 +1071,12 @@ export default function Medications() {
       {view === 'medicines' && (
         <section className="pm-med-library">
           <Back onClick={() => setView('empty')} tr={tr} />
-          <div className="pm-success-strip">
-            <Icon name="check" />
-            <strong>{tr('Medicine added successfully!', 'Matagumpay naidagdag ang gamot!')}</strong>
-          </div>
+          {medicineAddedSuccess && (
+            <div className="pm-success-strip">
+              <Icon name="check" />
+              <strong>{tr('Medicine added successfully!', 'Matagumpay naidagdag ang gamot!')}</strong>
+            </div>
+          )}
           <SectionHead
             title={tr('Your Medicines', 'Iyong mga Gamot')}
             action={tr('Add Medicine', 'Magdagdag')}
@@ -894,6 +1105,15 @@ export default function Medications() {
                   'Tutulungan ka naming pumili ng ligtas na oras.'
                 )}
               </p>
+              {scheduleProposal?.solver?.complete && (
+                <span className="pm-constraint-verified">
+                  <Icon name="check" size={15} />
+                  {tr(
+                    'Constraint-checked using medicine rules and your daily routine',
+                    'Sinuri gamit ang tuntunin ng gamot at araw-araw mong gawain'
+                  )}
+                </span>
+              )}
             </div>
             <Primary onClick={() => setView('choice')}>
               <Icon name="calendar" /> {tr('Create Schedule', 'Gumawa ng Iskedyul')}
@@ -904,7 +1124,7 @@ export default function Medications() {
 
       {view === 'choice' && (
         <section className="pm-schedule-choice">
-          <Back onClick={() => setView('medicines')} tr={tr} />
+          <Back onClick={() => setView('empty')} tr={tr} />
           <h2>
             {tr(
               'How would you like to create your schedule?',
@@ -922,7 +1142,7 @@ export default function Medications() {
               'Magmumungkahi kami ng oras batay sa tagubilin, dalas, pagkain, at araw-araw mong gawain.'
             )}
             recommended
-            onClick={() => setView('suggested')}
+            onClick={openSuggestedSchedule}
             tr={tr}
           />
           <Choice
@@ -965,18 +1185,40 @@ export default function Medications() {
               </p>
             </div>
           </div>
-          <Safe tr={tr} />
-          <h3>{tr('Your Suggested Schedule', 'Iyong Iminungkahing Iskedyul')}</h3>
-          <DoseRows rows={suggestions} status="upcoming" tr={tr} />
-          <Info title={tr('Why this schedule?', 'Bakit ito ang iskedyul?')}>
-            {tr(
-              'The proposed times follow the frequency, food timing, written directions, and daily routine you entered. Review every time against the medicine label before saving.',
-              'Sinusunod ng mungkahing oras ang dalas, pagkain, tagubilin, at araw-araw mong gawain. Suriin ito ayon sa label bago i-save.'
+          <SectionHead
+            title={tr(
+              `${new Set(suggestions.map((row) => row.medication_id || row.id)).size} medicine${new Set(suggestions.map((row) => row.medication_id || row.id)).size === 1 ? '' : 's'}`,
+              `${new Set(suggestions.map((row) => row.medication_id || row.id)).size} gamot`
             )}
-          </Info>
-          <Primary onClick={() => finishSchedule('suggested')}>
-            <Icon name="check" /> {tr('Use This Schedule', 'Gamitin ang Iskedyul')}
+            description={tr(
+              'Review the times and instructions below.',
+              'Suriin ang oras at tagubilin sa ibaba.'
+            )}
+            action={tr('Add Medicine', 'Magdagdag ng Gamot')}
+            onAction={addMedicineFromSuggested}
+          />
+          {scheduleBusy && <div className="pm-med-loading">Checking verified safety rules…</div>}
+          <SuggestedScheduleCards
+            rows={suggestions}
+            safety={scheduleSafety}
+            onEdit={(medicine) =>
+              navigate(`/patient/medications/add?edit=${medicine.id || medicine.medication_id}&return=suggested`)
+            }
+            onRemove={removeSuggestedMedicine}
+            tr={tr}
+          />
+          <label className="pm-schedule-review-confirm">
+            <input checked={scheduleReviewConfirmed} onChange={(event) => setScheduleReviewConfirmed(event.target.checked)} type="checkbox" />
+            <span>{tr('I reviewed this schedule and checked the medicine details against my label or prescription.', 'Sinuri ko ang iskedyul at itinugma ang gamot sa label o reseta.')}</span>
+          </label>
+          <Primary disabled={scheduleBusy || !scheduleSafety?.can_save || !scheduleReviewConfirmed} onClick={() => finishSchedule('suggested')}>
+            <Icon name="check" /> {tr('Confirm and Save Schedule', 'Kumpirmahin at I-save')}
           </Primary>
+          {!scheduleSafety?.can_save && (
+            <button className="pm-secondary-large" onClick={() => navigate('/patient/ask')} type="button">
+              <Icon name="info" /> {tr('Ask a Pharmacist', 'Magtanong sa Parmasyutiko')}
+            </button>
+          )}
           <button className="pm-secondary-large" onClick={() => setView('manual')} type="button">
             <Icon name="edit" /> {tr('Edit Schedule', 'I-edit ang Iskedyul')}
           </button>
@@ -990,7 +1232,12 @@ export default function Medications() {
           setForm={setForm}
           onAddNewMedicine={addMedicineFromManual}
           onBack={() => setView('choice')}
-          onDone={() => setView('manual-review')}
+          onDone={() => {
+            setScheduleSafety(null);
+            setScheduleReviewConfirmed(false);
+            setError('');
+            setView('manual-review');
+          }}
           tr={tr}
         />
       )}
@@ -1007,10 +1254,20 @@ export default function Medications() {
               'Kumpirmahin ang gamot, dose, at bawat oras ng paalala. Bumalik upang baguhin ang anumang hindi tama.'
             )}
           </Info>
+          <Info title={tr('Created by you', 'Ikaw ang gumawa nito')}>
+            {tr(
+              'These are the reminder times you chose. You can go back and change them before saving.',
+              'Ito ang mga oras ng paalala na pinili mo. Maaari kang bumalik at baguhin ang mga ito bago i-save.'
+            )}
+          </Info>
           <h3>{tr('Your Created Schedule', 'Iyong Ginawang Iskedyul')}</h3>
           <DoseRows rows={manualPreviewRows} status="upcoming" tr={tr} />
-          <Primary onClick={() => finishSchedule('manual')}>
-            <Icon name="check" /> {tr('Save This Schedule', 'I-save ang Iskedyul')}
+          <label className="pm-schedule-review-confirm">
+            <input checked={scheduleReviewConfirmed} onChange={(event) => setScheduleReviewConfirmed(event.target.checked)} type="checkbox" />
+            <span>{tr('I reviewed this schedule and checked the medicine details against my label or prescription.', 'Sinuri ko ang iskedyul at itinugma ang gamot sa label o reseta.')}</span>
+          </label>
+          <Primary disabled={scheduleBusy || !scheduleReviewConfirmed} onClick={() => finishSchedule('manual')}>
+            <Icon name="check" /> {tr('Confirm and Save Schedule', 'Kumpirmahin at I-save')}
           </Primary>
           <button className="pm-secondary-large" onClick={() => setView('manual')} type="button">
             <Icon name="edit" /> {tr('Edit Schedule', 'I-edit ang Iskedyul')}
@@ -1025,7 +1282,7 @@ export default function Medications() {
           upcoming={upcoming}
           missed={missed}
           taken={taken}
-          onCalendar={() => setModal('calendar')}
+          onCalendar={() => navigate('/patient/calendar')}
           onEdit={() => navigate('/patient/schedule')}
           onHistory={setModal}
           onManageMedicine={setMedicineToManage}
@@ -1039,7 +1296,7 @@ export default function Medications() {
         <section className="pm-edit-schedule">
           <ViewTitle
             title={tr('Edit Schedule', 'I-edit ang Iskedyul')}
-            onBack={() => setView(doses.length ? 'dashboard' : 'medicines')}
+            onBack={() => setView(doses.length ? 'dashboard' : 'empty')}
             tr={tr}
           />
           <Info>
@@ -1062,19 +1319,6 @@ export default function Medications() {
           />
           <Safe tr={tr} />
         </section>
-      )}
-      {modal === 'calendar' && (
-        <Calendar
-          selected={selectedDate}
-          setSelected={setSelectedDate}
-          doses={doses}
-          onClose={() => setModal(null)}
-          onAdd={() => {
-            setModal(null);
-            navigate('/patient/schedule');
-          }}
-          tr={tr}
-        />
       )}
       {(modal === 'taken' || modal === 'missed') && (
         <History
@@ -1129,7 +1373,11 @@ export default function Medications() {
             setSavedSchedule(null);
             navigate('/patient/medications', { replace: true });
           }}
-          onView={() => navigate('/patient/schedule')}
+          onView={() => {
+            setSavedSchedule(null);
+            setView('dashboard');
+            navigate('/patient/medications', { replace: true });
+          }}
           tr={tr}
         />
       )}
@@ -1155,27 +1403,22 @@ export default function Medications() {
   );
 }
 
-function Primary({ children, onClick }) {
+function Primary({ children, onClick, disabled = false }) {
   return (
-    <button className="pm-primary-large" onClick={onClick} type="button">
+    <button className="pm-primary-large" disabled={disabled} onClick={onClick} type="button">
       {children}
     </button>
   );
 }
 function MedicationSetupSteps({ view, tr }) {
   const current =
-    view === 'medicines'
-      ? 1
-      : view === 'choice' || view === 'manual'
+    view === 'choice' || view === 'manual'
         ? 2
-        : view === 'complete'
-          ? 4
-          : 3;
+        : 3;
   const steps = [
-    tr('Medicine Details', 'Detalye ng Gamot'),
+    tr('Add Medicine', 'Magdagdag ng Gamot'),
     tr('Create Schedule', 'Gumawa ng Iskedyul'),
-    tr('Review Schedule', 'Suriin ang Iskedyul'),
-    tr('Complete', 'Tapos'),
+    tr('Review & Confirm', 'Suriin at Kumpirmahin'),
   ];
   return (
     <nav
@@ -1239,6 +1482,7 @@ function Safe({ tr }) {
     </div>
   );
 }
+
 function SectionHead({ title, description, action, onAction }) {
   return (
     <div className="pm-med-section-head">
@@ -1346,11 +1590,18 @@ function DoseRows({ rows = [], status, tr, showStatus = true, dashboard = false,
       className={`pm-dose-rows ${dashboard ? 'pm-dashboard-dose-rows' : ''} ${showStatus ? '' : 'without-status'}`}
     >
       {rows.map((d, i) => {
+        const rowStatus = ['taken', 'taken_late'].includes(d.status)
+          ? 'taken'
+          : d.status === 'missed'
+            ? 'missed'
+            : status === 'all'
+              ? 'upcoming'
+              : status;
         const hour = new Date(d.scheduled_time).getHours();
         const statusIcon =
-          status === 'taken'
+          rowStatus === 'taken'
             ? 'check'
-            : status === 'missed'
+            : rowStatus === 'missed'
               ? 'warning'
               : hour >= 18
                 ? 'moon'
@@ -1358,7 +1609,7 @@ function DoseRows({ rows = [], status, tr, showStatus = true, dashboard = false,
         if (dashboard)
           return (
             <article
-              className={`pm-dashboard-dose-row pm-dashboard-dose-row--${status}`}
+              className={`pm-dashboard-dose-row pm-dashboard-dose-row--${rowStatus}`}
               key={d.schedule_id || i}
             >
               <span className={`pm-medicine-dot pm-medicine-kind--${medicineKind(d)}`}>
@@ -1369,17 +1620,17 @@ function DoseRows({ rows = [], status, tr, showStatus = true, dashboard = false,
                 <MedicineDoseDetail medicine={d} />
               </div>
               {showStatus && (
-                <em className={status}>
-                  {status === 'taken'
+                <em className={rowStatus}>
+                  {rowStatus === 'taken'
                     ? tr('Taken', 'Nainom')
-                    : status === 'missed'
+                    : rowStatus === 'missed'
                       ? tr('Missed', 'Hindi Nainom')
                       : tr('Upcoming', 'Paparating')}
                 </em>
               )}
-              {status !== 'missed' && (
+              {rowStatus !== 'missed' && onOpen && (
                 <button
-                  aria-label={`${tr('Manage', 'Pamahalaan')} ${medName(d)}`}
+                  aria-label={`${rowStatus === 'taken' ? tr('Edit taken dose', 'I-edit ang nainom na dose') : tr('Manage', 'Pamahalaan')} ${medName(d)}`}
                   className="pm-dashboard-dose-arrow"
                   onClick={() => onOpen?.(d)}
                   type="button"
@@ -1389,17 +1640,17 @@ function DoseRows({ rows = [], status, tr, showStatus = true, dashboard = false,
               )}
               <span className="pm-dashboard-dose-time">
                 <Icon name="clock" size={16} />
-                <time>{time(d.scheduled_time)}</time>
-                <small>{doseDayLabel(d.scheduled_time, status, tr)}</small>
+                <time>{time(rowStatus === 'taken' ? d.logged_at || d.scheduled_time : d.scheduled_time)}</time>
+                <small>{doseDayLabel(d.scheduled_time, rowStatus, tr)}</small>
               </span>
             </article>
           );
         return (
           <article key={d.schedule_id || i}>
-            <span className={`pm-dose-clock ${status}`}>
+            <span className={`pm-dose-clock ${rowStatus}`}>
               <Icon name={statusIcon} />
             </span>
-            <time>{time(d.scheduled_time)}</time>
+            <time>{time(rowStatus === 'taken' ? d.logged_at || d.scheduled_time : d.scheduled_time)}</time>
             <span className={`pm-medicine-dot pm-medicine-kind--${medicineKind(d)}`}>
               <Icon name="medicine" />
             </span>
@@ -1408,10 +1659,10 @@ function DoseRows({ rows = [], status, tr, showStatus = true, dashboard = false,
               <MedicineDoseDetail medicine={d} />
             </div>
             {showStatus && (
-              <em className={status}>
-                {status === 'taken'
+              <em className={rowStatus}>
+                {rowStatus === 'taken'
                   ? tr('Taken', 'Nainom')
-                  : status === 'missed'
+                  : rowStatus === 'missed'
                     ? tr('Missed', 'Hindi Nainom')
                     : tr('Upcoming', 'Paparating')}
               </em>
@@ -1419,6 +1670,120 @@ function DoseRows({ rows = [], status, tr, showStatus = true, dashboard = false,
           </article>
         );
       })}
+    </div>
+  );
+}
+
+function SuggestedScheduleCards({ rows = [], safety, onEdit, onRemove, tr }) {
+  const groups = [];
+  const byMedicine = new Map();
+  rows.forEach((row) => {
+    const id = String(row.medication_id || row.id);
+    if (!byMedicine.has(id)) {
+      const group = { medicine: row, slots: [] };
+      byMedicine.set(id, group);
+      groups.push(group);
+    }
+    byMedicine.get(id).slots.push(row);
+  });
+
+  if (!groups.length)
+    return (
+      <Info title={tr('No schedule available', 'Walang iskedyul')}>
+        {tr(
+          'Review the medicine information or add a medicine before generating reminder times.',
+          'Suriin ang impormasyon o magdagdag ng gamot bago gumawa ng oras ng paalala.'
+        )}
+      </Info>
+    );
+
+  return (
+    <div className="pm-suggested-medicine-cards">
+      {groups.map(({ medicine, slots }) => (
+        <article className="pm-suggested-medicine-card" key={medicine.medication_id || medicine.id}>
+          <header>
+            <span className={`pm-medicine-dot pm-medicine-kind--${medicineKind(medicine)}`}>
+              <Icon name="medicine" />
+            </span>
+            <div>
+              <h3>{medName(medicine)}</h3>
+              <MedicineDoseDetail medicine={medicine} />
+              {medicine.frequency && <small>{medicine.frequency}</small>}
+            </div>
+            <div className="pm-suggested-card-actions">
+              <button aria-label={`${tr('Edit', 'I-edit')} ${medName(medicine)}`} onClick={() => onEdit(medicine)} type="button">
+                <Icon name="edit" size={18} />
+              </button>
+              <button aria-label={`${tr('Delete', 'Tanggalin')} ${medName(medicine)}`} className="danger" onClick={() => onRemove(medicine)} type="button">
+                <Icon name="trash" size={18} />
+              </button>
+            </div>
+          </header>
+
+          <div className="pm-suggested-time-list">
+            {slots.map((slot, index) => (
+              <div key={slot.schedule_id || `${slot.medication_id}-${index}`}>
+                <Icon name="clock" size={18} />
+                <strong>{time(slot.scheduled_time)}</strong>
+                <span>
+                  {slot.administration_instruction ||
+                    slot.food_instruction ||
+                    tr('Follow the medicine label', 'Sundin ang label ng gamot')}
+                </span>
+              </div>
+            ))}
+          </div>
+
+          <details className="pm-schedule-explanation">
+            <summary>{tr('Why these times and how to take it', 'Bakit ito ang oras at paano inumin')}</summary>
+            <dl>
+              <div>
+                <dt>{tr('Food timing', 'Oras kaugnay ng pagkain')}</dt>
+                <dd>{medicine.administration_instruction || medicine.food_instruction || tr('No verified food instruction stored', 'Walang naka-save na tagubilin sa pagkain')}</dd>
+              </div>
+              <div>
+                <dt>{tr('Spacing', 'Agwat')}</dt>
+                <dd>
+                  {medicine.minimum_gap_hours
+                    ? tr(
+                        `At least ${medicine.minimum_gap_hours} hours between doses of this medicine.`,
+                        `Hindi bababa sa ${medicine.minimum_gap_hours} oras ang pagitan ng dose.`
+                      )
+                    : tr(
+                        'Times follow the entered frequency and all applicable stored interaction gaps.',
+                        'Sinusunod ng oras ang inilagay na dalas at mga naka-save na tuntunin sa agwat.'
+                      )}
+                </dd>
+              </div>
+              {(safety?.findings || [])
+                .filter((item) =>
+                  (item.medicines || []).map(String).includes(String(medicine.medication_id))
+                )
+                .map((item) => (
+                  <div key={item.code}>
+                    <dt>{item.title}</dt>
+                    <dd>{item.message}</dd>
+                  </div>
+                ))}
+              <div>
+                <dt>{tr('Why suggested', 'Bakit iminungkahi')}</dt>
+                <dd>{medicine.generated_reason}</dd>
+              </div>
+              {medicine.guidance_do && (
+                <div><dt>{tr('Do', 'Gawin')}</dt><dd>{medicine.guidance_do}</dd></div>
+              )}
+              {medicine.guidance_dont && (
+                <div><dt>{tr("Don't", 'Huwag')}</dt><dd>{medicine.guidance_dont}</dd></div>
+              )}
+            </dl>
+            {medicine.evidence_source_url && (
+              <a href={medicine.evidence_source_url} rel="noreferrer" target="_blank">
+                {tr('View official medicine-label source', 'Tingnan ang opisyal na pinagmulan')}
+              </a>
+            )}
+          </details>
+        </article>
+      ))}
     </div>
   );
 }
@@ -1558,18 +1923,7 @@ function Manual({ form, meds, setForm, onAddNewMedicine, onBack, onDone, tr }) {
               <div className="pm-time-inputs">
                 {entry.times.map((selectedTime, timeIndex) => (
                   <div className="pm-manual-time-row" key={`${entry.key}-${timeIndex}`}>
-                    <input
-                      aria-label={`${tr('Reminder time', 'Oras ng paalala')} ${timeIndex + 1}`}
-                      onChange={(event) =>
-                        updateEntry(index, {
-                          times: entry.times.map((value, itemIndex) =>
-                            itemIndex === timeIndex ? event.target.value : value
-                          ),
-                        })
-                      }
-                      type="time"
-                      value={selectedTime}
-                    />
+                    <FriendlyTimePicker onChange={(nextTime) => updateEntry(index, { times: entry.times.map((value, itemIndex) => itemIndex === timeIndex ? nextTime : value) })} tr={tr} value={selectedTime} />
                     {entry.times.length > 1 && (
                       <button
                         aria-label={tr('Remove time', 'Alisin ang oras')}
@@ -1700,7 +2054,7 @@ function Dashboard({
       {missed.length > 0 && (
         <DoseSection
           title={tr('Missed Doses', 'Mga Hindi Nainom')}
-          action={tr('View History', 'Tingnan ang History')}
+          action={tr('View Today', 'Tingnan Ngayon')}
           onAction={() => onHistory('missed')}
           rows={missed}
           status="missed"
@@ -1709,9 +2063,8 @@ function Dashboard({
       )}
       <DoseSection
         title={tr('Taken Doses', 'Mga Nainom')}
-        action={tr('View History', 'Tingnan ang History')}
+        action={tr('View Today', 'Tingnan Ngayon')}
         onAction={() => onHistory('taken')}
-        onOpen={onManageMedicine}
         rows={taken}
         status="taken"
         tr={tr}
@@ -2255,8 +2608,8 @@ function History({ doses, type, onClose, tr }) {
         <div className="pm-modal-title">
           <h2>
             {type === 'taken'
-              ? tr('Taken Doses History', 'History ng Nainom')
-              : tr('Missed Doses History', 'History ng Hindi Nainom')}
+              ? tr("Today’s Taken Doses", 'Mga Nainom Ngayon')
+              : tr("Today’s Missed Doses", 'Mga Hindi Nainom Ngayon')}
           </h2>
           <button onClick={onClose} aria-label={tr('Close', 'Isara')} type="button">
             <Icon name="close" />
@@ -2283,94 +2636,163 @@ function History({ doses, type, onClose, tr }) {
     </div>
   );
 }
-function statusForDate(doses, date) {
-  const matching = doses.filter(
-    (dose) =>
-      dose.scheduled_time && new Date(dose.scheduled_time).toDateString() === date.toDateString()
+export function MedicineCalendarModal({ selected, setSelected, onClose, onAdd, tr, page = false }) {
+  const [filter, setFilter] = useState('upcoming');
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
+  const [visibleMonth, setVisibleMonth] = useState(
+    () => new Date(selected.getFullYear(), selected.getMonth(), 1)
   );
-  if (!matching.length) return null;
-  if (matching.some((dose) => dose.status === 'missed')) return 'missed';
-  if (matching.some((dose) => ['scheduled', 'snoozed'].includes(dose.status))) return 'upcoming';
-  if (matching.every((dose) => ['taken', 'taken_late'].includes(dose.status))) return 'taken';
-  return null;
-}
+  const monthOffset = (visibleMonth.getDay() + 6) % 7;
+  const daysInMonth = new Date(
+    visibleMonth.getFullYear(),
+    visibleMonth.getMonth() + 1,
+    0
+  ).getDate();
+  const calendarCells = [
+    ...Array.from({ length: monthOffset }, () => null),
+    ...Array.from({ length: daysInMonth }, (_, index) => index + 1),
+  ];
 
-function Calendar({ selected, setSelected, doses, onClose, onAdd, tr }) {
-  const start = new Date(selected.getFullYear(), selected.getMonth(), 1);
-  const pad = start.getDay();
-  const total = new Date(selected.getFullYear(), selected.getMonth() + 1, 0).getDate();
-  const days = [...Array(pad).fill(null), ...Array.from({ length: total }, (_, i) => i + 1)];
-  const rows = doses.filter(
-    (dose) =>
-      dose.scheduled_time &&
-      new Date(dose.scheduled_time).toDateString() === selected.toDateString()
-  );
-  const move = (amount) =>
-    setSelected(new Date(selected.getFullYear(), selected.getMonth() + amount, 1));
+  function chooseDay(day) {
+    setSelected(new Date(visibleMonth.getFullYear(), visibleMonth.getMonth(), day));
+  }
+
+  function changeMonth(offset) {
+    const nextMonth = new Date(
+      visibleMonth.getFullYear(),
+      visibleMonth.getMonth() + offset,
+      1
+    );
+    setVisibleMonth(nextMonth);
+    setSelected(new Date(nextMonth.getFullYear(), nextMonth.getMonth(), 1));
+  }
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    setLoadError('');
+    api(`/api/patient/doses/calendar?date=${localDayKey(selected)}&status=${filter}`)
+      .then((response) => {
+        if (active) setRows(response.data);
+      })
+      .catch((requestError) => {
+        if (active) {
+          setRows([]);
+          setLoadError(
+            requestError.message || tr('Unable to load this day.', 'Hindi ma-load ang araw na ito.')
+          );
+        }
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [selected, filter, tr]);
   return (
-    <div className="pm-med-modal-backdrop">
-      <section className="pm-med-modal pm-calendar-modal" role="dialog" aria-modal="true">
+    <div className={page ? 'pm-calendar-page' : 'pm-med-modal-backdrop'}>
+      <section className="pm-med-modal pm-calendar-modal pm-simple-history-modal pm-calendar-planner" role={page ? undefined : 'dialog'} aria-modal={page ? undefined : 'true'} aria-labelledby="medicine-calendar-title">
         <div className="pm-modal-title">
-          <h2>{tr('Calendar', 'Kalendaryo')}</h2>
-          <button onClick={onClose} aria-label={tr('Close', 'Isara')} type="button">
-            <Icon name="close" />
+          <div>
+            <h2 id="medicine-calendar-title">{tr('Medicine Calendar', 'Kalendaryo ng Gamot')}</h2>
+            <p>{tr('Choose a day and view its medicines below.', 'Pumili ng araw at tingnan ang mga gamot sa ibaba.')}</p>
+          </div>
+          <button onClick={onClose} aria-label={page ? tr('Back to medications', 'Bumalik sa medications') : tr('Close', 'Isara')} type="button">
+            <Icon name={page ? 'back' : 'close'} />
           </button>
         </div>
-        <div className="pm-calendar-month">
-          <button onClick={() => move(-1)} type="button">
-            <Icon name="back" />
-          </button>
-          <h3>{selected.toLocaleDateString([], { month: 'long', year: 'numeric' })}</h3>
-          <button onClick={() => move(1)} type="button">
-            <Icon name="arrow" />
-          </button>
-        </div>
-        <div className="pm-calendar-grid">
-          {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
-            <strong key={day}>{day}</strong>
+
+        <section className="pm-calendar-planner__month" aria-label={tr('Choose a date', 'Pumili ng petsa')}>
+          <header>
+            <button aria-label={tr('Previous month', 'Nakaraang buwan')} onClick={() => changeMonth(-1)} type="button"><Icon name="back" /></button>
+            <div><small>{tr('Selected date', 'Napiling petsa')}</small><h3>{visibleMonth.toLocaleDateString([], { month: 'long', year: 'numeric' })}</h3></div>
+            <button aria-label={tr('Next month', 'Susunod na buwan')} onClick={() => changeMonth(1)} type="button"><Icon name="arrow" /></button>
+          </header>
+          <div className="pm-calendar-planner__weekdays" aria-hidden="true">
+            {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day) => <span key={day}>{day.slice(0, 1)}</span>)}
+          </div>
+          <div className="pm-calendar-planner__days">
+            {calendarCells.map((day, index) =>
+              day ? (
+                <button
+                  aria-label={new Date(visibleMonth.getFullYear(), visibleMonth.getMonth(), day).toLocaleDateString([], { month: 'long', day: 'numeric' })}
+                  aria-pressed={selected.getFullYear() === visibleMonth.getFullYear() && selected.getMonth() === visibleMonth.getMonth() && selected.getDate() === day}
+                  className={selected.getFullYear() === visibleMonth.getFullYear() && selected.getMonth() === visibleMonth.getMonth() && selected.getDate() === day ? 'selected' : ''}
+                  key={`${visibleMonth.getFullYear()}-${visibleMonth.getMonth()}-${day}`}
+                  onClick={() => chooseDay(day)}
+                  type="button"
+                >
+                  <strong>{day}</strong>
+                  {selected.getFullYear() === visibleMonth.getFullYear() && selected.getMonth() === visibleMonth.getMonth() && selected.getDate() === day && <i className={filter} />}
+                </button>
+              ) : <span aria-hidden="true" key={`empty-${index}`} />
+            )}
+          </div>
+        </section>
+
+        <div className="pm-calendar-filters" aria-label={tr('Dose history filter', 'Filter ng dose history')}>
+          {[
+            ['upcoming', tr('Upcoming', 'Paparating')],
+            ['taken', tr('Taken', 'Nainom')],
+            ['missed', tr('Missed', 'Hindi Nainom')],
+          ].map(([value, label]) => (
+            <button
+              aria-pressed={filter === value}
+              className={filter === value ? 'active' : ''}
+              key={value}
+              onClick={() => setFilter(value)}
+              type="button"
+            >
+              {label}
+            </button>
           ))}
-          {days.map((day, index) => {
-            if (!day) return <span key={index} />;
-            const date = new Date(selected.getFullYear(), selected.getMonth(), day);
-            return (
-              <button
-                className={day === selected.getDate() ? 'selected' : ''}
-                onClick={() => setSelected(date)}
-                type="button"
-                key={index}
-              >
-                <span>{day}</span>
-              </button>
-            );
-          })}
         </div>
         <section className="pm-calendar-day-detail">
-          <h3>
-            {selected.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' })}
-          </h3>
-          {rows.length ? (
-            <DoseRows
-              rows={rows}
-              showStatus={false}
-              status={statusForDate(doses, selected) || 'upcoming'}
-              tr={tr}
-            />
+          <header><div><small>{tr('Medicines for', 'Mga gamot para sa')}</small><h3>{selected.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' })}</h3></div><span>{rows.length}</span></header>
+          {loading ? (
+            <p>{tr('Loading doses…', 'Nilo-load ang mga dose…')}</p>
+          ) : loadError ? (
+            <p role="alert">{loadError}</p>
+          ) : rows.length ? (
+            <DoseRows rows={rows} status="all" tr={tr} />
           ) : (
             <>
               <p>
                 {tr(
-                  'No medicine is scheduled for this date.',
+                  `No ${filter === 'all' ? '' : `${filter} `}doses for this date.`,
                   'Walang gamot na naka-iskedyul sa petsang ito.'
                 )}
               </p>
-              <Primary onClick={onAdd}>
-                <Icon name="add" /> {tr('Add Schedule for This Date', 'Magdagdag ng Iskedyul')}
-              </Primary>
+              {filter === 'upcoming' && (
+                <Primary onClick={onAdd}>
+                  <Icon name="add" /> {tr('Add Schedule for This Date', 'Magdagdag ng Iskedyul')}
+                </Primary>
+              )}
             </>
           )}
         </section>
       </section>
     </div>
+  );
+}
+
+export function MedicineCalendarPage() {
+  const navigate = useNavigate();
+  const { language } = useLanguage();
+  const tr = useCallback((english, filipino) => (language === 'fil' ? filipino : english), [language]);
+  const [selected, setSelected] = useState(() => new Date());
+  return (
+    <MedicineCalendarModal
+      page
+      selected={selected}
+      setSelected={setSelected}
+      onClose={() => navigate('/patient/medications')}
+      onAdd={() => navigate('/patient/medications/add')}
+      tr={tr}
+    />
   );
 }
 function Success({ dose, onClose, tr }) {

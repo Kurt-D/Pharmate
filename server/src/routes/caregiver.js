@@ -17,9 +17,14 @@ import {
   normalizeCaregiverCode,
 } from '../utils/caregiverInvite.js';
 import { publishCaregiverEvent, subscribeCaregiver } from '../services/caregiverEvents.js';
+import { publishUser } from '../services/realtimeEvents.js';
 import { parseFrequency } from '../../engine/frequencyParser.js';
 import { findRestricted, resolveDrug, searchDrugs } from '../services/formulary.js';
 import { confirmForPatient } from '../services/schedule.js';
+import { todayDoses } from '../services/doses.js';
+import { recordAudit } from '../services/audit.js';
+import { createPortalNotification } from '../services/portalNotifications.js';
+import { inquiryChanged, medicationChanged, orderChanged, scheduleChanged } from '../services/domainEvents.js';
 import {
   stopMedication,
   updateMedication,
@@ -66,6 +71,20 @@ router.get('/profile', async (req, res) => {
     created_at: row.created_at,
     display_name: row.display_name_enc ? decrypt(row.display_name_enc) : '',
   });
+});
+
+// Pending links remain visible to the caregiver until the patient decides.
+// Only the patient's privacy-safe code is returned; no patient PII is exposed.
+router.get('/link-requests', async (req, res) => {
+  const [rows] = await pool.execute(
+    `SELECT cp.id, p.patient_code, cp.relationship, cp.status, cp.linked_at AS requested_at
+       FROM caregiver_patients cp
+       JOIN patients p ON p.id=cp.patient_id
+      WHERE cp.caregiver_id=? AND cp.status='pending'
+      ORDER BY cp.linked_at DESC`,
+    [req.user.sub]
+  );
+  res.json(rows);
 });
 
 router.put('/profile', async (req, res) => {
@@ -171,13 +190,19 @@ router.get('/patients/:code/medications', async (req, res) => {
   res.json(rows);
 });
 
+router.get('/patients/:code/today', async (req, res) => {
+  const patientId = await linkedPatientId(req.user.sub, req.params.code);
+  if (!patientId) return res.status(404).json({ error: 'Patient not linked' });
+  res.json(await todayDoses(patientId));
+});
+
 router.get('/drugs', async (req, res) => {
   res.json(await searchDrugs(req.query.q, req.query.limit || 20));
 });
 
 router.post('/patients/:code/medications', async (req, res) => {
-  const patientId = await linkedPatientId(req.user.sub, req.params.code);
-  if (!patientId) return res.status(404).json({ error: 'Patient not linked' });
+  const patientId = await medicationManagementPatient(req, res);
+  if (!patientId) return;
   const drugName = String(req.body?.drug_name || '').trim();
   const frequency = String(req.body?.frequency || '').trim();
   const dosageInstruction = String(req.body?.dosage_instruction || '').trim();
@@ -215,18 +240,22 @@ router.post('/patients/:code/medications', async (req, res) => {
       req.body?.start_date || new Date().toISOString().slice(0, 10),
     ]
   );
+  await recordAudit({ actor: { id: req.user.sub, role: 'caregiver' }, action: 'MEDICATION_CREATED', entityType: 'medication', entityId: id, patientId, metadata: { delegated: true } });
+  await medicationChanged(patientId, 'MEDICATION_CREATED', id, drugName);
   publishCaregiverEvent(req.user.sub, 'adherence-updated', { patient_code: req.params.code });
   res.status(201).json({ id, status: 'active', rx_class: drug.rx_class });
 });
 
 router.post('/patients/:code/schedule/suggested', async (req, res) => {
-  const patientId = await linkedPatientId(req.user.sub, req.params.code);
-  if (!patientId) return res.status(404).json({ error: 'Patient not linked' });
+  const patientId = await medicationManagementPatient(req, res);
+  if (!patientId) return;
   const result = await confirmForPatient(patientId);
   if (result.error === 'invalid_layout') {
     return res.status(409).json({ error: 'A medicine spacing rule could not be satisfied' });
   }
   if (result.error) return res.status(400).json({ error: result.error });
+  await recordAudit({ actor: { id: req.user.sub, role: 'caregiver' }, action: 'SCHEDULE_CONFIRMED', entityType: 'schedule', entityId: result.version, patientId });
+  await scheduleChanged(patientId, result.version);
   publishCaregiverEvent(req.user.sub, 'adherence-updated', { patient_code: req.params.code });
   res.status(201).json({ message: 'Suggested schedule created', ...result });
 });
@@ -260,6 +289,8 @@ router.patch('/patients/:code/medications/:id', async (req, res) => {
   if (parsed.error) return res.status(parsed.error.status).json(parsed.error);
   const result = await updateMedication(patientId, req.params.id, parsed);
   if (result.error) return res.status(result.error.status).json(result.error);
+  await recordAudit({ actor: { id: req.user.sub, role: 'caregiver' }, action: 'MEDICATION_UPDATED', entityType: 'medication', entityId: req.params.id, patientId });
+  await medicationChanged(patientId, 'MEDICATION_UPDATED', req.params.id, result.medication?.drug_name_raw);
   publishCaregiverEvent(req.user.sub, 'adherence-updated', { patient_code: req.params.code });
   res.json(result);
 });
@@ -269,6 +300,10 @@ router.post('/patients/:code/medications/:id/stop', async (req, res) => {
   if (!patientId) return;
   const result = await stopMedication(patientId, req.params.id, req.body?.expected_updated_at);
   if (result.error) return res.status(result.error.status).json(result.error);
+  if (!result.already_stopped) {
+    await recordAudit({ actor: { id: req.user.sub, role: 'caregiver' }, action: 'MEDICATION_STOPPED', entityType: 'medication', entityId: req.params.id, patientId });
+    await medicationChanged(patientId, 'MEDICATION_STOPPED', req.params.id, result.medication?.drug_name_raw);
+  }
   publishCaregiverEvent(req.user.sub, 'adherence-updated', { patient_code: req.params.code });
   res.json(result);
 });
@@ -278,14 +313,27 @@ router.post('/patients/:code/notify', async (req, res) => {
   const patientId = await linkedPatientId(req.user.sub, req.params.code);
   if (!patientId) return res.status(404).json({ error: 'Patient not linked' });
   const medicineName = String(req.body?.drug_name || '').trim() || null;
+  const eventId = uuidv4();
   const result = await createPatientNotification({
     patientId,
     type: 'dose_reminder',
     medicineName,
-    eventKey: `caregiver:${req.user.sub}:${patientId}:${uuidv4()}`,
+    eventKey: `caregiver:${req.user.sub}:${patientId}:${eventId}`,
   });
   let pushSent = false;
   if (result.created) {
+    publishUser(patientId, 'notification-updated', {
+      reason: 'caregiver-reminder',
+      reminder: {
+        id: eventId,
+        message:
+          String(req.body?.voice_message || '').trim() ||
+          'It is time to take your scheduled medicine.',
+        medicine: medicineName || 'scheduled medicine',
+        caregiverName: 'your caregiver',
+        createdAt: new Date().toISOString(),
+      },
+    });
     const [[patient]] = await pool.execute(
       `SELECT p.fcm_token, COALESCE(pp.lock_screen_detail, 'private') AS lock_screen_detail
        FROM patients p
@@ -328,6 +376,7 @@ router.post('/patients/:code/refills', async (req, res) => {
   if (!patientId) return res.status(404).json({ error: 'Patient not linked' });
   const result = await createRefill(patientId, req.body ?? {});
   if (sendOrderError(res, result, 'refill')) return;
+  await orderChanged({ patientId, kind: 'refill', orderId: result.id, status: result.status, created: true });
   res.status(201).json(result);
 });
 
@@ -337,6 +386,7 @@ router.post('/patients/:code/deliveries', async (req, res) => {
   if (!patientId) return res.status(404).json({ error: 'Patient not linked' });
   const result = await createDelivery(patientId, req.body ?? {});
   if (sendOrderError(res, result, 'delivery')) return;
+  await orderChanged({ patientId, kind: 'delivery', orderId: result.id, status: result.status, created: true });
   res.status(201).json(result);
 });
 
@@ -361,6 +411,7 @@ router.post('/patients/:code/inquiries', async (req, res) => {
         'Please have the patient visit their nearest branch.',
     });
   }
+  await inquiryChanged({ patientId, threadId: result.thread_id, action: 'created' });
   res.status(201).json(result);
 });
 
@@ -378,6 +429,7 @@ router.post('/link', inviteLimit, failedInviteLimit, async (req, res) => {
   }
   const tokenHash = hashCaregiverCode(code);
   const legacyTokenHash = legacyCaregiverCodeHash(submittedCode);
+  let requestedPatientId = null;
 
   const conn = await pool.getConnection();
   try {
@@ -391,6 +443,7 @@ router.post('/link', inviteLimit, failedInviteLimit, async (req, res) => {
       await conn.rollback();
       return res.status(404).json({ error: 'Invalid invite code' });
     }
+    requestedPatientId = invite.patient_id;
     if (invite.revoked_at) {
       await conn.rollback();
       return res.status(404).json({ error: 'Invalid invite code' });
@@ -409,9 +462,9 @@ router.post('/link', inviteLimit, failedInviteLimit, async (req, res) => {
        WHERE caregiver_id = ? AND patient_id = ? FOR UPDATE`,
       [req.user.sub, invite.patient_id]
     );
-    if (existing?.status === 'active') {
+    if (['active', 'pending'].includes(existing?.status)) {
       await conn.rollback();
-      return res.status(409).json({ error: 'Already linked to this patient' });
+      return res.status(409).json({ error: existing.status === 'active' ? 'Already linked to this patient' : 'Link request is awaiting patient approval' });
     }
 
     const [claimed] = await conn.execute(
@@ -425,18 +478,18 @@ router.post('/link', inviteLimit, failedInviteLimit, async (req, res) => {
     }
 
     const linkId = existing?.id ?? uuidv4();
-    const eventType = existing ? 'relinked' : 'linked';
+    const eventType = 'requested';
     if (existing) {
       await conn.execute(
         `UPDATE caregiver_patients
-         SET status = 'active', relationship = ?, linked_at = NOW(3), revoked_at = NULL,
+         SET status = 'pending', relationship = ?, linked_at = NOW(3), revoked_at = NULL,
              revoked_by_patient_id = NULL WHERE id = ?`,
         [relationship, linkId]
       );
     } else {
       await conn.execute(
         `INSERT INTO caregiver_patients
-           (id, caregiver_id, patient_id, relationship) VALUES (?, ?, ?, ?)`,
+           (id, caregiver_id, patient_id, relationship, status) VALUES (?, ?, ?, ?, 'pending')`,
         [linkId, req.user.sub, invite.patient_id, relationship]
       );
     }
@@ -446,6 +499,16 @@ router.post('/link', inviteLimit, failedInviteLimit, async (req, res) => {
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
       [uuidv4(), linkId, req.user.sub, invite.patient_id, eventType, req.user.sub, invite.id]
     );
+    await recordAudit({
+      actor: { id: req.user.sub, role: 'caregiver' }, action: 'CAREGIVER_LINK_REQUESTED',
+      entityType: 'caregiver_link', entityId: linkId, patientId: invite.patient_id,
+      metadata: { relationship }, executor: conn,
+    });
+    await createPortalNotification({
+      userId: invite.patient_id, type: 'CAREGIVER_LINK_UPDATED',
+      title: 'Caregiver link request', body: 'A caregiver used your invitation code. Review and approve or reject the request.',
+      actionPath: '/patient/profile', eventKey: `caregiver-link-request:${linkId}`, executor: conn,
+    });
     await conn.commit();
   } catch (err) {
     await conn.rollback();
@@ -454,8 +517,8 @@ router.post('/link', inviteLimit, failedInviteLimit, async (req, res) => {
     conn.release();
   }
 
-  publishCaregiverEvent(req.user.sub, 'patient-linked', { linked: true });
-  res.status(201).json({ message: 'Linked to patient', relationship });
+  publishUser(requestedPatientId, 'CAREGIVER_LINK_UPDATED', { action: 'requested' });
+  res.status(202).json({ message: 'Link request sent. The patient must approve it.', relationship, status: 'pending' });
 });
 
 export default router;

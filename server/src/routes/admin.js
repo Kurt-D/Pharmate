@@ -12,9 +12,34 @@ import { requireAuth } from '../middleware/auth.js';
 import { requireRole } from '../middleware/role.js';
 import { adherenceReport, doseLogReport, toCsv } from '../services/adherence.js';
 import { updateOrderStatus } from '../services/orders.js';
+import { recordAudit } from '../services/audit.js';
+import { orderChanged } from '../services/domainEvents.js';
+import { publishRole, publishUser } from '../services/realtimeEvents.js';
 
 const router = Router();
 router.use(requireAuth, requireRole('admin'));
+
+// Privacy-safe immutable activity feed. Metadata must contain identifiers and
+// operational state only; patient names, diagnoses and prescription content are
+// deliberately never selected here.
+router.get('/audit-events', async (req, res) => {
+  const limit = Math.min(Math.max(Number.parseInt(req.query.limit, 10) || 50, 1), 200);
+  const [rows] = await pool.execute(
+    `SELECT ae.id, ae.actor_role, ae.action, ae.entity_type, ae.entity_id,
+            ae.metadata_json, ae.created_at, p.patient_code
+     FROM audit_events ae
+     LEFT JOIN patients p ON p.id = ae.patient_id
+     ORDER BY ae.created_at DESC LIMIT ?`,
+    [limit]
+  );
+  res.json(rows.map((row) => ({
+    ...row,
+    metadata: typeof row.metadata_json === 'string'
+      ? JSON.parse(row.metadata_json || '{}')
+      : row.metadata_json || {},
+    metadata_json: undefined,
+  })));
+});
 
 function countByStatus(rows) {
   const out = {};
@@ -99,6 +124,18 @@ router.post('/medicines', async (req, res) => {
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)`,
     [id, genericName, strength, form, description, rxClass, stock > 0 ? 1 : 0, stock]
   );
+  await pool.execute(
+    `INSERT INTO medication_rule_variants
+       (id,drug_id,strength,dosage_form,schedule_rule_status,rule_version)
+     VALUES (?,?,?,?, 'UNVERIFIED',1)`,
+    [uuidv4(), id, strength, form]
+  );
+  await recordAudit({
+    actor: { id: req.user.sub, role: 'admin' },
+    action: 'FORMULARY_MEDICINE_CREATED', entityType: 'drug_reference', entityId: id,
+    metadata: { generic_name: genericName },
+  });
+  publishRole('pharmacist', 'FORMULARY_UPDATED', { action: 'created', drug_id: id });
   res.status(201).json({ id });
 });
 
@@ -124,6 +161,16 @@ router.put('/medicines/:id', async (req, res) => {
     [genericName, strength, form, description, rxClass, stock, stock > 0 ? 1 : 0, req.params.id]
   );
   if (!result.affectedRows) return res.status(404).json({ error: 'Medicine not found' });
+  await pool.execute(
+    `UPDATE medication_rule_variants SET strength=?,dosage_form=?,schedule_rule_status='UNVERIFIED'
+     WHERE drug_id=?`,
+    [strength, form, req.params.id]
+  );
+  await recordAudit({
+    actor: { id: req.user.sub, role: 'admin' },
+    action: 'FORMULARY_MEDICINE_UPDATED', entityType: 'drug_reference', entityId: req.params.id,
+  });
+  publishRole('pharmacist', 'FORMULARY_UPDATED', { action: 'updated', drug_id: req.params.id });
   res.json({ id: req.params.id });
 });
 
@@ -140,6 +187,11 @@ router.delete('/medicines/:id', async (req, res) => {
   }
   const [result] = await pool.execute('DELETE FROM drug_reference WHERE id = ?', [req.params.id]);
   if (!result.affectedRows) return res.status(404).json({ error: 'Medicine not found' });
+  await recordAudit({
+    actor: { id: req.user.sub, role: 'admin' },
+    action: 'FORMULARY_MEDICINE_DELETED', entityType: 'drug_reference', entityId: req.params.id,
+  });
+  publishRole('pharmacist', 'FORMULARY_UPDATED', { action: 'deleted', drug_id: req.params.id });
   res.status(204).end();
 });
 
@@ -151,6 +203,20 @@ router.put('/medicines/:id/availability', async (req, res) => {
     req.params.id,
   ]);
   if (r.affectedRows === 0) return res.status(404).json({ error: 'Medicine not found' });
+  await recordAudit({
+    actor: { id: req.user.sub, role: 'admin' },
+    action: 'FORMULARY_AVAILABILITY_UPDATED', entityType: 'drug_reference', entityId: req.params.id,
+    metadata: { availability: Boolean(available) },
+  });
+  publishRole('pharmacist', 'FORMULARY_UPDATED', {
+    action: 'availability', drug_id: req.params.id, availability: Boolean(available),
+  });
+  publishRole('admin', 'INVENTORY_UPDATED', {
+    drug_id: req.params.id, availability: Boolean(available),
+  });
+  publishRole('pharmacist', 'INVENTORY_UPDATED', {
+    drug_id: req.params.id, availability: Boolean(available),
+  });
   res.json({ id: req.params.id, availability: available });
 });
 
@@ -244,6 +310,12 @@ router.put('/users/:id/active', async (req, res) => {
     req.params.id,
   ]);
   if (r.affectedRows === 0) return res.status(404).json({ error: 'User not found' });
+  await recordAudit({
+    actor: { id: req.user.sub, role: 'admin' },
+    action: 'USER_ACTIVE_STATUS_UPDATED', entityType: 'user', entityId: req.params.id,
+    metadata: { is_active: Boolean(active) },
+  });
+  publishUser(req.params.id, 'ACCOUNT_STATUS_CHANGED', { is_active: Boolean(active) });
   res.json({ id: req.params.id, is_active: active });
 });
 
@@ -300,7 +372,7 @@ router.post('/orders/:kind/:id/status', async (req, res) => {
   }
 
   const table = kind === 'delivery' ? 'delivery_requests' : 'refill_requests';
-  const [[order]] = await pool.execute(`SELECT status FROM ${table} WHERE id = ?`, [id]);
+  const [[order]] = await pool.execute(`SELECT status, patient_id FROM ${table} WHERE id = ?`, [id]);
   if (!order) return res.status(404).json({ error: 'Order not found' });
 
   const requestedStatus = String(req.body?.status || '');
@@ -324,6 +396,12 @@ router.post('/orders/:kind/:id/status', async (req, res) => {
   const result = await updateOrderStatus(kind, id, requestedStatus);
   if (result.error === 'bad_status') return res.status(400).json({ error: 'Invalid status' });
   if (result.error === 'not_found') return res.status(404).json({ error: 'Order not found' });
+  await recordAudit({
+    actor: { id: req.user.sub, role: 'admin' },
+    action: 'ORDER_STATUS_UPDATED', entityType: `${kind}_order`, entityId: id,
+    patientId: order.patient_id, metadata: { from: order.status, to: requestedStatus },
+  });
+  await orderChanged({ patientId: order.patient_id, kind, orderId: id, status: requestedStatus });
   res.json(result);
 });
 

@@ -1,13 +1,16 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { createHash, randomBytes } from 'node:crypto';
+import { createHash, randomBytes, randomInt } from 'node:crypto';
+import { OAuth2Client } from 'google-auth-library';
+import { ipKeyGenerator, rateLimit as expressRateLimit } from 'express-rate-limit';
 import { v4 as uuidv4 } from 'uuid';
 import { pool } from '../db/connection.js';
 import { encrypt } from '../utils/crypto.js';
 import { generatePatientCode } from '../utils/patientCode.js';
 import { requireAuth } from '../middleware/auth.js';
-import { failedAttemptLimit, rateLimit } from '../middleware/rateLimit.js';
+import { rateLimit } from '../middleware/rateLimit.js';
+import { issueSelfHostedCaptcha, verifyCaptcha } from '../middleware/verifyTurnstile.js';
 import { validatePassword } from '../utils/passwordPolicy.js';
 import { normalizeEmail } from '../utils/email.js';
 import { deliverPasswordReset } from '../services/passwordResetDelivery.js';
@@ -20,26 +23,31 @@ const REFRESH_DAYS = Number(process.env.JWT_REFRESH_EXPIRES_DAYS) || 30;
 // by intentionally-slow hashing; production must leave BCRYPT_COST unset.
 const BCRYPT_COST = Number(process.env.BCRYPT_COST) || 12;
 const FIFTEEN_MINUTES = 15 * 60 * 1000;
-const RESET_TOKEN_TTL_MS = 30 * 60 * 1000;
+const RESET_PIN_TTL_MS = 10 * 60 * 1000;
+const RESET_PIN_MAX_ATTEMPTS = 3;
+const ACCOUNT_LOCK_THRESHOLD = 5;
+const ACCOUNT_LOCK_BASE_MINUTES = 15;
 const FORGOT_RESPONSE = {
-  message: 'If the account is eligible, a password reset link will be sent',
+  message: 'If the email exists, a 6-digit code has been sent',
 };
-const INVALID_RESET_RESPONSE = { error: 'Invalid or expired reset token' };
+const INVALID_RESET_RESPONSE = { error: 'Invalid or expired password reset request' };
+const INVALID_PIN_RESPONSE = { error: 'Invalid or expired PIN' };
 
 const registerLimit = rateLimit({ windowMs: 60 * 60 * 1000, max: 5 });
-const loginLimit = rateLimit({ windowMs: FIFTEEN_MINUTES, max: 20 });
-const failedLoginLimit = failedAttemptLimit({
+const loginLimit = expressRateLimit({
   windowMs: FIFTEEN_MINUTES,
   max: 5,
-  keyGenerator: (req) =>
-    `${req.ip}:${String(req.body?.email || '')
-      .trim()
-      .toLowerCase()}`,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  skipSuccessfulRequests: true,
+  keyGenerator: (req) => `${ipKeyGenerator(req.ip)}:${normalizeEmail(req.body?.email) || '-'}`,
+  handler: (_req, res) =>
+    res.status(429).json({ error: 'Too many failed attempts; try again later' }),
 });
 const refreshLimit = rateLimit({ windowMs: FIFTEEN_MINUTES, max: 30 });
 const forgotIpLimit = rateLimit({
   windowMs: FIFTEEN_MINUTES,
-  max: process.env.NODE_ENV === 'test' ? 1000 : 5,
+  max: process.env.NODE_ENV === 'test' ? 1000 : 3,
 });
 const forgotEmailLimit = rateLimit({
   windowMs: 60 * 60 * 1000,
@@ -47,9 +55,43 @@ const forgotEmailLimit = rateLimit({
   keyGenerator: (req) => normalizeEmail(req.body?.email) || 'invalid-email',
 });
 const resetLimit = rateLimit({ windowMs: FIFTEEN_MINUTES, max: 10 });
+const verifyPinLimit = rateLimit({ windowMs: FIFTEEN_MINUTES, max: 10 });
+const captchaIssueLimit = rateLimit({ windowMs: FIFTEEN_MINUTES, max: 30 });
+const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+
+function validateRecoveryPassword(password) {
+  const policyError = validatePassword(password);
+  if (policyError) return policyError;
+  if (!/[A-Z]/.test(password)) return 'Password must include an uppercase letter';
+  if (!/[a-z]/.test(password)) return 'Password must include a lowercase letter';
+  if (!/\d/.test(password)) return 'Password must include a number';
+  if (!/[^A-Za-z0-9]/.test(password)) return 'Password must include a special character';
+  return null;
+}
 
 function signAccess(payload) {
   return jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: ACCESS_EXPIRES });
+}
+
+function signResetToken({ userId, resetId, sessionVersion }) {
+  return jwt.sign(
+    {
+      sub: userId,
+      jti: String(resetId),
+      userId,
+      resetId,
+      purpose: 'password-reset',
+      sessionVersion,
+    },
+    process.env.RESET_TOKEN_SECRET ||
+      process.env.PASSWORD_RESET_JWT_SECRET ||
+      process.env.JWT_REFRESH_SECRET,
+    {
+      audience: 'pharmate-password-reset',
+      issuer: 'pharmate-api',
+      expiresIn: '10m',
+    }
+  );
 }
 
 function hashToken(raw) {
@@ -62,9 +104,61 @@ function refreshExpiresAt() {
   return d;
 }
 
+function lockDurationMinutes(failedAttempts) {
+  const lockLevel = Math.max(0, Math.floor((failedAttempts - ACCOUNT_LOCK_THRESHOLD) / 5));
+  return Math.min(60, ACCOUNT_LOCK_BASE_MINUTES * 2 ** lockLevel);
+}
+
+async function createSession(user, executor = pool) {
+  let extra = {};
+  if (user.role === 'patient') {
+    const [patientRows] = await executor.execute(
+      'SELECT patient_code FROM patients WHERE id = ?',
+      [user.id]
+    );
+    extra = { patientCode: patientRows[0]?.patient_code ?? null };
+  }
+  const accessToken = signAccess({
+    sub: user.id,
+    id: user.id,
+    email: user.email,
+    role: user.role,
+    sessionVersion: user.session_version,
+  });
+  const rawRefresh = randomBytes(40).toString('hex');
+  await executor.execute(
+    'INSERT INTO refresh_tokens (id, user_id, token_hash, expires_at) VALUES (?, ?, ?, ?)',
+    [uuidv4(), user.id, hashToken(rawRefresh), refreshExpiresAt()]
+  );
+  const profile = { id: user.id, email: user.email, role: user.role, ...extra };
+  return { accessToken, refreshToken: rawRefresh, role: user.role, profile, user: profile };
+}
+
+async function createPatientRecords(conn, userId, fullName) {
+  const patientCode = await generatePatientCode();
+  await conn.execute(
+    'INSERT INTO patients (id, patient_code, full_name_enc) VALUES (?, ?, ?)',
+    [userId, patientCode, fullName ? encrypt(fullName) : null]
+  );
+  await conn.execute('INSERT INTO patient_anchors (patient_id) VALUES (?)', [userId]);
+  await conn.execute('INSERT INTO patient_preferences (patient_id) VALUES (?)', [userId]);
+}
+
+// ── GET /api/auth/captcha (explicit self-hosted fallback only) ────────────────
+router.get('/captcha', captchaIssueLimit, issueSelfHostedCaptcha);
+
 // ── POST /api/auth/register ───────────────────────────────────────────────────
-router.post('/register', registerLimit, async (req, res) => {
-  const { password, role, full_name, contact_num, address, medical_condition } = req.body;
+router.post('/register', registerLimit, verifyCaptcha, async (req, res) => {
+  const {
+    password,
+    confirmPassword,
+    confirm_password: confirmPasswordSnake,
+    role,
+    full_name,
+    contact_num,
+    address,
+    medical_condition,
+  } = req.body;
   const email = normalizeEmail(req.body.email);
 
   if (!email || !password || !role) {
@@ -72,6 +166,13 @@ router.post('/register', registerLimit, async (req, res) => {
   }
   if (role !== 'patient') {
     return res.status(403).json({ error: 'Public registration is available only to patients' });
+  }
+  const confirmation = confirmPassword ?? confirmPasswordSnake;
+  if (confirmation !== undefined && password !== confirmation) {
+    return res.status(400).json({ error: 'Passwords do not match' });
+  }
+  if (full_name !== undefined && (typeof full_name !== 'string' || full_name.trim().length < 2)) {
+    return res.status(400).json({ error: 'Enter a valid full name' });
   }
   const passwordError = validatePassword(password);
   if (passwordError) return res.status(400).json({ error: passwordError });
@@ -88,12 +189,10 @@ router.post('/register', registerLimit, async (req, res) => {
   try {
     await conn.beginTransaction();
 
-    await conn.execute('INSERT INTO users (id, email, password_hash, role) VALUES (?, ?, ?, ?)', [
-      userId,
-      email,
-      passwordHash,
-      role,
-    ]);
+    await conn.execute(
+      'INSERT INTO users (id, email, password_hash, role, is_verified) VALUES (?, ?, ?, ?, 0)',
+      [userId, email, passwordHash, role]
+    );
 
     const patientCode = await generatePatientCode();
     await conn.execute(
@@ -121,11 +220,17 @@ router.post('/register', registerLimit, async (req, res) => {
     conn.release();
   }
 
-  res.status(201).json({ message: 'Registered successfully' });
+  const session = await createSession({
+    id: userId,
+    email,
+    role,
+    session_version: 0,
+  });
+  res.status(201).json({ message: 'Registered successfully', ...session });
 });
 
 // ── POST /api/auth/login ──────────────────────────────────────────────────────
-router.post('/login', loginLimit, failedLoginLimit, async (req, res) => {
+router.post('/login', loginLimit, verifyCaptcha, async (req, res) => {
   const { password, role: selectedRole, accountGroup } = req.body;
   const email = normalizeEmail(req.body.email);
   if (!email || !password) {
@@ -141,55 +246,156 @@ router.post('/login', loginLimit, failedLoginLimit, async (req, res) => {
     return res.status(400).json({ error: 'Choose either a mobile role or the staff portal' });
   }
 
-  const [rows] = await pool.execute(
-    'SELECT id, email, password_hash, role, is_active, session_version FROM users WHERE email = ?',
-    [email]
-  );
-  const user = rows[0];
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const [rows] = await conn.execute(
+      `SELECT id, email, password_hash, role, is_active, session_version,
+              failed_login_attempts, account_locked_until
+       FROM users WHERE email = ? FOR UPDATE`,
+      [email]
+    );
+    const user = rows[0];
+    const lockedUntil = user?.account_locked_until
+      ? new Date(user.account_locked_until).getTime()
+      : 0;
+    if (user && lockedUntil > Date.now()) {
+      const retryAfter = Math.max(1, Math.ceil((lockedUntil - Date.now()) / 1000));
+      await conn.commit();
+      res.set('Retry-After', String(retryAfter));
+      return res.status(423).json({ error: 'Account temporarily locked', retryAfter });
+    }
 
-  // Constant-time-ish: always run bcrypt even on missing user to prevent timing attacks
-  const hashToCheck =
-    user?.password_hash ?? '$2a$12$invalidhashpadding000000000000000000000000000000000000000';
-  const match = await bcrypt.compare(password, hashToCheck);
+    // Always perform bcrypt work, including for unknown and OAuth-only accounts.
+    const hashToCheck =
+      user?.password_hash ?? '$2a$12$invalidhashpadding000000000000000000000000000000000000000';
+    const match = await bcrypt.compare(password, hashToCheck);
 
-  if (!user || !match || !user.is_active) {
-    return res.status(401).json({ error: 'Invalid credentials' });
+    if (!user || !match || !user.is_active) {
+      let retryAfter = 0;
+      if (user) {
+        const failedAttempts = Number(user.failed_login_attempts || 0) + 1;
+        const lockMinutes =
+          failedAttempts >= ACCOUNT_LOCK_THRESHOLD ? lockDurationMinutes(failedAttempts) : 0;
+        const lockUntil = lockMinutes ? new Date(Date.now() + lockMinutes * 60 * 1000) : null;
+        retryAfter = lockUntil ? lockMinutes * 60 : 0;
+        await conn.execute(
+          `UPDATE users
+           SET failed_login_attempts = ?, account_locked_until = ?
+           WHERE id = ?`,
+          [failedAttempts, lockUntil, user.id]
+        );
+      }
+      await conn.commit();
+      if (retryAfter) {
+        res.set('Retry-After', String(retryAfter));
+        return res.status(423).json({ error: 'Account temporarily locked', retryAfter });
+      }
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
+
+    const roleMismatch = selectedRole && user.role !== selectedRole;
+    const staffMismatch = accountGroup === 'staff' && !['pharmacist', 'admin'].includes(user.role);
+    if (roleMismatch || staffMismatch) {
+      await conn.commit();
+      return res.status(403).json({ error: 'This account does not match the selected login type' });
+    }
+
+    await conn.execute(
+      'UPDATE users SET failed_login_attempts = 0, account_locked_until = NULL WHERE id = ?',
+      [user.id]
+    );
+    const session = await createSession(user, conn);
+    await conn.commit();
+    return res.json(session);
+  } catch (error) {
+    await conn.rollback();
+    throw error;
+  } finally {
+    conn.release();
+  }
+});
+
+// ── POST /api/auth/google ─────────────────────────────────────────────────────
+router.post('/google', loginLimit, async (req, res) => {
+  const credential = typeof req.body?.credential === 'string' ? req.body.credential : '';
+  const audience = process.env.GOOGLE_CLIENT_ID?.trim();
+  if (!credential || !audience) {
+    return res.status(400).json({ error: 'Google sign-in is not configured or is incomplete' });
   }
 
-  const roleMismatch = selectedRole && user.role !== selectedRole;
-  const staffMismatch = accountGroup === 'staff' && !['pharmacist', 'admin'].includes(user.role);
-  if (roleMismatch || staffMismatch) {
-    return res.status(403).json({ error: 'This account does not match the selected login type' });
+  let googleProfile;
+  try {
+    const ticket = await googleClient.verifyIdToken({ idToken: credential, audience });
+    googleProfile = ticket.getPayload();
+  } catch {
+    return res.status(401).json({ error: 'Google authentication could not be verified' });
+  }
+  const email = normalizeEmail(googleProfile?.email);
+  const googleId = googleProfile?.sub;
+  if (!email || !googleId || googleProfile?.email_verified !== true) {
+    return res.status(401).json({ error: 'A verified Google email is required' });
   }
 
-  // Fetch role-specific extras
-  let extra = {};
-  if (user.role === 'patient') {
-    const [pRows] = await pool.execute('SELECT patient_code FROM patients WHERE id = ?', [user.id]);
-    extra = { patientCode: pRows[0]?.patient_code ?? null };
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const [rows] = await conn.execute(
+      `SELECT id, email, role, google_id, is_active, session_version
+       FROM users WHERE google_id = ? OR email = ? FOR UPDATE`,
+      [googleId, email]
+    );
+    let user = rows.find((row) => row.google_id === googleId) || rows[0];
+
+    if (user && (!user.is_active || user.role !== 'patient')) {
+      await conn.rollback();
+      return res.status(403).json({ error: 'Google sign-in is available only to patient accounts' });
+    }
+    if (user && user.google_id && user.google_id !== googleId) {
+      await conn.rollback();
+      return res.status(409).json({ error: 'This email is already linked to another sign-in' });
+    }
+
+    if (!user) {
+      const userId = uuidv4();
+      await conn.execute(
+        `INSERT INTO users
+           (id, email, password_hash, google_id, role, is_verified)
+         VALUES (?, ?, NULL, ?, 'patient', 1)`,
+        [userId, email, googleId]
+      );
+      await createPatientRecords(conn, userId, String(googleProfile.name || 'PharMate Patient'));
+      user = { id: userId, email, role: 'patient', session_version: 0 };
+    } else if (!user.google_id) {
+      await conn.execute(
+        `UPDATE users
+         SET google_id = ?, is_verified = 1,
+             failed_login_attempts = 0, account_locked_until = NULL
+         WHERE id = ?`,
+        [googleId, user.id]
+      );
+    }
+
+    const session = await createSession(user, conn);
+    await conn.commit();
+    return res.json(session);
+  } catch (error) {
+    await conn.rollback();
+    if (error?.code === 'ER_DUP_ENTRY') {
+      return res.status(409).json({ error: 'This Google account is already linked' });
+    }
+    throw error;
+  } finally {
+    conn.release();
   }
-
-  const payload = { sub: user.id, role: user.role, sessionVersion: user.session_version };
-  const accessToken = signAccess(payload);
-  const rawRefresh = randomBytes(40).toString('hex');
-
-  await pool.execute(
-    'INSERT INTO refresh_tokens (id, user_id, token_hash, expires_at) VALUES (?, ?, ?, ?)',
-    [uuidv4(), user.id, hashToken(rawRefresh), refreshExpiresAt()]
-  );
-
-  res.json({
-    accessToken,
-    refreshToken: rawRefresh,
-    role: user.role,
-    profile: { id: user.id, email: user.email, role: user.role, ...extra },
-    user: { id: user.id, email: user.email, role: user.role, ...extra },
-  });
 });
 
 // ── POST /api/auth/forgot-password ───────────────────────────────────────────
-router.post('/forgot-password', forgotIpLimit, forgotEmailLimit, async (req, res) => {
+router.post('/forgot-password', forgotIpLimit, verifyCaptcha, forgotEmailLimit, async (req, res) => {
   const email = normalizeEmail(req.body?.email);
+  const pin = String(randomInt(100_000, 1_000_000));
+  // Hash even for an unknown email to reduce account-enumeration timing differences.
+  const pinHash = await bcrypt.hash(pin, BCRYPT_COST);
   let delivery = null;
 
   if (email) {
@@ -202,17 +408,16 @@ router.post('/forgot-password', forgotIpLimit, forgotEmailLimit, async (req, res
       );
       const user = rows[0];
       if (user) {
-        const rawToken = randomBytes(32).toString('hex');
         await conn.execute(
-          'UPDATE password_reset_tokens SET used_at = NOW(3) WHERE user_id = ? AND used_at IS NULL',
+          'UPDATE password_resets SET is_used = 1 WHERE user_id = ? AND is_used = 0',
           [user.id]
         );
         await conn.execute(
-          `INSERT INTO password_reset_tokens (id, user_id, token_hash, expires_at)
-           VALUES (?, ?, ?, ?)`,
-          [uuidv4(), user.id, hashToken(rawToken), new Date(Date.now() + RESET_TOKEN_TTL_MS)]
+          `INSERT INTO password_resets (user_id, pin_hash, expires_at)
+           VALUES (?, ?, ?)`,
+          [user.id, pinHash, new Date(Date.now() + RESET_PIN_TTL_MS)]
         );
-        delivery = { email: user.email, rawToken };
+        delivery = { email: user.email, pin };
       }
       await conn.commit();
     } catch (error) {
@@ -232,15 +437,98 @@ router.post('/forgot-password', forgotIpLimit, forgotEmailLimit, async (req, res
       console.error('Password-reset email delivery failed');
     }
   }
-  res.status(202).json(FORGOT_RESPONSE);
+  res.status(200).json(FORGOT_RESPONSE);
+});
+
+// ── POST /api/auth/verify-pin ────────────────────────────────────────────────
+router.post(['/verify-pin', '/verify-reset-pin'], verifyPinLimit, async (req, res) => {
+  const email = normalizeEmail(req.body?.email);
+  const pin = typeof req.body?.pin === 'string' ? req.body.pin.trim() : '';
+  if (!email || !/^\d{6}$/.test(pin)) return res.status(400).json(INVALID_PIN_RESPONSE);
+
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const [rows] = await conn.execute(
+      `SELECT prp.id, prp.user_id, prp.pin_hash, prp.expires_at, prp.attempts, prp.is_used,
+              u.is_active, u.session_version
+       FROM users u
+       JOIN password_resets prp ON prp.user_id = u.id
+       WHERE u.email = ?
+       ORDER BY prp.created_at DESC
+       LIMIT 1 FOR UPDATE`,
+      [email]
+    );
+    const record = rows[0];
+    const hashToCheck =
+      record?.pin_hash ?? '$2a$12$invalidhashpadding000000000000000000000000000000000000000';
+    const matches = await bcrypt.compare(pin, hashToCheck);
+    const valid =
+      record &&
+      matches &&
+      record.is_active &&
+      !record.is_used &&
+      Number(record.attempts) < RESET_PIN_MAX_ATTEMPTS &&
+      new Date(record.expires_at) > new Date();
+
+    if (!valid) {
+      if (record && !record.is_used && new Date(record.expires_at) > new Date()) {
+        const attempts = Number(record.attempts) + 1;
+        await conn.execute(
+          'UPDATE password_resets SET attempts = ?, is_used = ? WHERE id = ?',
+          [attempts, attempts >= RESET_PIN_MAX_ATTEMPTS ? 1 : 0, record.id]
+        );
+      }
+      await conn.commit();
+      return res.status(400).json(INVALID_PIN_RESPONSE);
+    }
+
+    const resetToken = signResetToken({
+      userId: record.user_id,
+      resetId: record.id,
+      sessionVersion: record.session_version,
+    });
+    await conn.commit();
+    return res.json({ reset_token: resetToken, resetToken, expiresIn: 600 });
+  } catch (error) {
+    await conn.rollback();
+    throw error;
+  } finally {
+    conn.release();
+  }
 });
 
 // ── POST /api/auth/reset-password ────────────────────────────────────────────
 router.post('/reset-password', resetLimit, async (req, res) => {
-  const { token, new_password: newPassword } = req.body || {};
-  const passwordError = validatePassword(newPassword);
+  const {
+    token,
+    reset_token: resetTokenSnake,
+    new_password: newPassword,
+    confirm_password: confirmPassword,
+    confirmPassword: confirmPasswordCamel,
+  } = req.body || {};
+  const passwordError = validateRecoveryPassword(newPassword);
   if (passwordError) return res.status(400).json({ error: passwordError });
-  if (typeof token !== 'string' || !/^[a-f0-9]{64}$/.test(token)) {
+  const confirmation = confirmPassword ?? confirmPasswordCamel;
+  if (confirmation !== undefined && confirmation !== newPassword) {
+    return res.status(400).json({ error: 'Passwords do not match' });
+  }
+
+  let claims;
+  try {
+    claims = jwt.verify(
+      resetTokenSnake || token,
+      process.env.RESET_TOKEN_SECRET ||
+        process.env.PASSWORD_RESET_JWT_SECRET ||
+        process.env.JWT_REFRESH_SECRET,
+      { audience: 'pharmate-password-reset', issuer: 'pharmate-api' }
+    );
+  } catch {
+    return res.status(400).json(INVALID_RESET_RESPONSE);
+  }
+  const resetUserId = claims?.userId || claims?.sub;
+  const resetId = claims?.resetId || claims?.jti;
+  if (claims?.purpose !== 'password-reset' || !resetUserId || !resetId) {
     return res.status(400).json(INVALID_RESET_RESPONSE);
   }
 
@@ -248,18 +536,19 @@ router.post('/reset-password', resetLimit, async (req, res) => {
   try {
     await conn.beginTransaction();
     const [rows] = await conn.execute(
-      `SELECT prt.id, prt.user_id, prt.expires_at, prt.used_at, u.is_active
-       FROM password_reset_tokens prt
-       JOIN users u ON u.id = prt.user_id
-       WHERE prt.token_hash = ?
+      `SELECT prp.id, prp.user_id, prp.expires_at, prp.is_used, u.is_active, u.session_version
+       FROM password_resets prp
+       JOIN users u ON u.id = prp.user_id
+       WHERE prp.id = ? AND prp.user_id = ?
        FOR UPDATE`,
-      [hashToken(token)]
+      [resetId, resetUserId]
     );
     const record = rows[0];
     if (
       !record ||
-      record.used_at ||
+      record.is_used ||
       !record.is_active ||
+      Number(record.session_version) !== Number(claims.sessionVersion) ||
       new Date(record.expires_at) <= new Date()
     ) {
       await conn.rollback();
@@ -269,12 +558,13 @@ router.post('/reset-password', resetLimit, async (req, res) => {
     const passwordHash = await bcrypt.hash(newPassword, BCRYPT_COST);
     await conn.execute(
       `UPDATE users
-       SET password_hash = ?, session_version = session_version + 1
+       SET password_hash = ?, session_version = session_version + 1,
+           failed_login_attempts = 0, account_locked_until = NULL
        WHERE id = ?`,
       [passwordHash, record.user_id]
     );
     await conn.execute(
-      'UPDATE password_reset_tokens SET used_at = NOW(3) WHERE id = ? AND used_at IS NULL',
+      'UPDATE password_resets SET is_used = 1 WHERE id = ? AND is_used = 0',
       [record.id]
     );
     await conn.execute(
@@ -298,7 +588,7 @@ router.post('/refresh', refreshLimit, async (req, res) => {
 
   const tokenHash = hashToken(refreshToken);
   const [rows] = await pool.execute(
-    `SELECT rt.id, rt.user_id, rt.expires_at, rt.revoked, u.role, u.is_active,
+    `SELECT rt.id, rt.user_id, rt.expires_at, rt.revoked, u.email, u.role, u.is_active,
             u.session_version
      FROM refresh_tokens rt
      JOIN users u ON u.id = rt.user_id
@@ -323,6 +613,8 @@ router.post('/refresh', refreshLimit, async (req, res) => {
 
   const accessToken = signAccess({
     sub: record.user_id,
+    id: record.user_id,
+    email: record.email,
     role: record.role,
     sessionVersion: record.session_version,
   });
@@ -358,12 +650,14 @@ router.post('/change-password', requireAuth, async (req, res) => {
       [req.user.sub]
     );
     const user = rows[0];
-    const matches = user ? await bcrypt.compare(currentPassword, user.password_hash) : false;
+    const matches = user?.password_hash
+      ? await bcrypt.compare(currentPassword, user.password_hash)
+      : false;
     if (!matches) {
       await conn.rollback();
       return res.status(401).json({ error: 'Invalid credentials' });
     }
-    if (await bcrypt.compare(newPassword, user.password_hash)) {
+    if (user.password_hash && (await bcrypt.compare(newPassword, user.password_hash))) {
       await conn.rollback();
       return res.status(400).json({ error: 'New password must differ from current password' });
     }

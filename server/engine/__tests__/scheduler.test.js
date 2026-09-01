@@ -101,7 +101,7 @@ describe('ENG §11 example 2 — gap enforcement (Paracetamol q4h + Ibuprofen TI
 });
 
 describe('ENG §11 example 3 — 1-0-1 meal anchoring (Losartan)', () => {
-  test('MEALMAP(1,0,1):PC → 08:00 post-breakfast, 19:30 post-dinner', () => {
+  test('MEALMAP(1,0,1):PC keeps the verified 12-hour internal gap', () => {
     const out = generateSchedule({
       anchors: ANCHORS,
       medications: [
@@ -116,10 +116,31 @@ describe('ENG §11 example 3 — 1-0-1 meal anchoring (Losartan)', () => {
       interactions: [],
     });
 
-    expect(times(out)).toEqual(['08:00', '19:30']);
-    expect(out.slots[0].reason).toMatch(/post-breakfast/);
-    expect(out.slots[1].reason).toMatch(/post-dinner/);
+    expect(times(out)).toEqual(['07:30', '19:30']);
+    expect(out.slots[0].reason).toMatch(/after breakfast/);
+    expect(out.slots[1].reason).toMatch(/after dinner/);
+    expect(out.slots[1].minuteOfDay - out.slots[0].minuteOfDay).toBeGreaterThanOrEqual(12 * 60);
     expect(out.unresolved).toHaveLength(0);
+  });
+});
+
+describe('CSP solver metadata and hard-constraint validation', () => {
+  test('returns deterministic solver evidence with no prescribed-count changes', () => {
+    const input = {
+      anchors: ANCHORS,
+      medications: [
+        { id: 'csp-a', drugId: PARA, drugName: 'Medicine A', frequencyCode: 'q8h', minIntervalHours: 8, maxDailyDoses: 3 },
+        { id: 'csp-b', drugId: IBU, drugName: 'Medicine B', frequencyCode: 'BID', minIntervalHours: 12, maxDailyDoses: 2 },
+      ],
+      interactions: [{ drugAId: PARA, drugBId: IBU, minGapHours: 2, type: 'SPACING' }],
+    };
+    const first = generateSchedule(input);
+    const second = generateSchedule(input);
+    expect(first).toEqual(second);
+    expect(first.solver.algorithm).toBe('CSP_RULE_ANCHOR_V2');
+    expect(first.solver.complete).toBe(true);
+    expect(first.slots.filter((item) => item.medicationId === 'csp-a')).toHaveLength(3);
+    expect(first.slots.filter((item) => item.medicationId === 'csp-b')).toHaveLength(2);
   });
 });
 

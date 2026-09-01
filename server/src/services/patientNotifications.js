@@ -9,6 +9,10 @@ export const NOTIFICATION_TYPES = [
   'prescription_approved',
   'prescription_rejected',
   'prescription_needs_clearer',
+  'streak_warning',
+  'streak_reset',
+  'reward_earned',
+  'caregiver_update',
 ];
 
 const DEFAULT_LIMIT = 20;
@@ -142,6 +146,8 @@ export async function createPatientNotification({
   eventKey,
   medicineName,
   metadata = {},
+  title,
+  message,
   executor = pool,
 }) {
   if (!NOTIFICATION_TYPES.includes(type)) throw new Error(`Unsupported notification type: ${type}`);
@@ -154,7 +160,7 @@ export async function createPatientNotification({
   if (type === 'dose_reminder' && prefs && !prefs.reminders_enabled) return { created: false };
   const named = prefs?.detail === 'medicine_name' && Boolean(medicineName);
   const medicine = named ? medicineName : GENERIC_MEDICINE;
-  const copy = {
+  const defaultCopy = {
     dose_reminder: ['Medication reminder', `It is time to take ${medicine}.`],
     dose_missed: ['Dose update', `A dose of ${medicine} was marked missed.`],
     schedule_confirmed: ['Schedule confirmed', 'Your medication schedule has been confirmed.'],
@@ -171,19 +177,41 @@ export async function createPatientNotification({
       'Prescription update',
       `A clearer prescription image is needed for ${medicine}.`,
     ],
+    streak_warning: ['Streak reminder', 'Complete your remaining doses before midnight.'],
+    streak_reset: ['Streak reset', "Complete all of today's doses to begin Day 1 again."],
+    reward_earned: ['Priority Token earned', 'A streak reward was added to your balance.'],
+    caregiver_update: ['Caregiver update', 'Your caregiver sent a new update.'],
   }[type];
   const safeMetadata = Object.fromEntries(
     Object.entries(metadata).filter(
       ([key, value]) =>
-        ['schedule_id', 'schedule_version', 'medication_id', 'prescription_id'].includes(key) &&
-        (typeof value === 'string' || Number.isInteger(value))
+        [
+          'schedule_id',
+          'schedule_version',
+          'medication_id',
+          'prescription_id',
+          'screen',
+          'highlightDoseId',
+          'tokens',
+          'streak_days',
+          'warning_level',
+          'dose_count',
+        ].includes(key) && (typeof value === 'string' || Number.isInteger(value))
     )
   );
   const [result] = await executor.execute(
     `INSERT IGNORE INTO patient_notifications
        (id, patient_id, type, title, message, metadata, event_key)
      VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    [uuidv4(), patientId, type, copy[0], copy[1], JSON.stringify(safeMetadata), eventKey]
+    [
+      uuidv4(),
+      patientId,
+      type,
+      String(title || defaultCopy[0]).slice(0, 120),
+      String(message || defaultCopy[1]).slice(0, 500),
+      JSON.stringify(safeMetadata),
+      eventKey,
+    ]
   );
   return { created: result.affectedRows === 1 };
 }

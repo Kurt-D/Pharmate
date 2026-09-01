@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../../api.js';
 import { useLanguage } from '../../context/LanguageContext.jsx';
+import AutomatedAddMedication, { FriendlyTimePicker } from './AutomatedAddMedication.jsx';
 
 const FREQ_OPTIONS = [
   { label: 'Once daily', fil: 'Isang beses', value: 'once daily' },
@@ -150,7 +151,7 @@ function frequencyChoice(value = '') {
 
 function ScheduleFlowSteps({ current, tr }) {
   const steps = [
-    tr('Medicine Details', 'Detalye ng Gamot'),
+    tr('Add Medicine', 'Magdagdag ng Gamot'),
     tr('Create Schedule', 'Gumawa ng Iskedyul'),
     tr('Review Schedule', 'Suriin ang Iskedyul'),
     tr('Complete', 'Tapos'),
@@ -176,12 +177,14 @@ function ScheduleFlowSteps({ current, tr }) {
   );
 }
 
-export default function AddMedicine() {
+export function LegacyAddMedicine() {
   const { language } = useLanguage();
   const tr = (english, filipino) => (language === 'fil' ? filipino : english);
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const editId = searchParams.get('edit');
+  const returnToSuggested = searchParams.get('return') === 'suggested';
+  const appendToSuggested = searchParams.get('append') === '1';
   const addMedicineOnly = !editId;
   const [name, setName] = useState(searchParams.get('name') || '');
   const [strength, setStrength] = useState(searchParams.get('strength') || '');
@@ -265,9 +268,26 @@ export default function AddMedicine() {
     [suggestions, medicineSearch]
   );
   const doseOptions = useMemo(
-    () => [...new Set([selectedDrug?.common_strength, strength, ...DOSE_OPTIONS].filter(Boolean))],
+    () =>
+      selectedDrug?.common_strength
+        ? [...new Set([selectedDrug.common_strength, strength].filter(Boolean))]
+        : [...new Set([strength, ...DOSE_OPTIONS].filter(Boolean))],
     [selectedDrug, strength]
   );
+  const formOptions = useMemo(
+    () =>
+      selectedDrug?.dosage_form
+        ? [selectedDrug.dosage_form[0].toUpperCase() + selectedDrug.dosage_form.slice(1)]
+        : MEDICINE_FORMS,
+    [selectedDrug]
+  );
+  function catalogFoodTiming(instruction) {
+    const value = String(instruction || '').toLowerCase();
+    if (/before|empty stomach/.test(value)) return 'before food';
+    if (/after/.test(value)) return 'after food';
+    if (/with|meal|food|first bite/.test(value)) return 'with food';
+    return 'no restriction';
+  }
   function chooseDrug(drug) {
     setSelectedDrug(drug);
     setName(drug.generic_name);
@@ -275,6 +295,8 @@ export default function AddMedicine() {
     setMedicineSearch('');
     if (drug.common_strength) setStrength(drug.common_strength);
     if (drug.dosage_form) setForm(drug.dosage_form[0].toUpperCase() + drug.dosage_form.slice(1));
+    if (drug.administration_instruction) setLabelDirections(drug.administration_instruction);
+    setFoodTiming(catalogFoodTiming(drug.meal_instruction));
   }
   function updateTime(index, value) {
     setTimes((items) => items.map((item, itemIndex) => (itemIndex === index ? value : item)));
@@ -327,42 +349,26 @@ export default function AddMedicine() {
     localStorage.setItem('pm_medicine_schedule_preferences', JSON.stringify(preferences));
   }
 
-  function saveFrontendMedicine(medicationId) {
-    let medicines = [];
-    try {
-      medicines = JSON.parse(localStorage.getItem('pm_frontend_medications') || '[]') || [];
-    } catch {
-      medicines = [];
-    }
-    const medicine = {
-      id: medicationId,
-      drug_name_raw: name.trim(),
-      dosage_instruction: `${strength.trim()}, ${form}`,
-      frequency,
-      source: selectedDrug?.rx_class === 'RX' ? 'RX_VALIDATED' : 'OTC_SELF',
-      start_date: startDate,
-      end_date: ongoing ? null : endDate || null,
-      status: 'frontend_draft',
-    };
-    const existingIndex = medicines.findIndex(
-      (item) =>
-        item.id === medicationId ||
-        item.drug_name_raw?.toLowerCase() === medicine.drug_name_raw.toLowerCase()
-    );
-    if (existingIndex >= 0) medicines[existingIndex] = medicine;
-    else medicines.push(medicine);
-    localStorage.setItem('pm_frontend_medications', JSON.stringify(medicines));
-  }
-
   function continueToSchedule(medicationId) {
-    saveFrontendMedicine(medicationId);
     saveSuggestionPreferences(medicationId);
     sessionStorage.setItem('pm_medicine_added_success', '1');
+    let targetMedicationIds = [];
+    if (appendToSuggested) {
+      try {
+        targetMedicationIds =
+          JSON.parse(sessionStorage.getItem('pm_schedule_target_medication_ids') || '[]') || [];
+      } catch {
+        targetMedicationIds = [];
+      }
+    }
+    sessionStorage.setItem(
+      'pm_schedule_target_medication_ids',
+      JSON.stringify([...new Set([...targetMedicationIds.map(String), String(medicationId)])])
+    );
     const returnToManual = sessionStorage.getItem('pm_return_to_manual_after_add') === '1';
     sessionStorage.removeItem('pm_return_to_manual_after_add');
     if (returnToManual) sessionStorage.setItem('pm_open_manual_after_add', '1');
-    else sessionStorage.setItem('pm_choose_schedule_after_add', '1');
-    navigate(`/patient/medications?setup=${returnToManual ? 'manual' : 'choice'}`, {
+    navigate(`/patient/medications?setup=${returnToManual ? 'manual' : 'suggested'}`, {
       replace: true,
     });
   }
@@ -403,6 +409,12 @@ export default function AddMedicine() {
     }
     setSubmitting(true);
     try {
+      // Suggested schedules are generated on the server, so the routine entered
+      // here must be persisted there rather than remaining browser-only state.
+      await api('/api/patient/anchors', {
+        method: 'PUT',
+        body: { wake_anchor: wakeTime, sleep_anchor: bedtime },
+      });
       const dosageInstruction = `${strength.trim()}, ${form}`;
       let medicationId = editId;
       let replacedMedicationId = editId;
@@ -416,6 +428,9 @@ export default function AddMedicine() {
           body: {
             expected_updated_at: original.updated_at,
             dosage_instruction: dosageInstruction,
+            label_direction: labelDirections.trim(),
+            food_instruction: selectedDrug?.meal_instruction || foodTiming,
+            timing_note: timingNotes.trim(),
             frequency,
             is_prn: false,
             start_date: startDate,
@@ -433,6 +448,9 @@ export default function AddMedicine() {
             schedule_only: true,
             is_prn: false,
             dosage_instruction: dosageInstruction,
+            label_direction: labelDirections.trim(),
+            food_instruction: selectedDrug?.meal_instruction || foodTiming,
+            timing_note: timingNotes.trim(),
             start_date: startDate,
             end_date: ongoing ? null : endDate || null,
           },
@@ -447,7 +465,7 @@ export default function AddMedicine() {
           });
         else replacedMedicationId = medicationId;
       }
-      if (addMedicineOnly) {
+      if (addMedicineOnly || returnToSuggested) {
         continueToSchedule(medicationId);
         return;
       }
@@ -463,12 +481,15 @@ export default function AddMedicine() {
       });
     } catch (error) {
       if (addMedicineOnly) {
-        const frontendMedicationId = `frontend-${Date.now()}`;
-        sessionStorage.setItem(
-          'pm_frontend_schedule_notice',
-          error.message || 'Medicine saved in this frontend session.'
-        );
-        continueToSchedule(frontendMedicationId);
+        setResult({
+          kind: 'error',
+          message:
+            error.message ||
+            tr(
+              'The medicine could not be saved. Please try again.',
+              'Hindi na-save ang gamot. Pakisubukang muli.'
+            ),
+        });
         return;
       }
       setResult({ kind: 'error', message: error.message });
@@ -646,12 +667,16 @@ export default function AddMedicine() {
               value={form}
             >
               <option value="">{tr('Select form', 'Pumili ng uri')}</option>
-              {form && !MEDICINE_FORMS.includes(form) && <option>{form}</option>}
-              {MEDICINE_FORMS.map((item) => (
+              {form && !formOptions.includes(form) && <option>{form}</option>}
+              {formOptions.map((item) => (
                 <option key={item}>{item}</option>
               ))}
             </select>
-            <small>Tablet, Capsule, Syrup, Injection</small>
+            <small>
+              {selectedDrug?.dosage_form
+                ? tr('Form matched to the selected medicine record.', 'Ang uri ay batay sa napiling tala ng gamot.')
+                : 'Tablet, Capsule, Syrup, Injection'}
+            </small>
           </div>
         </section>
         <section className="pm-medication-form-row">
@@ -690,6 +715,9 @@ export default function AddMedicine() {
                   onChange={(event) => setLabelDirections(event.target.value)}
                   value={labelDirections}
                 >
+                  {labelDirections && !DIRECTION_OPTIONS.includes(labelDirections) && (
+                    <option value={labelDirections}>{labelDirections}</option>
+                  )}
                   {DIRECTION_OPTIONS.map((direction) => (
                     <option key={direction} value={direction}>
                       {direction}
@@ -834,13 +862,7 @@ export default function AddMedicine() {
                 <div className="pm-medication-time-entry">
                   {times.map((selectedTime, index) => (
                     <div key={index}>
-                      <input
-                        aria-label={`${tr('Medicine time', 'Oras ng gamot')} ${index + 1}`}
-                        onChange={(event) => updateTime(index, event.target.value)}
-                        required
-                        type="time"
-                        value={selectedTime}
-                      />
+                      <FriendlyTimePicker onChange={(value) => updateTime(index, value)} tr={tr} value={selectedTime} />
                       {times.length > 1 && (
                         <button
                           aria-label={tr('Remove time', 'Alisin ang oras')}
@@ -919,13 +941,18 @@ export default function AddMedicine() {
       {saved && (
         <ScheduleSavedModal
           onDone={() => navigate('/patient/medications')}
-          onView={() => navigate('/patient/schedule')}
+          onView={() => navigate('/patient/medications?created=1', { replace: true })}
           saved={saved}
           tr={tr}
         />
       )}
     </main>
   );
+}
+
+export default function AddMedicine() {
+  const [searchParams] = useSearchParams();
+  return searchParams.get('edit') ? <LegacyAddMedicine /> : <AutomatedAddMedication />;
 }
 
 function ScheduleSavedModal({ saved, onDone, onView, tr }) {

@@ -1,12 +1,19 @@
-import { useEffect, useRef, useState } from 'react';
-import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import '../../styles/patient.css';
 import '../../styles/patient-uniform.css';
+import '../../styles/elderly-tour.css';
 import { api } from '../../api.js';
 import { registerPush } from '../../lib/notifications.js';
 import { useLanguage } from '../../context/LanguageContext.jsx';
 import { useAccessibility } from '../../context/AccessibilityContext.jsx';
 import { speak } from '../../lib/notifications.js';
+import { useRealtime } from '../../hooks/useRealtime.js';
+import PointerSpotlight from '../../components/PointerSpotlight.js';
+import {
+  PATIENT_ELDERLY_TOUR_STEPS,
+  PATIENT_TUTORIAL_MODULES,
+} from '../../config/elderlyTourSteps.js';
 
 function PatientIcon({ name, size = 23 }) {
   const paths = {
@@ -43,6 +50,10 @@ function PatientIcon({ name, size = 23 }) {
       </>
     ),
     star: <path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-2.9-5.6 2.9 1.1-6.2L3 9.6l6.2-.9Z" />,
+    flame: <path d="M12.5 3s.8 3-1.7 5.7C8.4 11.2 9 14 11 15.2c-.2-2 1.2-3.2 2.4-4.2.2 2.1 2.6 3.6 2.6 6.1A4.1 4.1 0 0 1 11.9 21C8.1 21 5 18.2 5 14.6 5 9.7 9 7.7 12.5 3Z" />,
+    gift: <><path d="M4 10h16v10H4Z" /><path d="M12 10v10M3 7h18v3H3ZM12 7H8.8a2 2 0 1 1 2-3.2L12 7Zm0 0h3.2a2 2 0 1 0-2-3.2L12 7Z" /></>,
+    warning: <><path d="M12 3 2.8 20h18.4Z" /><path d="M12 9v4M12 17h.01" /></>,
+    check: <path d="m5 12 4 4L19 6" />,
     bell: (
       <>
         <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" />
@@ -82,6 +93,7 @@ const NAV = [
 ];
 
 export default function PatientLayout() {
+  const navigate = useNavigate();
   const location = useLocation();
   const { t, language } = useLanguage();
   const { preferences: accessibility, updatePreference } = useAccessibility();
@@ -90,7 +102,16 @@ export default function PatientLayout() {
   const [unread, setUnread] = useState(0);
   const [notifications, setNotifications] = useState([]);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [streakStatus, setStreakStatus] = useState({
+    state: 'active',
+    current_days: 0,
+    priority_tokens: 0,
+  });
   const [listenMenuOpen, setListenMenuOpen] = useState(false);
+  const [tourOpen, setTourOpen] = useState(
+    () => localStorage.getItem('has_seen_onboarding_tour') !== 'true'
+  );
+  const [tourSteps, setTourSteps] = useState(PATIENT_ELDERLY_TOUR_STEPS);
 
   async function loadNotifications() {
     try {
@@ -113,10 +134,107 @@ export default function PatientLayout() {
     }
   }
 
+  async function markOneRead(id) {
+    try {
+      await api(`/api/patient/notifications/${id}/read`, { method: 'PATCH' });
+      setNotifications((all) =>
+        all.map((item) =>
+          item.id === id ? { ...item, read_at: item.read_at || new Date().toISOString() } : item
+        )
+      );
+      setUnread((count) => Math.max(0, count - 1));
+    } catch {
+      /* Keep the item unread when the device is offline. */
+    }
+  }
+
+  async function loadStreakStatus() {
+    try {
+      const response = await api('/api/patient/streak/status');
+      setStreakStatus(response.data);
+      localStorage.setItem(
+        'pm_priority_streak',
+        JSON.stringify({
+          days: response.data.current_days,
+          tokens: response.data.priority_tokens,
+          lastTaken: null,
+        })
+      );
+    } catch {
+      /* Preserve the last visible streak state while offline. */
+    }
+  }
+
+  const realtimeStatus = useRealtime((event, payload) => {
+    if (event === 'streak-updated') {
+      setStreakStatus(payload);
+      localStorage.setItem(
+        'pm_priority_streak',
+        JSON.stringify({
+          days: payload.current_days,
+          tokens: payload.priority_tokens,
+          lastTaken: null,
+        })
+      );
+      window.dispatchEvent(new CustomEvent('pm-realtime-dose', { detail: payload }));
+    }
+    if (event === 'notification-updated') {
+      loadNotifications();
+      window.dispatchEvent(new CustomEvent('pm-realtime-notification', { detail: payload }));
+    }
+    if (event === 'streak-updated') loadNotifications();
+    if (
+      [
+        'DOSE_STATUS_CHANGED',
+        'ADHERENCE_UPDATED',
+        'MEDICATION_CREATED',
+        'MEDICATION_UPDATED',
+        'MEDICATION_STOPPED',
+        'SCHEDULE_CONFIRMED',
+        'ORDER_STATUS_CHANGED',
+        'INQUIRY_UPDATED',
+        'PRESCRIPTION_STATUS_CHANGED',
+        'CAREGIVER_LINK_UPDATED',
+      ].includes(event)
+    ) {
+      window.dispatchEvent(new CustomEvent('pm-domain-updated', { detail: { event, payload } }));
+      loadStreakStatus();
+      loadNotifications();
+    }
+  });
+
   useEffect(() => {
     registerPush(api);
     loadNotifications();
+    loadStreakStatus();
+    const timer = window.setInterval(() => {
+      loadNotifications();
+      loadStreakStatus();
+    }, 15000);
+    const refresh = () => {
+      loadNotifications();
+      loadStreakStatus();
+    };
+    window.addEventListener('pm-streak-updated', refresh);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener('pm-streak-updated', refresh);
+    };
   }, []);
+
+  useEffect(() => {
+    const openHelpCenter = () => navigate('/patient/help');
+    const replayHelpTour = (event) => startTutorial(event.detail || 'welcome');
+    const showHelpGuide = (event) => showFaqOnScreen(event.detail);
+    window.addEventListener('pm-open-help-center', openHelpCenter);
+    window.addEventListener('pm-start-help-tour', replayHelpTour);
+    window.addEventListener('pm-show-help-guide', showHelpGuide);
+    return () => {
+      window.removeEventListener('pm-open-help-center', openHelpCenter);
+      window.removeEventListener('pm-start-help-tour', replayHelpTour);
+      window.removeEventListener('pm-show-help-guide', showHelpGuide);
+    };
+  });
 
   const accessibilityClasses = [
     'pm-phone',
@@ -157,12 +275,58 @@ export default function PatientLayout() {
     setListenMenuOpen(false);
   }
 
+  function closeTour() {
+    localStorage.setItem('has_seen_onboarding_tour', 'true');
+    localStorage.setItem('pm_patient_elderly_tour', 'complete');
+    setTourOpen(false);
+    sessionStorage.removeItem('pm_tour_add_mode');
+    window.dispatchEvent(new CustomEvent('pm-tour-step', { detail: null }));
+  }
+
+  function startTutorial(moduleKey = 'welcome') {
+    setTourSteps(PATIENT_TUTORIAL_MODULES[moduleKey]?.steps || PATIENT_ELDERLY_TOUR_STEPS);
+    setTourOpen(true);
+  }
+
+  function showFaqOnScreen(faq) {
+    if (!faq?.tourStep) return;
+    setTourSteps([faq.tourStep]);
+    setTourOpen(true);
+  }
+
+  const handleTourStepChange = useCallback(
+    (step) => {
+      if (step.id === 'create-schedule') sessionStorage.setItem('pm_tour_add_mode', '1');
+      else sessionStorage.removeItem('pm_tour_add_mode');
+      if (location.pathname !== step.path) navigate(step.path);
+      window.setTimeout(
+        () => window.dispatchEvent(new CustomEvent('pm-tour-step', { detail: step })),
+        80
+      );
+    },
+    [location.pathname, navigate]
+  );
+
   return (
     <div className={accessibilityClasses}>
       <div className="pm-phone__scroll" ref={pageContentRef}>
+        <div
+          className={`pm-realtime-indicator is-${realtimeStatus}`}
+          role="status"
+          title={tr('Real-time system connection', 'Real-time system connection')}
+        >
+          <i />
+          {realtimeStatus === 'live'
+            ? tr('Live', 'Live')
+            : realtimeStatus === 'offline'
+              ? tr('Offline', 'Offline')
+              : tr('Connecting', 'Kumokonekta')}
+        </div>
         {![
           '/patient/streak',
           '/patient/schedule',
+          '/patient/calendar',
+          '/patient/help',
           '/patient/medications/add',
           '/patient/shop',
           '/patient/orders',
@@ -170,10 +334,25 @@ export default function PatientLayout() {
         ].includes(location.pathname) && (
           <div className="pm-global-patient-actions">
             <Link
+              className={`pm-header-streak-button streak-state-${streakStatus.state}`}
               to="/patient/streak"
               aria-label={tr('Open adherence streak', 'Buksan ang adherence streak')}
             >
-              <PatientIcon name="star" />
+              <PatientIcon name="flame" />
+              <span className="pm-streak-status-badge" aria-hidden="true">
+                <PatientIcon
+                  name={
+                    streakStatus.state === 'reward_ready'
+                      ? 'gift'
+                      : streakStatus.state === 'at_risk'
+                        ? 'warning'
+                        : streakStatus.state === 'safe'
+                          ? 'check'
+                          : 'flame'
+                  }
+                  size={12}
+                />
+              </span>
             </Link>
             <button
               onClick={() => {
@@ -190,6 +369,12 @@ export default function PatientLayout() {
         )}
         <Outlet />
       </div>
+      <PointerSpotlight
+        onClose={closeTour}
+        onStepChange={handleTourStepChange}
+        open={tourOpen}
+        steps={tourSteps}
+      />
       {accessibility.ttsEnabled && (
         <>
           <button
@@ -286,7 +471,7 @@ export default function PatientLayout() {
             <div className="pm-notification-modal-list">
               {notifications.length ? (
                 notifications.map((item) => (
-                  <article className={item.read_at ? '' : 'unread'} key={item.id}>
+                  <article className={`${item.read_at ? '' : 'unread'} type-${item.type}`} key={item.id}>
                     <span>
                       <PatientIcon name="bell" size={18} />
                     </span>
@@ -294,6 +479,15 @@ export default function PatientLayout() {
                       <strong>{item.title}</strong>
                       <p>{item.message}</p>
                       <time>{new Date(item.created_at).toLocaleString()}</time>
+                      {!item.read_at && (
+                        <button
+                          className="pm-notification-item-read"
+                          onClick={() => markOneRead(item.id)}
+                          type="button"
+                        >
+                          {tr('Mark as read', 'Markahang nabasa')}
+                        </button>
+                      )}
                     </div>
                   </article>
                 ))

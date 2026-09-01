@@ -128,7 +128,7 @@ describe('startup environment validation', () => {
         NODE_ENV: 'production',
         PASSWORD_RESET_EMAIL_ENABLED: 'true',
       })
-    ).toThrow(/SMTP_HOST.*SMTP_PORT.*SMTP_USERNAME.*SMTP_PASSWORD.*SMTP_SENDER.*PUBLIC_APP_URL/);
+    ).toThrow(/SMTP_HOST.*SMTP_PORT.*SMTP_USER.*SMTP_PASS/);
 
     expect(() =>
       validateEnvironment({

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../../api.js';
 import { useAuth } from '../../context/AuthContext.jsx';
@@ -101,6 +101,12 @@ function Icon({ name, size = 22 }) {
         <path d="M4 7V4h16v3M9 20h6M12 4v16" />
       </>
     ),
+    help: (
+      <>
+        <circle cx="12" cy="12" r="9" />
+        <path d="M9.7 9a2.4 2.4 0 1 1 3.6 2.1c-.8.5-1.3 1-1.3 2.1M12 17h.01" />
+      </>
+    ),
     message: <path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4Z" />,
     logout: (
       <>
@@ -132,7 +138,7 @@ export default function ProfileRedesign() {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
   const { language, setLanguage, t } = useLanguage();
-  const tr = (en, fil) => (language === 'fil' ? fil : en);
+  const tr = useCallback((en, fil) => (language === 'fil' ? fil : en), [language]);
   const [profile, setProfile] = useState({
     full_name: '',
     medical_condition: '',
@@ -142,34 +148,62 @@ export default function ProfileRedesign() {
   const [draft, setDraft] = useState({ full_name: '', medical_condition: '' });
   const [preferences, setPreferences] = useState(null);
   const [caregivers, setCaregivers] = useState([]);
+  const [caregiverRequests, setCaregiverRequests] = useState([]);
+  const [caregiverDecision, setCaregiverDecision] = useState(null);
   const [invite, setInvite] = useState(null);
   const [inviteClock, setInviteClock] = useState(Date.now());
   const [panel, setPanel] = useState('');
   const [showDetails, setShowDetails] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const [errorTitle, setErrorTitle] = useState('');
   const [busy, setBusy] = useState(false);
-  async function load() {
-    try {
-      const [p, prefs, linked] = await Promise.all([
+  const load = useCallback(async () => {
+    const [profileResult, preferencesResult, caregiversResult, requestsResult] =
+      await Promise.allSettled([
         api('/api/patient/profile'),
         api('/api/patient/preferences'),
         api('/api/patient/caregivers'),
+        api('/api/patient/caregiver-requests'),
       ]);
-      setProfile(p.data);
-      setDraft({
-        full_name: p.data.full_name || '',
-        medical_condition: p.data.medical_condition || '',
-      });
-      setPreferences(prefs.data);
-      setCaregivers(linked.data);
-    } catch (e) {
-      setError(e.message);
+
+    if (profileResult.status === 'rejected') {
+      setErrorTitle(tr('Unable to load your latest profile', 'Hindi ma-load ang pinakabagong profile'));
+      setError(profileResult.reason?.message || 'Internal server error');
+      return;
     }
-  }
+
+    const nextProfile = profileResult.value.data;
+    setProfile(nextProfile);
+    setDraft({
+      full_name: nextProfile.full_name || '',
+      medical_condition: nextProfile.medical_condition || '',
+    });
+    setError('');
+    setErrorTitle('');
+
+    if (preferencesResult.status === 'fulfilled') {
+      setPreferences(preferencesResult.value.data);
+    }
+    if (caregiversResult.status === 'fulfilled') {
+      setCaregivers(caregiversResult.value.data);
+    }
+    if (requestsResult.status === 'fulfilled') {
+      setCaregiverRequests(requestsResult.value.data);
+    }
+  }, [tr]);
   useEffect(() => {
     load();
-  }, []);
+  }, [load]);
+  useEffect(() => {
+    const refresh = () => load();
+    window.addEventListener('pm-domain-updated', refresh);
+    const timer = window.setInterval(refresh, 15000);
+    return () => {
+      window.removeEventListener('pm-domain-updated', refresh);
+      window.clearInterval(timer);
+    };
+  }, [load]);
   useEffect(() => {
     if (!invite) return undefined;
     setInviteClock(Date.now());
@@ -179,11 +213,14 @@ export default function ProfileRedesign() {
   async function generateCode() {
     setBusy(true);
     setError('');
+    setErrorTitle('');
+    setMessage('');
     try {
       const response = await api('/api/patient/caregiver-link-code', { method: 'POST' });
       setInvite(response.data);
       setMessage('A new single-use caregiver code was generated.');
     } catch (e) {
+      setErrorTitle(tr('Unable to generate a caregiver code', 'Hindi makagawa ng caregiver code'));
       setError(e.message);
     } finally {
       setBusy(false);
@@ -212,6 +249,27 @@ export default function ProfileRedesign() {
     } finally {
       setBusy(false);
     }
+  }
+  async function decideCaregiverRequest(linkId, approve) {
+    setBusy(true);
+    setError('');
+    try {
+      await api(`/api/patient/caregiver-requests/${linkId}/decision`, {
+        method: 'POST', body: { approve },
+      });
+      setMessage(approve ? 'Caregiver request approved.' : 'Caregiver request declined.');
+      await load();
+      setCaregiverDecision(null);
+    } catch (e) { setError(e.message); } finally { setBusy(false); }
+  }
+  async function revokeCaregiver(linkId) {
+    setBusy(true);
+    setError('');
+    try {
+      await api(`/api/patient/caregivers/${linkId}`, { method: 'DELETE' });
+      setMessage('Caregiver access was revoked.');
+      await load();
+    } catch (e) { setError(e.message); } finally { setBusy(false); }
   }
   async function copyCode() {
     if (!invite?.code) return;
@@ -281,10 +339,12 @@ export default function ProfileRedesign() {
           <Icon name="shield" />
           <span>
             <strong>
-              {tr('Unable to load your latest profile', 'Hindi ma-load ang pinakabagong profile')}
+              {errorTitle || tr('Something went wrong', 'May nangyaring problema')}
             </strong>
             <small>
-              {tr('Please try again in a moment.', 'Pakisubukan muli pagkalipas ng ilang sandali.')}
+              {error && error !== 'Internal server error'
+                ? error
+                : tr('Please try again in a moment.', 'Pakisubukan muli pagkalipas ng ilang sandali.')}
             </small>
           </span>
         </div>
@@ -405,6 +465,39 @@ export default function ProfileRedesign() {
             <Icon name="lock" />
           </b>
         </div>
+        {caregiverRequests.length > 0 && (
+          <div className="pm-linked-caregivers pm-caregiver-requests">
+            <div className="pm-caregiver-request-heading">
+              <span><Icon name="shield" size={18} /></span>
+              <p>
+                <strong>{tr('Caregiver approval needed', 'Kailangan ng caregiver approval')}</strong>
+                <small>{tr('Review who is asking to access your health information.', 'Suriin kung sino ang humihiling ng access sa iyong health information.')}</small>
+              </p>
+            </div>
+            {caregiverRequests.map((item) => (
+              <span key={item.id}>
+                <span><b>{item.email}</b><small>{item.relationship || 'Caregiver'}</small></span>
+                <span className="pm-caregiver-request-actions">
+                  <button
+                    disabled={busy}
+                    onClick={() => setCaregiverDecision({ request: item, approve: true })}
+                    type="button"
+                  >
+                    <Icon name="check" size={16} /> {tr('Approve', 'Aprubahan')}
+                  </button>
+                  <button
+                    className="is-decline"
+                    disabled={busy}
+                    onClick={() => setCaregiverDecision({ request: item, approve: false })}
+                    type="button"
+                  >
+                    {tr('Decline', 'Tanggihan')}
+                  </button>
+                </span>
+              </span>
+            ))}
+          </div>
+        )}
         <div className="pm-caregiver-code">
           <small>{t('profile.code')}</small>
           {invite ? (
@@ -429,8 +522,8 @@ export default function ProfileRedesign() {
             <button disabled={!invite || inviteSeconds === 0} onClick={copyCode}>
               <Icon name="copy" size={18} /> {t('profile.copy')}
             </button>
-            <button disabled={busy} onClick={generateCode}>
-              <Icon name="refresh" size={18} /> {t('profile.newCode')}
+            <button disabled={busy} onClick={generateCode} type="button">
+              <Icon name="refresh" size={18} /> {busy ? tr('Generating…', 'Ginagawa…') : t('profile.newCode')}
             </button>
           </div>
         </div>
@@ -453,6 +546,9 @@ export default function ProfileRedesign() {
                   {item.can_manage_medications
                     ? tr('Medication access on', 'May access sa gamot')
                     : tr('Allow medication edits', 'Payagan mag-edit ng gamot')}
+                </button>
+                <button disabled={busy} onClick={() => revokeCaregiver(item.id)} type="button">
+                  <Icon name="lock" size={16} /> {tr('Revoke access', 'Bawiin ang access')}
                 </button>
               </span>
             ))}
@@ -616,6 +712,23 @@ export default function ProfileRedesign() {
             <Icon name="chevron" size={20} />
           </b>
         </button>
+        <button onClick={() => navigate('/patient/help')}>
+          <i>
+            <Icon name="help" />
+          </i>
+          <span>
+            <strong>{tr('Help & FAQs', 'Help at FAQs')}</strong>
+            <small>
+              {tr(
+                'Search guides or replay the on-screen tour',
+                'Maghanap ng guide o ulitin ang on-screen tour'
+              )}
+            </small>
+          </span>
+          <b>
+            <Icon name="chevron" size={20} />
+          </b>
+        </button>
       </section>
       <div className="pm-profile-heading">
         <h2>{t('profile.others')}</h2>
@@ -651,6 +764,60 @@ export default function ProfileRedesign() {
           <b />
         </button>
       </section>
+      {caregiverDecision && (
+        <div
+          className="pm-caregiver-confirm-backdrop"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !busy) setCaregiverDecision(null);
+          }}
+          role="presentation"
+        >
+          <section
+            aria-describedby="caregiver-confirm-description"
+            aria-labelledby="caregiver-confirm-title"
+            aria-modal="true"
+            className={`pm-caregiver-confirm${caregiverDecision.approve ? '' : ' is-decline'}`}
+            role="dialog"
+          >
+            <span className="pm-caregiver-confirm-icon">
+              <Icon name={caregiverDecision.approve ? 'caregiver' : 'lock'} size={26} />
+            </span>
+            <h2 id="caregiver-confirm-title">
+              {caregiverDecision.approve
+                ? tr('Approve caregiver access?', 'Aprubahan ang caregiver access?')
+                : tr('Decline this caregiver request?', 'Tanggihan ang caregiver request na ito?')}
+            </h2>
+            <p id="caregiver-confirm-description">
+              {caregiverDecision.approve
+                ? tr(
+                    `${caregiverDecision.request.email} will be able to view the health information you share. Medication editing stays off unless you enable it separately.`,
+                    `Makikita ni ${caregiverDecision.request.email} ang health information na ibabahagi mo. Mananatiling naka-off ang medication editing maliban kung hiwalay mo itong pahihintulutan.`
+                  )
+                : tr(
+                    `${caregiverDecision.request.email} will not receive access to your health information.`,
+                    `Hindi magkakaroon ng access si ${caregiverDecision.request.email} sa iyong health information.`
+                  )}
+            </p>
+            <div className="pm-caregiver-confirm-actions">
+              <button disabled={busy} onClick={() => setCaregiverDecision(null)} type="button">
+                {tr('Cancel', 'Kanselahin')}
+              </button>
+              <button
+                className={caregiverDecision.approve ? 'is-approve' : 'is-decline'}
+                disabled={busy}
+                onClick={() => decideCaregiverRequest(caregiverDecision.request.id, caregiverDecision.approve)}
+                type="button"
+              >
+                {busy
+                  ? tr('Please wait…', 'Sandali…')
+                  : caregiverDecision.approve
+                    ? tr('Yes, approve', 'Oo, aprubahan')
+                    : tr('Yes, decline', 'Oo, tanggihan')}
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
     </main>
   );
 }

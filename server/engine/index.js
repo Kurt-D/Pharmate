@@ -18,6 +18,7 @@
 import { idealSlots } from './intervals.js';
 import { buildInteractionMap, checkDose, pairKey } from './constraints.js';
 import { parseClock, formatClock, dayOffset } from './time.js';
+import { solveScheduleCsp } from './cspScheduler.js';
 
 const SHIFT_STEP = 30; // minutes — candidate slots move in 30-min increments (ENG §5)
 const ANCHOR_WINDOW = 90; // ±90 min search window for anchored doses (ENG §5 step 3)
@@ -83,6 +84,8 @@ function conflictText(conflict) {
 // Shift the whole train's anchor forward until every dose clears constraints,
 // searching up to half the drug's own interval (ENG §5 step 3). Example 2:
 // ibuprofen TID collides at 08:00 → anchor slides to 09:00, whole train follows.
+// Retained for audit comparison with CSP_RULE_ANCHOR_V2.
+// eslint-disable-next-line no-unused-vars
 function placeInterval(med, info, ctx) {
   const { anchors, placed, interactionMap, slots, unresolved } = ctx;
   const interval = info.intervalMin;
@@ -147,6 +150,8 @@ function placeInterval(med, info, ctx) {
 // Each ideal meal/sleep slot is placed within a ±90 min window, preferring the
 // later side (ENG §5 step 3). If any required dose has no safe slot, the whole
 // medication is UNRESOLVED — a partial regimen is never proposed.
+// Retained for audit comparison with CSP_RULE_ANCHOR_V2.
+// eslint-disable-next-line no-unused-vars
 function placeAnchored(med, info, ctx) {
   const { placed, interactionMap, slots, unresolved } = ctx;
   const minIntervalMin = med.minIntervalHours ? Math.round(med.minIntervalHours * 60) : 0;
@@ -259,11 +264,19 @@ export function generateSchedule(input = {}) {
     return String(a.med.id) < String(b.med.id) ? -1 : String(a.med.id) > String(b.med.id) ? 1 : 0;
   });
 
-  const ctx = { anchors, placed, interactionMap, slots, unresolved };
-  for (const { med, info } of schedulable) {
-    if (info.kind === 'interval') placeInterval(med, info, ctx);
-    else placeAnchored(med, info, ctx);
+  const solved = solveScheduleCsp(schedulable, anchors, interactionMap);
+  for (const assignment of solved.assignments) {
+    slots.push(...assignment.candidate.slots);
+    placed.push(
+      ...assignment.candidate.slots.map((item) => ({
+        minuteOfDay: item.minuteOfDay,
+        drugId: item.drugId,
+        medId: item.medicationId,
+        drugName: item.drugName,
+      }))
+    );
   }
+  unresolved.push(...solved.unresolved);
 
   // Deterministic output ordering — independent of medication input order.
   slots.sort(
@@ -278,7 +291,7 @@ export function generateSchedule(input = {}) {
     a.medicationId < b.medicationId ? -1 : a.medicationId > b.medicationId ? 1 : 0
   );
 
-  return { version, slots, prn, unresolved };
+  return { version, slots, prn, unresolved, solver: solved.metadata };
 }
 
 /**

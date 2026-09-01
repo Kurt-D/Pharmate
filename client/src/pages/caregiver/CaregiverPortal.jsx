@@ -2,11 +2,11 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AlertCircle, Bell, CheckCircle2, Clock3, X } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { api } from '../../api.js';
-import { apiUrl } from '../../config.js';
 import { useAccessibility } from '../../context/AccessibilityContext.jsx';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { useLanguage } from '../../context/LanguageContext.jsx';
 import { scheduleCaregiverDoseAlerts } from '../../lib/notifications.js';
+import { useRealtime } from '../../hooks/useRealtime.js';
 import CaregiverDashboard from './CaregiverDashboard.jsx';
 import CaregiverNavbar from './CaregiverNavbar.jsx';
 import CaregiverRefills from './CaregiverRefills.jsx';
@@ -15,57 +15,10 @@ import CaregiverPatientInfo from './CaregiverPatientInfo.jsx';
 import CaregiverOrders from './CaregiverOrders.jsx';
 import LinkPatientModal from './LinkPatientModal.jsx';
 import VoiceReminderModal from './VoiceReminderModal.jsx';
+import ElderlyTourGuide from '../../components/ElderlyTourGuide.jsx';
+import { CAREGIVER_ELDERLY_TOUR_STEPS } from '../../config/elderlyTourSteps.js';
 import '../../styles/caregiver-portal.css';
-
-const MOCK_TIMELINE = [
-  {
-    id: 'preview-1',
-    period: 'morning',
-    time: '8:00 AM',
-    medicine: 'Amlodipine 5 mg',
-    instructions: '1 tablet after breakfast',
-    status: 'taken',
-    statusText: 'Taken at 8:05 AM',
-  },
-  {
-    id: 'preview-2',
-    period: 'afternoon',
-    time: '1:00 PM',
-    medicine: 'Metformin 500 mg',
-    instructions: '1 tablet after lunch',
-    status: 'upcoming',
-    statusText: 'Due in 45m',
-  },
-  {
-    id: 'preview-3',
-    period: 'evening',
-    time: '6:00 PM',
-    medicine: 'Metformin 500 mg',
-    instructions: '1 tablet after dinner',
-    status: 'overdue',
-    statusText: 'Overdue by 30m',
-  },
-  {
-    id: 'preview-4',
-    period: 'night',
-    time: '9:00 PM',
-    medicine: 'Atorvastatin 20 mg',
-    instructions: '1 tablet before bedtime',
-    status: 'upcoming',
-    statusText: 'Due tonight',
-  },
-];
-
-const MOCK_STOCK = [
-  {
-    id: 'preview-stock-1',
-    name: 'Metformin 500 mg',
-    daysRemaining: 4,
-    tabletsLeft: 8,
-    isRx: true,
-    medicationId: null,
-  },
-];
+import '../../styles/elderly-tour.css';
 
 const CAREGIVER_PAGES = new Set(['home', 'medication', 'patient-info', 'orders', 'profile']);
 
@@ -138,6 +91,7 @@ export default function CaregiverPortal() {
   const { preferences: accessibility, updatePreference } = useAccessibility();
   const [activePage, setActivePage] = useState(() => pageFromPath(location.pathname));
   const [patients, setPatients] = useState([]);
+  const [pendingLinks, setPendingLinks] = useState([]);
   const [selectedCode, setSelectedCode] = useState('');
   const [medications, setMedications] = useState([]);
   const [timeline, setTimeline] = useState([]);
@@ -151,6 +105,9 @@ export default function CaregiverPortal() {
   const [toast, setToast] = useState(null);
   const [caregiverNotifications, setCaregiverNotifications] = useState([]);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [tourOpen, setTourOpen] = useState(
+    () => localStorage.getItem('pm_caregiver_elderly_tour') !== 'complete'
+  );
 
   useEffect(() => {
     setActivePage(pageFromPath(location.pathname));
@@ -164,15 +121,17 @@ export default function CaregiverPortal() {
   const loadBase = useCallback(async () => {
     setLoading(true);
     try {
-      const [patientResult, profileResult, alertResult] = await Promise.allSettled([
+      const [patientResult, profileResult, alertResult, pendingResult] = await Promise.allSettled([
         api('/api/caregiver/patients'),
         api('/api/caregiver/profile'),
         api('/api/caregiver/alerts'),
+        api('/api/caregiver/link-requests'),
       ]);
       const linked = patientResult.status === 'fulfilled' ? patientResult.value.data : [];
       setPatients(linked.map((patient) => ({ ...patient, displayLabel: patientLabel(patient) })));
       if (profileResult.status === 'fulfilled') setProfile(profileResult.value.data);
       if (alertResult.status === 'fulfilled') setCaregiverNotifications(alertResult.value.data);
+      setPendingLinks(pendingResult.status === 'fulfilled' ? pendingResult.value.data : []);
       setSelectedCode((current) => current || linked[0]?.patient_code || '');
     } catch (error) {
       showToast(error.message, 'error');
@@ -206,8 +165,8 @@ export default function CaregiverPortal() {
         ...(orderPayload.deliveries || []).map((item) => ({ ...item, kind: 'Delivery' })),
       ].sort((a, b) => new Date(b.requested_at) - new Date(a.requested_at))
     );
-    setTimeline(liveTimeline.length ? liveTimeline : MOCK_TIMELINE);
-    setPreviewMode(!liveTimeline.length);
+    setTimeline(liveTimeline);
+    setPreviewMode(false);
   }, []);
 
   useEffect(() => {
@@ -217,54 +176,30 @@ export default function CaregiverPortal() {
     loadPatient(selectedCode);
   }, [selectedCode, loadPatient]);
 
-  useEffect(() => {
-    const token = sessionStorage.getItem('pm_token');
-    if (!token) return undefined;
-    const controller = new AbortController();
-    async function subscribe() {
-      const response = await fetch(apiUrl('/api/caregiver/events'), {
-        headers: { Authorization: `Bearer ${token}` },
-        signal: controller.signal,
-      });
-      if (!response.ok || !response.body) return;
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
-      while (!controller.signal.aborted) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const events = buffer.split('\n\n');
-        buffer = events.pop() || '';
-        for (const eventBlock of events) {
-          const event = eventBlock.match(/^event:\s*(.+)$/m)?.[1];
-          if (event === 'patient-linked') await loadBase();
-          if (event === 'adherence-updated') await loadPatient(selectedCode);
-        }
-      }
+  const realtimeStatus = useRealtime((event, payload) => {
+    const patientEvents = new Set([
+      'patient-activity',
+      'DOSE_STATUS_CHANGED',
+      'MEDICATION_CREATED',
+      'MEDICATION_UPDATED',
+      'MEDICATION_STOPPED',
+      'SCHEDULE_CONFIRMED',
+      'ORDER_STATUS_CHANGED',
+      'PRESCRIPTION_STATUS_CHANGED',
+    ]);
+    if (event === 'CAREGIVER_LINK_UPDATED') {
+      loadBase();
+      if (selectedCode) loadPatient(selectedCode);
+      return;
     }
-    subscribe().catch((error) => {
-      if (error.name !== 'AbortError')
-        showToast('Live monitoring paused. Refresh to reconnect.', 'error');
-    });
-    return () => controller.abort();
-  }, [loadBase, loadPatient, selectedCode, showToast]);
+    if (!patientEvents.has(event)) return;
+    if (!selectedCode || !payload?.patientCode || payload.patientCode === selectedCode) {
+      loadPatient(selectedCode);
+    }
+    loadBase();
+  });
 
-  const stockAlerts = useMemo(
-    () =>
-      previewMode
-        ? MOCK_STOCK.map((item) => ({
-            ...item,
-            medicationId:
-              medications.find((medicine) =>
-                medicine.drug_name_raw?.toLowerCase().includes('metformin')
-              )?.id ||
-              medications[0]?.id ||
-              null,
-          }))
-        : [],
-    [previewMode, medications]
-  );
+  const stockAlerts = useMemo(() => [], []);
   const selectedPatient = patients.find((patient) => patient.patient_code === selectedCode);
 
   useEffect(() => {
@@ -274,7 +209,7 @@ export default function CaregiverPortal() {
 
   async function connectPatient({ code, relationship }) {
     await api('/api/caregiver/link', { method: 'POST', body: { code, relationship } });
-    showToast('Patient linked successfully. Monitoring is now available.');
+    showToast('Link request sent. Monitoring begins after the patient approves it.');
     await loadBase();
     navigate('/caregiver/home');
   }
@@ -380,10 +315,23 @@ export default function CaregiverPortal() {
     .filter(Boolean)
     .join(' ');
 
-  function changePage(page) {
+  const changePage = useCallback((page) => {
     setActivePage(page);
     navigate(`/caregiver/${page}`);
     window.scrollTo({ top: 0, behavior: accessibility.reduceMotion ? 'auto' : 'smooth' });
+  }, [accessibility.reduceMotion, navigate]);
+
+  const handleTourStepChange = useCallback(
+    (step) => {
+      const page = pageFromPath(step.path);
+      if (page !== activePage) changePage(page);
+    },
+    [activePage, changePage]
+  );
+
+  function closeTour() {
+    localStorage.setItem('pm_caregiver_elderly_tour', 'complete');
+    setTourOpen(false);
   }
 
   return (
@@ -404,6 +352,7 @@ export default function CaregiverPortal() {
               {activePage === 'home' && (
                 <CaregiverDashboard
                   patients={patients}
+                  pendingLinks={pendingLinks}
                   selectedCode={selectedCode}
                   onSelectPatient={setSelectedCode}
                   onAddPatient={() => setLinkOpen(true)}
@@ -412,6 +361,7 @@ export default function CaregiverPortal() {
                   patientLabel={selectedPatient?.displayLabel}
                   notificationCount={caregiverNotifications.filter((item) => item.status === 'unseen').length}
                   onOpenNotifications={readCaregiverNotifications}
+                  realtimeStatus={realtimeStatus}
                   onVoiceReminder={(dose) =>
                     setVoiceDose(dose || timeline.find((item) => item.status !== 'taken') || null)
                   }
@@ -465,6 +415,13 @@ export default function CaregiverPortal() {
         </div>
         {!loading && <CaregiverNavbar active={activePage} onChange={changePage} />}
       </div>
+      <ElderlyTourGuide
+        autoNarrate={Boolean(accessibility.ttsEnabled)}
+        onClose={closeTour}
+        onStepChange={handleTourStepChange}
+        open={tourOpen}
+        steps={CAREGIVER_ELDERLY_TOUR_STEPS}
+      />
       {toast && (
         <div
           className={`fixed left-1/2 top-4 z-[70] flex w-[calc(100%-2rem)] max-w-sm -translate-x-1/2 items-start gap-3 rounded-2xl border p-3 shadow-xl ${toast.type === 'error' ? 'border-rose-200 bg-rose-50 text-rose-800' : 'border-emerald-200 bg-emerald-50 text-emerald-800'}`}

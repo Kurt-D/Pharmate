@@ -205,6 +205,50 @@ describe('patient medication access and edits', () => {
 });
 
 describe('stop and history', () => {
+  test('stopping a medicine removes active reminders but preserves taken and missed history', async () => {
+    const created = await add();
+    const med = (await request(app).get(`/api/patient/medications/${created.body.id}`).set(auth()))
+      .body;
+    const scheduledId = uuidv4();
+    const takenId = uuidv4();
+    const missedId = uuidv4();
+    await pool.execute(
+      `INSERT INTO medication_schedules
+       (id,medication_id,patient_id,scheduled_time,generated_reason,is_confirmed,status)
+       VALUES (?, ?, ?, NOW(3), 'active reminder', 1, 'scheduled'),
+              (?, ?, ?, DATE_SUB(NOW(3), INTERVAL 1 HOUR), 'taken history', 1, 'taken'),
+              (?, ?, ?, DATE_SUB(NOW(3), INTERVAL 2 HOUR), 'missed history', 1, 'missed')`,
+      [scheduledId, med.id, patientId, takenId, med.id, patientId, missedId, med.id, patientId]
+    );
+    await pool.execute(
+      `INSERT INTO dose_logs
+       (id,schedule_id,patient_id,logged_at,confirmation_method,status,synced)
+       VALUES (?, ?, ?, DATE_SUB(NOW(3), INTERVAL 1 HOUR), 'manual', 'taken', 1)`,
+      [uuidv4(), takenId, patientId]
+    );
+
+    const stopped = await request(app)
+      .post(`/api/patient/medications/${med.id}/stop`)
+      .set(auth())
+      .send({ expected_updated_at: med.updated_at })
+      .expect(200);
+    expect(stopped.body.future_schedules_invalidated).toBe(1);
+
+    const [remaining] = await pool.execute(
+      'SELECT id,status FROM medication_schedules WHERE medication_id=? ORDER BY status',
+      [med.id]
+    );
+    expect(remaining).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: takenId, status: 'taken' }),
+        expect.objectContaining({ id: missedId, status: 'missed' }),
+      ])
+    );
+    expect(remaining.some((row) => row.id === scheduledId)).toBe(false);
+    const [[log]] = await pool.execute('SELECT id FROM dose_logs WHERE schedule_id=?', [takenId]);
+    expect(log.id).toBeTruthy();
+  });
+
   test.each([
     ['OTC_SELF', 'active', 'completed'],
     ['RX_VALIDATED', 'pending_validation', 'cancelled'],

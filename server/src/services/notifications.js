@@ -33,19 +33,26 @@ async function getMessaging() {
     if (!inline && !filePath && !adc) return null; // not configured — silent
 
     try {
-      const { default: admin } = await import('firebase-admin');
-      if (admin.apps.length === 0) {
+      const [appModule, messagingModule] = await Promise.all([
+        import('firebase-admin/app'),
+        import('firebase-admin/messaging'),
+      ]);
+      const { applicationDefault, cert, getApps, initializeApp } = appModule;
+      const { getMessaging: getFirebaseMessaging } = messagingModule;
+
+      let app = getApps()[0];
+      if (!app) {
         let credential;
         if (inline) {
-          credential = admin.credential.cert(JSON.parse(inline));
+          credential = cert(JSON.parse(inline));
         } else if (filePath) {
-          credential = admin.credential.cert(JSON.parse(fs.readFileSync(filePath, 'utf8')));
+          credential = cert(JSON.parse(fs.readFileSync(filePath, 'utf8')));
         } else {
-          credential = admin.credential.applicationDefault();
+          credential = applicationDefault();
         }
-        admin.initializeApp({ credential });
+        app = initializeApp({ credential });
       }
-      return admin.messaging();
+      return getFirebaseMessaging(app);
     } catch (err) {
       console.error('[notifications] FCM init failed, disabling push:', err.message);
       return null;
@@ -69,7 +76,7 @@ export function pushConfigured() {
  * @returns {Promise<{ok:boolean, skipped?:string, error?:string, stale?:boolean}>}
  *   stale=true marks an unregistered/invalid token the caller should clear.
  */
-export async function sendPush(token, { title, body, data = {} } = {}) {
+export async function sendPush(token, { title, body, data = {}, highPriority = false } = {}) {
   if (!token) return { ok: false, skipped: 'no_token' };
 
   const messaging = await getMessaging();
@@ -78,7 +85,12 @@ export async function sendPush(token, { title, body, data = {} } = {}) {
   try {
     // Data values must be strings for FCM.
     const strData = Object.fromEntries(Object.entries(data).map(([k, v]) => [k, String(v)]));
-    await messaging.send({ token, notification: { title, body }, data: strData });
+    const message = { token, notification: { title, body }, data: strData };
+    if (highPriority) {
+      message.android = { priority: 'high', notification: { priority: 'high', defaultSound: true } };
+      message.apns = { headers: { 'apns-priority': '10' }, payload: { aps: { sound: 'default' } } };
+    }
+    await messaging.send(message);
     return { ok: true };
   } catch (err) {
     // messaging/registration-token-not-registered → the app was uninstalled or

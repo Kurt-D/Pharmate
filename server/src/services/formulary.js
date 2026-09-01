@@ -76,7 +76,10 @@ export async function searchDrugs(query, limit = 20, filters = {}) {
   }
   const [rows] = await pool.execute(
     `SELECT id, generic_name, brand_names_json, min_interval_hours, max_daily_doses,
-            is_prn_default, default_interval_hours, meal_anchor_code, is_restricted,
+            is_prn_default, default_interval_hours, meal_anchor_code, meal_instruction,
+            administration_instruction, guidance_do, guidance_dont,
+            evidence_source_url, evidence_reviewed_at, clinical_source_name,
+            source_revision_date, catalog_status, clinical_rule_status, rule_version, is_restricted,
             availability, rx_class, is_provisional, therapeutic_category, drug_class, common_uses,
             short_description, common_strength, dosage_form
      FROM (

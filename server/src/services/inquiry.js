@@ -227,10 +227,10 @@ export async function closeThread(threadId, closerRole, closerId) {
 export async function patientThreads(patientId) {
   const [rows] = await pool.execute(
     `SELECT t.id,t.status,t.priority,t.subject,t.opened_at,t.closed_at,
-            t.branch_id,t.pharmacist_id,
+            t.branch_id,COALESCE(t.pharmacist_id,t.requested_pharmacist_id) AS pharmacist_id,
             CASE WHEN t.pharmacist_id IS NULL THEN 'awaiting_pharmacist' ELSE 'accepted' END AS validation_status,
             ph.full_name AS pharmacist_name
-     FROM inquiry_threads t LEFT JOIN pharmacists ph ON ph.id=t.pharmacist_id
+     FROM inquiry_threads t LEFT JOIN pharmacists ph ON ph.id=COALESCE(t.pharmacist_id,t.requested_pharmacist_id)
      WHERE t.patient_id = ? ORDER BY t.opened_at DESC`,
     [patientId]
   );

@@ -1,6 +1,8 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { GoogleLogin } from '@react-oauth/google';
 import pharmateLogo from '../assets/pharmate-logo.png';
+import CaptchaChallenge from '../components/CaptchaChallenge.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import { apiUrl } from '../config.js';
 import { homeForRole } from '../config/roleRoutes.js';
@@ -9,6 +11,7 @@ import '../styles/auth.css';
 const MAX_FAILED_ATTEMPTS = 5;
 const DEFAULT_COOLDOWN_SECONDS = 60;
 const COOLDOWN_STORAGE_KEY = 'pm_login_cooldown_until';
+const GOOGLE_CLIENT_ID = (import.meta.env.VITE_GOOGLE_CLIENT_ID || '').trim();
 
 const PASSWORD_CHECKS = [
   { label: '12+ characters', test: (value) => value.length >= 12 },
@@ -27,6 +30,52 @@ function PasswordToggleIcon({ visible }) {
       <path d="M3 10.2S6.5 4 12 4s9 6.2 9 6.2S17.5 16 12 16s-9-5.8-9-5.8Z" />
       <circle cx="12" cy="10" r="2.4" />
     </svg>
+  );
+}
+
+function PinInput({ value, onChange, disabled }) {
+  const inputRefs = useRef([]);
+  const digits = Array.from({ length: 6 }, (_, index) => value[index] || '');
+
+  function updateDigit(index, nextValue) {
+    const next = digits.slice();
+    next[index] = nextValue.replace(/\D/g, '').slice(-1);
+    onChange(next.join(''));
+    if (next[index] && index < 5) inputRefs.current[index + 1]?.focus();
+  }
+
+  function handlePaste(event) {
+    const pasted = event.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6);
+    if (!pasted) return;
+    event.preventDefault();
+    onChange(pasted);
+    inputRefs.current[Math.min(pasted.length, 6) - 1]?.focus();
+  }
+
+  return (
+    <div className="auth-pin-boxes" onPaste={handlePaste}>
+      {digits.map((digit, index) => (
+        <input
+          aria-label={`PIN digit ${index + 1}`}
+          autoComplete={index === 0 ? 'one-time-code' : 'off'}
+          disabled={disabled}
+          inputMode="numeric"
+          key={index}
+          maxLength={1}
+          onChange={(event) => updateDigit(index, event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === 'Backspace' && !digit && index > 0) {
+              inputRefs.current[index - 1]?.focus();
+            }
+          }}
+          ref={(element) => {
+            inputRefs.current[index] = element;
+          }}
+          type="text"
+          value={digit}
+        />
+      ))}
+    </div>
   );
 }
 
@@ -62,12 +111,15 @@ export default function LoginRedesign() {
   const [password, setPassword] = useState('');
   const [remember, setRemember] = useState(Boolean(rememberedEmail));
   const [showPassword, setShowPassword] = useState(false);
-  const [captchaChecked, setCaptchaChecked] = useState(false);
+  const [captcha, setCaptcha] = useState({ captchaToken: '', captchaAnswer: '' });
+  const captchaRef = useRef(null);
   const [error, setError] = useState('');
   const [message, setMessage] = useState(
-    params.get('reason') === 'session-expired'
-      ? 'Your session expired. Please sign in again to continue.'
-      : ''
+    params.get('reset') === 'success'
+      ? 'Your password was reset successfully. Sign in with your new password.'
+      : params.get('reason') === 'session-expired'
+        ? 'Your session expired. Please sign in again to continue.'
+        : ''
   );
   const [loading, setLoading] = useState(false);
   const [failedAttempts, setFailedAttempts] = useState(0);
@@ -84,6 +136,7 @@ export default function LoginRedesign() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [resetComplete, setResetComplete] = useState(false);
+  const [resendSeconds, setResendSeconds] = useState(0);
 
   const passwordScore = useMemo(
     () => PASSWORD_CHECKS.filter((check) => check.test(newPassword)).length,
@@ -91,6 +144,7 @@ export default function LoginRedesign() {
   );
   const strengthLabel = ['Too short', 'Weak', 'Fair', 'Good', 'Strong'][passwordScore];
   const loginLocked = cooldownSeconds > 0;
+  const captchaComplete = Boolean(captcha.captchaToken || captcha.captchaAnswer);
 
   useEffect(() => {
     if (!cooldownUntil) return undefined;
@@ -111,6 +165,15 @@ export default function LoginRedesign() {
     return () => window.clearInterval(timer);
   }, [cooldownUntil]);
 
+  useEffect(() => {
+    if (resendSeconds <= 0) return undefined;
+    const timer = window.setInterval(
+      () => setResendSeconds((current) => Math.max(0, current - 1)),
+      1000
+    );
+    return () => window.clearInterval(timer);
+  }, [resendSeconds]);
+
   function startCooldown(seconds = DEFAULT_COOLDOWN_SECONDS) {
     const safeSeconds = Math.max(1, Math.ceil(seconds));
     const until = Date.now() + safeSeconds * 1000;
@@ -125,13 +188,6 @@ export default function LoginRedesign() {
     setMessage('');
   }
 
-  function openRecovery() {
-    clearFeedback();
-    setRecoveryEmail(email.trim());
-    setRecoveryStep(1);
-    setMode('recovery');
-  }
-
   function returnToLogin() {
     clearFeedback();
     setMode('login');
@@ -144,26 +200,29 @@ export default function LoginRedesign() {
     navigate('/login', { replace: true });
   }
 
-  async function submitLogin(event) {
-    event.preventDefault();
+  async function authenticate(loginEmail, loginPassword, shouldRemember = remember) {
     if (loginLocked) return;
     clearFeedback();
     setLoading(true);
 
     try {
-      const cleanEmail = email.trim();
+      const cleanEmail = loginEmail.trim();
       const response = await fetch(apiUrl('/api/auth/login'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: cleanEmail, password }),
+        credentials: 'include',
+        body: JSON.stringify({ email: cleanEmail, password: loginPassword, ...captcha }),
       });
       const data = await response.json().catch(() => ({}));
 
       if (!response.ok) {
-        setCaptchaChecked(false);
-        if (response.status === 429) {
+        setCaptcha({ captchaToken: '', captchaAnswer: '' });
+        captchaRef.current?.reset();
+        if (response.status === 429 || response.status === 423) {
           startCooldown(
-            retryAfterSeconds(response.headers.get('Retry-After')) || DEFAULT_COOLDOWN_SECONDS
+            Number(data.retryAfter) ||
+              retryAfterSeconds(response.headers.get('Retry-After')) ||
+              DEFAULT_COOLDOWN_SECONDS
           );
           return;
         }
@@ -182,12 +241,42 @@ export default function LoginRedesign() {
         return;
       }
 
-      if (remember) localStorage.setItem('pm_remember_email', cleanEmail);
+      if (shouldRemember) localStorage.setItem('pm_remember_email', cleanEmail);
       else localStorage.removeItem('pm_remember_email');
 
       sessionStorage.removeItem(COOLDOWN_STORAGE_KEY);
       setFailedAttempts(0);
 
+      login(data.user, data.accessToken, data.refreshToken);
+      navigate(homeForRole(data.role || data.user.role), { replace: true });
+    } catch {
+      setError('PharMate cannot reach the server right now. Please check your connection.');
+      setCaptcha({ captchaToken: '', captchaAnswer: '' });
+      captchaRef.current?.reset();
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function submitLogin(event) {
+    event.preventDefault();
+    await authenticate(email, password);
+  }
+
+  async function submitGoogle(credential) {
+    clearFeedback();
+    setLoading(true);
+    try {
+      const response = await fetch(apiUrl('/api/auth/google'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ credential }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setError(data.error || 'Google sign-in could not be completed.');
+        return;
+      }
       login(data.user, data.accessToken, data.refreshToken);
       navigate(homeForRole(data.role || data.user.role), { replace: true });
     } catch {
@@ -198,7 +287,7 @@ export default function LoginRedesign() {
   }
 
   async function requestPin(event) {
-    event.preventDefault();
+    event?.preventDefault();
     clearFeedback();
     setLoading(true);
 
@@ -214,6 +303,8 @@ export default function LoginRedesign() {
         return;
       }
       setMessage('If this email is registered, a 6-digit PIN has been sent.');
+      setPin('');
+      setResendSeconds(60);
       setRecoveryStep(2);
     } catch {
       setError('PharMate cannot reach the server right now. Please check your connection.');
@@ -228,7 +319,7 @@ export default function LoginRedesign() {
     setLoading(true);
 
     try {
-      const response = await fetch(apiUrl('/api/auth/verify-reset-pin'), {
+      const response = await fetch(apiUrl('/api/auth/verify-pin'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: recoveryEmail.trim(), pin }),
@@ -260,7 +351,11 @@ export default function LoginRedesign() {
       const response = await fetch(apiUrl('/api/auth/reset-password'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token: resetToken, new_password: newPassword }),
+        body: JSON.stringify({
+          token: resetToken,
+          new_password: newPassword,
+          confirm_password: confirmPassword,
+        }),
       });
       const data = await response.json();
       if (!response.ok) {
@@ -305,11 +400,10 @@ export default function LoginRedesign() {
                   </span>
                 </div>
               ) : (
-                error && (
-                  <div className="auth-alert error" role="alert">
-                    {error}
-                  </div>
-                )
+                <>
+                  {error && <div className="auth-alert error" role="alert">{error}</div>}
+                  {message && <div className="auth-alert success" role="status">{message}</div>}
+                </>
               )}
             </div>
 
@@ -343,13 +437,16 @@ export default function LoginRedesign() {
                     required
                   />
                   <button
+                    className={`auth-password-toggle${showPassword ? ' is-visible' : ''}`}
                     type="button"
                     onClick={() => setShowPassword((value) => !value)}
                     aria-label={showPassword ? 'Hide password' : 'Show password'}
                     aria-pressed={showPassword}
+                    title={showPassword ? 'Hide password' : 'Show password'}
                     disabled={loginLocked}
                   >
                     <PasswordToggleIcon visible={showPassword} />
+                    <span>{showPassword ? 'Hide' : 'Show'}</span>
                   </button>
                 </div>
               </label>
@@ -363,33 +460,46 @@ export default function LoginRedesign() {
                   />
                   <span>Remember me</span>
                 </label>
-                <button type="button" className="auth-text-button" onClick={openRecovery}>
+                <button
+                  type="button"
+                  className="auth-text-button"
+                  onClick={() => navigate('/forgot-password')}
+                >
                   Forgot password?
                 </button>
               </div>
 
-              <label className="auth-captcha">
-                <input
-                  type="checkbox"
-                  checked={captchaChecked}
-                  onChange={(event) => setCaptchaChecked(event.target.checked)}
-                  disabled={loginLocked || loading}
-                  required
-                />
-                <span>
-                  <strong>I&apos;m not a robot</strong>
-                  <small>Security verification</small>
-                </span>
-                <span className="auth-captcha-mark" aria-hidden="true">
-                  ✓
-                </span>
-              </label>
+              <CaptchaChallenge
+                ref={captchaRef}
+                action="login"
+                onChange={setCaptcha}
+                onError={setError}
+              />
 
-              <button className="auth-primary" disabled={loading || loginLocked || !captchaChecked}>
+              <button className="auth-primary" disabled={loading || loginLocked || !captchaComplete}>
                 {loading ? <span className="auth-spinner" aria-hidden="true" /> : null}
                 {loading ? 'Signing in…' : 'Login'}
               </button>
             </form>
+
+            <div className="auth-divider">or continue securely with</div>
+            <div className="auth-google-button">
+              {GOOGLE_CLIENT_ID ? (
+                <GoogleLogin
+                  onSuccess={(response) => submitGoogle(response.credential)}
+                  onError={() => setError('Google sign-in was cancelled or could not start.')}
+                  size="large"
+                  shape="rectangular"
+                  text="continue_with"
+                  theme="outline"
+                  width="360"
+                />
+              ) : (
+                <button className="auth-google-disabled" disabled type="button">
+                  Continue with Google (configuration required)
+                </button>
+              )}
+            </div>
 
             <div className="auth-signup-footer">
               <p>
@@ -460,22 +570,10 @@ export default function LoginRedesign() {
 
                 {recoveryStep === 2 && (
                   <form className="auth-form" onSubmit={verifyPin}>
-                    <label>
-                      <span>6-digit PIN</span>
-                      <input
-                        className="auth-pin"
-                        type="text"
-                        inputMode="numeric"
-                        pattern="[0-9]{6}"
-                        maxLength={6}
-                        value={pin}
-                        onChange={(event) => setPin(event.target.value.replace(/\D/g, ''))}
-                        placeholder="000000"
-                        autoComplete="one-time-code"
-                        required
-                        autoFocus
-                      />
-                    </label>
+                    <fieldset className="auth-pin-fieldset">
+                      <legend>6-digit PIN</legend>
+                      <PinInput value={pin} onChange={setPin} disabled={loading} />
+                    </fieldset>
                     <button className="auth-primary" disabled={loading || pin.length !== 6}>
                       {loading ? 'Verifying…' : 'Verify PIN'}
                     </button>
@@ -490,8 +588,13 @@ export default function LoginRedesign() {
                       >
                         Change email
                       </button>
-                      <button type="button" className="auth-text-button" onClick={requestPin}>
-                        Resend PIN
+                      <button
+                        type="button"
+                        className="auth-text-button"
+                        disabled={loading || resendSeconds > 0}
+                        onClick={() => requestPin()}
+                      >
+                        {resendSeconds > 0 ? `Resend in ${resendSeconds}s` : 'Resend PIN'}
                       </button>
                     </div>
                   </form>
@@ -512,11 +615,15 @@ export default function LoginRedesign() {
                           required
                         />
                         <button
+                          className={`auth-password-toggle${showNewPassword ? ' is-visible' : ''}`}
                           type="button"
                           onClick={() => setShowNewPassword((value) => !value)}
                           aria-label={showNewPassword ? 'Hide password' : 'Show password'}
+                          aria-pressed={showNewPassword}
+                          title={showNewPassword ? 'Hide password' : 'Show password'}
                         >
                           <PasswordToggleIcon visible={showNewPassword} />
+                          <span>{showNewPassword ? 'Hide' : 'Show'}</span>
                         </button>
                       </div>
                     </label>

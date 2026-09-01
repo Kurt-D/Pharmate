@@ -3,7 +3,10 @@ import { pool } from '../db/connection.js';
 import { parseFrequency } from '../../engine/frequencyParser.js';
 import { createPatientNotification } from './patientNotifications.js';
 
-const EDITABLE = new Set(['dosage_instruction', 'frequency', 'is_prn', 'start_date', 'end_date']);
+const EDITABLE = new Set([
+  'dosage_instruction', 'label_direction', 'food_instruction', 'timing_note',
+  'frequency', 'is_prn', 'start_date', 'end_date',
+]);
 const CONTROL = new Set(['expected_updated_at']);
 const EVENTS = new Set(['updated', 'stopped', 'cancelled']);
 const STATUSES = new Set([
@@ -15,7 +18,8 @@ const STATUSES = new Set([
 ]);
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const SELECT = `SELECT m.id, m.patient_id, m.drug_id, m.drug_name_raw, m.source, m.is_prn,
-  m.frequency, m.frequency_code, m.dosage_instruction, m.start_date, m.end_date,
+  m.frequency, m.frequency_code, m.dosage_instruction, m.label_direction,
+  m.food_instruction, m.timing_note, m.start_date, m.end_date,
   m.status, m.pharmacist_id, m.validated_at, m.created_at, m.updated_at, dr.rx_class,
   dr.min_interval_hours, dr.max_daily_doses,
   pp.status AS prescription_status, pp.decision_reason AS prescription_reason,
@@ -37,6 +41,9 @@ function medication(row) {
     frequency: row.frequency,
     frequency_code: row.frequency_code,
     dosage_instruction: row.dosage_instruction,
+    label_direction: row.label_direction,
+    food_instruction: row.food_instruction,
+    timing_note: row.timing_note,
     start_date: row.start_date,
     end_date: row.end_date,
     status: row.status,
@@ -52,6 +59,9 @@ function medication(row) {
 function auditSnapshot(row) {
   return {
     dosage_instruction: row.dosage_instruction,
+    label_direction: row.label_direction,
+    food_instruction: row.food_instruction,
+    timing_note: row.timing_note,
     frequency: row.frequency,
     frequency_code: row.frequency_code,
     is_prn: Boolean(row.is_prn),
@@ -118,6 +128,17 @@ async function invalidateFuture(conn, row) {
   return result.affectedRows;
 }
 
+async function invalidateActiveReminders(conn, row) {
+  const [result] = await conn.execute(
+    `DELETE ms FROM medication_schedules ms
+     WHERE ms.medication_id = ? AND ms.patient_id = ?
+       AND ms.status IN ('scheduled','snoozed')
+       AND NOT EXISTS (SELECT 1 FROM dose_logs dl WHERE dl.schedule_id = ms.id)`,
+    [row.id, row.patient_id]
+  );
+  return result.affectedRows;
+}
+
 export async function getMedication(patientId, medicationId) {
   const [[row]] = await pool.execute(`${SELECT} WHERE m.id=? AND m.patient_id=?`, [
     medicationId,
@@ -149,6 +170,15 @@ export function validateMedicationPatch(body) {
     const dosage = body.dosage_instruction?.trim() || null;
     if (dosage && dosage.length > 1000) return fail(400, 'dosage_instruction is too long');
     value.dosage_instruction = dosage;
+  }
+  for (const key of ['label_direction', 'food_instruction', 'timing_note']) {
+    if (key in body) {
+      if (body[key] !== null && typeof body[key] !== 'string')
+        return fail(400, `${key} must be text or null`);
+      const text = body[key]?.trim() || null;
+      if (text && text.length > 500) return fail(400, `${key} is too long`);
+      value[key] = text;
+    }
   }
   if ('frequency' in body) {
     if (typeof body.frequency !== 'string' || !body.frequency.trim())
@@ -293,7 +323,7 @@ export async function stopMedication(patientId, medicationId, expected) {
       nextStatus,
       row.id,
     ]);
-    const invalidated = await invalidateFuture(conn, row);
+    const invalidated = await invalidateActiveReminders(conn, row);
     const [[updated]] = await conn.execute(`${SELECT} WHERE m.id=? AND m.patient_id=?`, [
       row.id,
       patientId,

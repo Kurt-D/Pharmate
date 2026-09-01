@@ -80,6 +80,7 @@ function PatientSwitcher({ patients, selectedCode, onSelect, onAdd }) {
 
 export default function CaregiverDashboard({
   patients,
+  pendingLinks = [],
   selectedCode,
   onSelectPatient,
   onAddPatient,
@@ -93,6 +94,7 @@ export default function CaregiverDashboard({
   onNavigate,
   notificationCount = 0,
   onOpenNotifications,
+  realtimeStatus = 'connecting',
 }) {
   const [showAllStock, setShowAllStock] = useState(false);
   const [dismissedStock, setDismissedStock] = useState([]);
@@ -124,15 +126,34 @@ export default function CaregiverDashboard({
             Link a patient before medicine activity can be displayed.
           </p>
         </header>
+        {pendingLinks.length > 0 && (
+          <section className="rounded-2xl border border-amber-200 bg-amber-50 p-5 shadow-sm" role="status">
+            <span className="mx-auto grid h-16 w-16 place-items-center rounded-full bg-white text-amber-700 shadow-sm">
+              <Clock3 className="h-8 w-8" />
+            </span>
+            <h2 className="mb-0 mt-4 text-xl font-bold text-slate-900">Waiting for patient approval</h2>
+            <p className="mb-0 mt-2 text-sm font-medium leading-6 text-slate-700">
+              Your code was accepted. The patient must open Profile → Caregiver Access and approve your request before monitoring begins.
+            </p>
+            {pendingLinks.map((request) => (
+              <div className="mt-4 rounded-xl border border-amber-200 bg-white p-3 text-left" key={request.id}>
+                <strong className="block text-sm text-slate-900">Patient {request.patient_code}</strong>
+                <small className="text-slate-600">{request.relationship} · Approval pending</small>
+              </div>
+            ))}
+          </section>
+        )}
         <section className="rounded-2xl border border-slate-100 bg-white p-6 text-center shadow-sm">
           <span className="mx-auto grid h-20 w-20 place-items-center rounded-full border border-blue-100 bg-blue-50 text-blue-600">
             <Link2 className="h-9 w-9 stroke-[2]" />
           </span>
           <h2 className="mb-0 mt-4 text-xl font-bold tracking-tight text-slate-900">
-            No linked patient yet
+            {pendingLinks.length ? 'Link another patient' : 'No linked patient yet'}
           </h2>
           <p className="mx-auto mb-0 mt-2 max-w-xs text-sm font-medium leading-6 text-slate-600">
-            Ask the patient for their secure 6-character code, then connect their account here.
+            {pendingLinks.length
+              ? 'You can wait for approval or enter a code for another patient.'
+              : 'Ask the patient for their secure 6-character code, then connect their account here.'}
           </p>
           <button
             className="mt-5 flex h-14 w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 text-base font-semibold text-white transition hover:bg-blue-700 active:scale-[.99]"
@@ -174,9 +195,17 @@ export default function CaregiverDashboard({
         <p className="mb-0 mt-1 text-sm font-medium leading-5 text-slate-600">
           Keep {patientLabel || 'your linked patient'} on track today.
         </p>
-        <span className={`cg-live-status ${previewMode ? 'is-preview' : 'is-live'}`}>
+        <span
+          className={`cg-live-status ${realtimeStatus === 'live' ? 'is-live' : 'is-preview'}`}
+        >
           <Activity className="h-4 w-4" />
-          {previewMode ? 'Preview information' : 'Live patient monitoring'}
+          {realtimeStatus === 'live'
+            ? previewMode
+              ? 'Live connection · No current schedule'
+              : 'Live patient monitoring'
+            : realtimeStatus === 'offline'
+              ? 'Offline · Showing saved information'
+              : 'Connecting live monitoring'}
         </span>
       </header>
       <PatientSwitcher

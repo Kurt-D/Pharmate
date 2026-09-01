@@ -10,6 +10,7 @@
  */
 import request from 'supertest';
 import app from '../index.js';
+import { pool } from '../db/connection.js';
 import { createPrivilegedTestUser } from './helpers/testUsers.js';
 
 const PATIENT_EMAIL = `patient.s3.${Date.now()}@test.pharmate`;
@@ -18,6 +19,10 @@ const PASSWORD = 'TestPass@123';
 
 let patientToken;
 let pharmToken;
+
+afterAll(async () => {
+  await pool.end();
+});
 
 beforeAll(async () => {
   await request(app).post('/api/auth/register').send({

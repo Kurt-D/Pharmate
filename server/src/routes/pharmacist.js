@@ -23,10 +23,38 @@ import {
 } from '../services/inquiry.js';
 import { orderQueue, updateOrderStatus } from '../services/orders.js';
 import { createPatientNotification } from '../services/patientNotifications.js';
+import { recordAudit } from '../services/audit.js';
+import { inquiryChanged, orderChanged, prescriptionChanged } from '../services/domainEvents.js';
+import { publishRole } from '../services/realtimeEvents.js';
+import { checkClinicalRule, verificationSummary } from '../services/clinicalRuleVerification.js';
 
 const router = Router();
 
 router.use(requireAuth, requireRole('pharmacist'));
+
+async function inquiryPatientId(threadId) {
+  const [[row]] = await pool.execute('SELECT patient_id FROM inquiry_threads WHERE id = ?', [
+    threadId,
+  ]);
+  return row?.patient_id || null;
+}
+
+async function orderPatientId(kind, orderId) {
+  const table = kind === 'delivery' ? 'delivery_requests' : 'refill_requests';
+  const [[row]] = await pool.execute(`SELECT patient_id FROM ${table} WHERE id = ?`, [orderId]);
+  return row?.patient_id || null;
+}
+
+async function prescriptionPatientId(photoId) {
+  const [[row]] = await pool.execute(
+    `SELECT m.patient_id
+     FROM prescription_photos pp
+     JOIN medications m ON m.id = pp.medication_id
+     WHERE pp.id = ?`,
+    [photoId]
+  );
+  return row?.patient_id || null;
+}
 
 // ── GET /api/pharmacist/summary ───────────────────────────────────────────────
 // Dashboard counts for the pharmacist's work queues. Aggregates only — no PII.
@@ -218,6 +246,16 @@ router.post('/inquiries/:id/accept', async (req, res) => {
   if (result.error === 'not_requested' || result.error === 'claimed') {
     return res.status(409).json({ error: 'This inquiry is assigned to another pharmacist' });
   }
+  const patientId = await inquiryPatientId(req.params.id);
+  if (patientId) {
+    await recordAudit({
+      actor: { id: req.user.sub, role: 'pharmacist' },
+      action: 'INQUIRY_ACCEPTED', entityType: 'inquiry', entityId: req.params.id, patientId,
+    });
+    await inquiryChanged({
+      patientId, threadId: req.params.id, action: 'accepted', recipientRole: 'patient',
+    });
+  }
   res.json(result);
 });
 
@@ -237,12 +275,31 @@ router.post('/inquiries/:id/reply', async (req, res) => {
   if (result.error === 'not_accepted')
     return res.status(409).json({ error: 'Accept this inquiry before replying' });
   if (result.error === 'closed') return res.status(409).json({ error: 'This inquiry is closed' });
+  const patientId = await inquiryPatientId(req.params.id);
+  if (patientId) {
+    await inquiryChanged({
+      patientId,
+      threadId: req.params.id,
+      action: 'pharmacist_message',
+      recipientRole: 'patient',
+    });
+  }
   res.status(201).json(result);
 });
 
 router.post('/inquiries/:id/close', async (req, res) => {
   const result = await closeThread(req.params.id, 'pharmacist', req.user.sub);
   if (result.error === 'not_found') return res.status(404).json({ error: 'Thread not found' });
+  const patientId = await inquiryPatientId(req.params.id);
+  if (patientId) {
+    await recordAudit({
+      actor: { id: req.user.sub, role: 'pharmacist' },
+      action: 'INQUIRY_CLOSED', entityType: 'inquiry', entityId: req.params.id, patientId,
+    });
+    await inquiryChanged({
+      patientId, threadId: req.params.id, action: 'closed', recipientRole: 'patient',
+    });
+  }
   res.json({ message: 'Inquiry completed and saved to consultation history', ...result });
 });
 
@@ -256,9 +313,16 @@ router.post('/orders/:kind/:id/status', async (req, res) => {
   if (kind !== 'refill' && kind !== 'delivery') {
     return res.status(400).json({ error: 'kind must be refill or delivery' });
   }
+  const patientId = await orderPatientId(kind, id);
   const result = await updateOrderStatus(kind, id, req.body?.status);
   if (result.error === 'bad_status') return res.status(400).json({ error: 'Invalid status' });
   if (result.error === 'not_found') return res.status(404).json({ error: 'Order not found' });
+  await recordAudit({
+    actor: { id: req.user.sub, role: 'pharmacist' },
+    action: 'ORDER_STATUS_UPDATED', entityType: `${kind}_order`, entityId: id, patientId,
+    metadata: { status: result.status },
+  });
+  if (patientId) await orderChanged({ patientId, kind, orderId: id, status: result.status });
   res.json(result);
 });
 
@@ -325,6 +389,7 @@ router.post('/validate', async (req, res) => {
   const { photo_id, action, reason } = req.body;
   if (!photo_id) return res.status(400).json({ error: 'photo_id is required' });
 
+  const patientId = await prescriptionPatientId(photo_id);
   const result = await decideValidation(req.user.sub, photo_id, action, reason);
   if (result.error === 'bad_action') {
     return res
@@ -354,6 +419,18 @@ router.post('/validate', async (req, res) => {
   if (result.error === 'no_schedule') {
     return res.status(409).json({ error: 'No safe schedule is available to approve' });
   }
+  await recordAudit({
+    actor: { id: req.user.sub, role: 'pharmacist' },
+    action: 'PRESCRIPTION_DECIDED', entityType: 'prescription', entityId: photo_id, patientId,
+    metadata: { action },
+  });
+  if (patientId) {
+    await prescriptionChanged({
+      patientId,
+      prescriptionId: photo_id,
+      status: action === 'approve' ? 'approved' : action,
+    });
+  }
   res.json(result);
 });
 
@@ -365,6 +442,198 @@ router.get('/drugs', async (req, res) => {
     category: req.query.category,
   });
   res.json(results);
+});
+
+const CLINICAL_RULE_SELECT = `
+  SELECT id,generic_name,common_strength,dosage_form,administration_route,release_type,
+         supported_frequency_codes,rx_class,availability,
+         catalog_status,clinical_rule_status,frequency_default,max_daily_doses,
+         COALESCE(min_interval_hours,default_interval_hours) AS min_interval_hours,
+         food_rule,administration_instruction,clinical_rationale,guidance_do,guidance_dont,
+         evidence_source_url,clinical_source_name,source_revision_date,
+         evidence_reviewed_at,rule_version,clinical_rejection_reason,verified_by,verified_at
+  FROM drug_reference`;
+
+// One-time formulary rule verification. This is deliberately separate from
+// reviewing any individual patient's schedule.
+router.get('/clinical-rules', async (req, res) => {
+  const status = String(req.query.status || '').toUpperCase();
+  const query = String(req.query.q || '').trim().toLowerCase().slice(0, 100);
+  const conditions = [];
+  const params = [];
+  if (['UNVERIFIED', 'IN_REVIEW', 'VERIFIED', 'REJECTED', 'RETIRED'].includes(status)) {
+    conditions.push('clinical_rule_status=?');
+    params.push(status);
+  }
+  if (query) {
+    conditions.push('LOWER(generic_name) LIKE ?');
+    params.push(`%${query}%`);
+  }
+  const [rows] = await pool.execute(
+    `${CLINICAL_RULE_SELECT}${conditions.length ? ` WHERE ${conditions.join(' AND ')}` : ''}
+     ORDER BY FIELD(clinical_rule_status,'IN_REVIEW','UNVERIFIED','REJECTED','VERIFIED','RETIRED'),generic_name
+     LIMIT 500`,
+    params
+  );
+  res.json(rows.map((row) => ({ ...row, consistency: checkClinicalRule(row) })));
+});
+
+router.get('/clinical-rules/report', async (_req, res) => {
+  const [rows] = await pool.execute(CLINICAL_RULE_SELECT);
+  const [[coverage]] = await pool.execute(
+    `SELECT COUNT(DISTINCT variant.drug_id) AS rule_records,
+            SUM(CASE WHEN variant.drug_id IS NULL THEN 1 ELSE 0 END) AS missing_rule_records
+     FROM drug_reference drug
+     LEFT JOIN medication_rule_variants variant ON variant.drug_id=drug.id
+     WHERE drug.availability=1`
+  );
+  const [[duplicates]] = await pool.execute(
+    `SELECT COUNT(*) AS count FROM (
+       SELECT drug_id,strength,dosage_form FROM medication_rule_variants
+       GROUP BY drug_id,strength,dosage_form HAVING COUNT(*)>1
+     ) duplicate_variants`
+  );
+  res.json({ summary: {
+    ...verificationSummary(rows),
+    rule_records: Number(coverage.rule_records || 0),
+    missing_rule_records: Number(coverage.missing_rule_records || 0),
+    duplicate_variants: Number(duplicates.count || 0),
+  }, medicines: rows.map((row) => ({
+    id: row.id, generic_name: row.generic_name, catalog_status: row.catalog_status,
+    schedule_rule_status: row.clinical_rule_status, ...checkClinicalRule(row),
+  })) });
+});
+
+router.get('/clinical-rules/:id/revisions', async (req, res) => {
+  const [rows] = await pool.execute(
+    `SELECT revision.id,revision.rule_version,revision.action,revision.consistency_result,
+            revision.reason,revision.created_at,pharmacist.full_name AS reviewed_by_name
+     FROM clinical_rule_revisions revision
+     JOIN pharmacists pharmacist ON pharmacist.id=revision.reviewed_by
+     WHERE revision.drug_id=? ORDER BY revision.rule_version DESC,revision.created_at DESC`,
+    [req.params.id]
+  );
+  res.json(rows);
+});
+
+router.post('/clinical-rules/:id/decision', async (req, res) => {
+  const action = String(req.body?.action || '').toUpperCase();
+  if (!['SUBMIT', 'VERIFY', 'REJECT', 'RETIRE'].includes(action)) {
+    return res.status(400).json({ error: 'action must be SUBMIT, VERIFY, REJECT, or RETIRE' });
+  }
+  const reason = String(req.body?.reason || '').trim().slice(0, 500);
+  if (['REJECT', 'RETIRE'].includes(action) && !reason) return res.status(400).json({ error: 'A reason is required' });
+  const requestedCodes = Array.isArray(req.body?.supported_frequency_codes)
+    ? req.body.supported_frequency_codes
+    : String(req.body?.supported_frequency_codes || '').split(',');
+  const supportedCodes = [...new Set(requestedCodes.map((code) => String(code).trim().toUpperCase()).filter(Boolean))];
+  const fields = {
+    common_strength: req.body?.common_strength,
+    dosage_form: req.body?.dosage_form,
+    administration_route: req.body?.administration_route,
+    release_type: req.body?.release_type,
+    supported_frequency_codes: supportedCodes,
+    frequency_default: req.body?.frequency_default,
+    max_daily_doses: req.body?.max_daily_doses,
+    min_interval_hours: req.body?.min_interval_hours,
+    food_rule: req.body?.food_rule,
+    administration_instruction: req.body?.administration_instruction,
+    clinical_rationale: req.body?.clinical_rationale,
+    guidance_do: req.body?.guidance_do,
+    guidance_dont: req.body?.guidance_dont,
+    evidence_source_url: req.body?.evidence_source_url,
+    clinical_source_name: req.body?.clinical_source_name,
+    source_revision_date: req.body?.source_revision_date || null,
+    evidence_reviewed_at: req.body?.evidence_reviewed_at,
+  };
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const [[current]] = await conn.execute(`${CLINICAL_RULE_SELECT} WHERE id=? FOR UPDATE`, [req.params.id]);
+    if (!current) { await conn.rollback(); return res.status(404).json({ error: 'Medicine not found' }); }
+    const candidate = { ...current, ...fields };
+    const consistency = checkClinicalRule(candidate);
+    if (action === 'VERIFY' && !consistency.valid) {
+      await conn.rollback();
+      return res.status(422).json({
+        error: 'This rule cannot be verified until every evidence and consistency issue is resolved.',
+        consistency,
+      });
+    }
+    const status = action === 'VERIFY' ? 'VERIFIED'
+      : action === 'REJECT' ? 'REJECTED'
+        : action === 'RETIRE' ? 'RETIRED' : 'IN_REVIEW';
+    const nextVersion = Number(current.rule_version || 1) + 1;
+    await conn.execute(
+      `UPDATE drug_reference SET common_strength=?,dosage_form=?,administration_route=?,release_type=?,
+       supported_frequency_codes=?,frequency_default=?,
+       max_daily_doses=?,min_interval_hours=?,food_rule=?,administration_instruction=?,
+       clinical_rationale=?,guidance_do=?,guidance_dont=?,evidence_source_url=?,clinical_source_name=?,source_revision_date=?,
+       evidence_reviewed_at=?,clinical_rule_status=?,clinical_rejection_reason=?,
+       verified_by=?,verified_at=CASE WHEN ?='VERIFIED' THEN NOW(3) ELSE NULL END,
+       is_provisional=CASE WHEN ?='VERIFIED' THEN 0 ELSE is_provisional END,rule_version=? WHERE id=?`,
+      [fields.common_strength,fields.dosage_form,fields.administration_route,fields.release_type,
+        JSON.stringify(fields.supported_frequency_codes),fields.frequency_default,
+        fields.max_daily_doses || null,fields.min_interval_hours || null,fields.food_rule,
+        fields.administration_instruction,fields.clinical_rationale || null,
+        fields.guidance_do || null,fields.guidance_dont || null,
+        fields.evidence_source_url,fields.clinical_source_name,fields.source_revision_date,
+        fields.evidence_reviewed_at,status,['REJECT','RETIRE'].includes(action) ? reason : null,
+        req.user.sub,status,status,nextVersion,req.params.id]
+    );
+    await conn.execute(
+      `INSERT INTO medication_rule_variants
+       (id,drug_id,strength,dosage_form,administration_route,release_type,
+        supported_frequency_codes,frequency_code,daily_dose_count,min_interval_hours,
+        max_daily_doses,food_rule,bedtime_required,administration_instruction,
+        clinical_rationale,guidance_do,guidance_dont,source_name,source_url,
+        source_revision_date,evidence_reviewed_at,reviewed_by,verified_at,
+        schedule_rule_status,rule_version)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,
+               CASE WHEN ?='VERIFIED' THEN NOW(3) ELSE NULL END,?,?)
+       ON DUPLICATE KEY UPDATE administration_route=VALUES(administration_route),
+       release_type=VALUES(release_type),supported_frequency_codes=VALUES(supported_frequency_codes),
+       frequency_code=VALUES(frequency_code),daily_dose_count=VALUES(daily_dose_count),
+       min_interval_hours=VALUES(min_interval_hours),max_daily_doses=VALUES(max_daily_doses),
+       food_rule=VALUES(food_rule),bedtime_required=VALUES(bedtime_required),
+       administration_instruction=VALUES(administration_instruction),
+       clinical_rationale=VALUES(clinical_rationale),guidance_do=VALUES(guidance_do),
+       guidance_dont=VALUES(guidance_dont),source_name=VALUES(source_name),
+       source_url=VALUES(source_url),source_revision_date=VALUES(source_revision_date),
+       evidence_reviewed_at=VALUES(evidence_reviewed_at),reviewed_by=VALUES(reviewed_by),
+       verified_at=VALUES(verified_at),schedule_rule_status=VALUES(schedule_rule_status),
+       rule_version=VALUES(rule_version)`,
+      [uuidv4(),current.id,fields.common_strength || null,fields.dosage_form || null,
+        fields.administration_route || null,fields.release_type || null,
+        JSON.stringify(fields.supported_frequency_codes),fields.frequency_default || null,
+        fields.max_daily_doses || null,fields.min_interval_hours || null,
+        fields.max_daily_doses || null,fields.food_rule || null,fields.food_rule === 'BEDTIME' ? 1 : 0,
+        fields.administration_instruction || null,fields.clinical_rationale || null,
+        fields.guidance_do || null,fields.guidance_dont || null,fields.clinical_source_name || null,
+        fields.evidence_source_url || null,fields.source_revision_date,fields.evidence_reviewed_at,
+        req.user.sub,status,status,nextVersion]
+    );
+    await conn.execute(
+      `INSERT INTO clinical_rule_revisions
+       (id,drug_id,rule_version,action,before_data,after_data,consistency_result,reason,reviewed_by)
+       VALUES (?,?,?,?,?,?,?,?,?)`,
+      [uuidv4(),current.id,nextVersion,action === 'VERIFY' ? 'VERIFIED' : action === 'REJECT' ? 'REJECTED' : action === 'RETIRE' ? 'RETIRED' : 'SUBMITTED',
+        JSON.stringify(current),JSON.stringify(candidate),JSON.stringify(consistency),reason || null,req.user.sub]
+    );
+    await recordAudit({
+      actor: { id: req.user.sub, role: 'pharmacist' },
+      action: `CLINICAL_RULE_${status}`, entityType: 'drug_reference', entityId: current.id,
+      metadata: { rule_version: nextVersion, consistency }, executor: conn,
+    });
+    await conn.commit();
+    publishRole('admin', 'FORMULARY_UPDATED', { action: status.toLowerCase(), drug_id: current.id });
+    res.json({ id: current.id, status, rule_version: nextVersion, consistency });
+  } catch (error) {
+    await conn.rollback();
+    throw error;
+  } finally {
+    conn.release();
+  }
 });
 
 // ── GET /api/pharmacist/pending-drugs ─────────────────────────────────────────
@@ -403,7 +672,8 @@ router.post('/pending-drugs/:id/curate', async (req, res) => {
   }
 
   const [reqRows] = await pool.execute(
-    `SELECT id, medication_id, drug_name_raw, status FROM pending_drug_requests WHERE id = ?`,
+    `SELECT id, patient_id, medication_id, drug_name_raw, status
+     FROM pending_drug_requests WHERE id = ?`,
     [id]
   );
   const pending = reqRows[0];
@@ -426,11 +696,17 @@ router.post('/pending-drugs/:id/curate', async (req, res) => {
           pending.medication_id,
         ]);
       }
+      await recordAudit({
+        actor: { id: req.user.sub, role: 'pharmacist' },
+        action: 'FORMULARY_REQUEST_REJECTED', entityType: 'pending_drug_request', entityId: id,
+        patientId: pending.patient_id, executor: conn,
+      });
       await conn.commit();
+      publishRole('admin', 'FORMULARY_UPDATED', { action: 'request_rejected', request_id: id });
       return res.json({ status: 'rejected' });
     }
 
-    // approve — insert into formulary, pharmacist-signed (verified now).
+    // Approve catalog presence only. Clinical scheduling remains unverified.
     const name = canonicalName(generic_name || pending.drug_name_raw);
     const drugId = uuidv4();
     await conn.execute(
@@ -466,6 +742,14 @@ router.post('/pending-drugs/:id/curate', async (req, res) => {
       [name]
     );
     const resolvedDrugId = drugRow[0].id;
+    await conn.execute(
+      `INSERT INTO medication_rule_variants
+         (id,drug_id,strength,dosage_form,schedule_rule_status,rule_version)
+       SELECT ?,drug.id,NULLIF(drug.common_strength,''),NULLIF(drug.dosage_form,''),'UNVERIFIED',drug.rule_version
+       FROM drug_reference drug WHERE drug.id=?
+         AND NOT EXISTS (SELECT 1 FROM medication_rule_variants rule_record WHERE rule_record.drug_id=drug.id)`,
+      [uuidv4(), resolvedDrugId]
+    );
 
     if (pending.medication_id) {
       await conn.execute(`UPDATE medications SET drug_id=?, status='active' WHERE id=?`, [
@@ -477,7 +761,13 @@ router.post('/pending-drugs/:id/curate', async (req, res) => {
       `UPDATE pending_drug_requests SET status='curated', resolved_at=NOW(3) WHERE id=?`,
       [id]
     );
+    await recordAudit({
+      actor: { id: req.user.sub, role: 'pharmacist' },
+      action: 'CATALOG_ENTRY_CURATED', entityType: 'drug_reference', entityId: resolvedDrugId,
+      patientId: pending.patient_id, metadata: { request_id: id }, executor: conn,
+    });
     await conn.commit();
+    publishRole('admin', 'FORMULARY_UPDATED', { action: 'verified', drug_id: resolvedDrugId });
     res.json({ status: 'curated', drug_id: resolvedDrugId });
   } catch (err) {
     await conn.rollback();

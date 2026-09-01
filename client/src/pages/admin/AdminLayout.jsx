@@ -1,8 +1,11 @@
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { useState } from 'react';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { useAccessibility } from '../../context/AccessibilityContext.jsx';
 import pharmateLogo from '../../assets/pharmate-logo-transparent.png';
 import '../../styles/admin.css';
+import PortalNotificationButton from '../../components/PortalNotificationButton.jsx';
+import { useRealtime } from '../../hooks/useRealtime.js';
 
 // Admin web console (Figs 50–54). Aggregates + pseudonymous management — no
 // patient names or conditions anywhere (TC-05).
@@ -75,6 +78,20 @@ export default function AdminLayout() {
   const location = useLocation();
   const { user, logout } = useAuth();
   const { preferences, updatePreference } = useAccessibility();
+  const [realtimeRevision, setRealtimeRevision] = useState(0);
+  useRealtime((event) => {
+    if (
+      [
+        'ADHERENCE_UPDATED',
+        'ORDER_STATUS_CHANGED',
+        'PRESCRIPTION_STATUS_CHANGED',
+        'FORMULARY_UPDATED',
+        'INVENTORY_UPDATED',
+      ].includes(event)
+    ) {
+      setRealtimeRevision((value) => value + 1);
+    }
+  });
   const current = MENU.find((item) => location.pathname.startsWith(item.to));
   const descriptions = {
     Dashboard: 'Validated system activity from the Pharmate database',
@@ -121,7 +138,7 @@ export default function AdminLayout() {
           <AdminIcon name={preferences.darkMode ? 'sun' : 'moon'} />{' '}
           <span>{preferences.darkMode ? 'Light mode' : 'Dark mode'}</span>
         </button>
-        <button className="admin-minor" type="button">
+        <button className="admin-minor" onClick={() => navigate('/admin/settings')} type="button">
           <AdminIcon name="help" /> <span>Help</span>
         </button>
         <button className="admin-logout" onClick={handleLogout}>
@@ -139,6 +156,7 @@ export default function AdminLayout() {
             </div>
           </div>
           <div className="admin-account">
+            <PortalNotificationButton />
             <span className="admin-avatar">
               {(user?.name || user?.email || 'Admin').slice(0, 2).toUpperCase()}
             </span>
@@ -149,7 +167,7 @@ export default function AdminLayout() {
           </div>
         </header>
         <main className="admin-content">
-          <Outlet />
+          <Outlet key={realtimeRevision} />
         </main>
       </div>
     </div>

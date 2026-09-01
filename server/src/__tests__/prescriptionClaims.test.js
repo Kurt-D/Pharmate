@@ -14,6 +14,10 @@ let pharm2Token;
 let pharm1Id;
 let pharm2Id;
 
+afterAll(async () => {
+  await pool.end();
+});
+
 const auth = (token) => ({ Authorization: `Bearer ${token}` });
 
 async function login(email) {

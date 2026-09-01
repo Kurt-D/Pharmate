@@ -2,6 +2,7 @@ import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext.jsx';
 import '../../styles/pharmacist.css';
 import '../../styles/pharmacist-redesign.css';
+import PortalNotificationButton from '../../components/PortalNotificationButton.jsx';
 
 const MENU = [
   { to: '/pharmacist/dashboard', label: 'Dashboard' },
@@ -78,6 +79,7 @@ export default function PharmacistLayout() {
             <div className="pw-sub">{title[1]}</div>
           </div>
           <div className="text-end">
+            <PortalNotificationButton />
             <div className="pw-user-badge">
               <i>●</i>
               <span>

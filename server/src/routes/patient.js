@@ -5,10 +5,15 @@ import { requireAuth } from '../middleware/auth.js';
 import { requireRole } from '../middleware/role.js';
 import { parseFrequency } from '../../engine/frequencyParser.js';
 import { findRestricted, resolveDrug, searchDrugs } from '../services/formulary.js';
-import { proposeForPatient, confirmForPatient, validateMove } from '../services/schedule.js';
+import {
+  proposeForPatient,
+  confirmForPatient,
+  validateMove,
+  analyzeAdjustedLayout,
+} from '../services/schedule.js';
 import { uploadPrescription } from '../middleware/upload.js';
 import { attachPhoto } from '../services/prescription.js';
-import { todayDoses, logDose, syncLogs } from '../services/doses.js';
+import { todayDoses, dosesForDate, logDose, syncLogs } from '../services/doses.js';
 import {
   openThread,
   postMessage,
@@ -22,6 +27,7 @@ import { loyaltyFor } from '../services/adherence.js';
 import { encrypt } from '../utils/crypto.js';
 import { serializePatient } from '../utils/serializer.js';
 import { getPatientDashboard } from '../services/patientDashboard.js';
+import { getStreakStatus } from '../services/streakLifecycle.js';
 import {
   getPreferences,
   updatePreferences,
@@ -48,6 +54,10 @@ import {
   generateCaregiverCode,
   hashCaregiverCode,
 } from '../utils/caregiverInvite.js';
+import { recordAudit } from '../services/audit.js';
+import { createPortalNotification } from '../services/portalNotifications.js';
+import { publishUser } from '../services/realtimeEvents.js';
+import { inquiryChanged, medicationChanged, orderChanged, prescriptionChanged, scheduleChanged } from '../services/domainEvents.js';
 
 const router = Router();
 
@@ -87,6 +97,11 @@ router.put('/preferences', async (req, res) => {
 // A compact, PII-free summary for the signed-in patient's home screen.
 router.get('/dashboard', async (req, res) => {
   res.json(await getPatientDashboard(req.user.sub));
+});
+
+// One server-owned streak state shared by the home banner, header icon and inbox.
+router.get('/streak/status', async (req, res) => {
+  res.json(await getStreakStatus(req.user.sub));
 });
 
 // ── GET /api/patient/anchors ──────────────────────────────────────────────────
@@ -284,6 +299,53 @@ router.get('/caregivers', async (req, res) => {
   res.json(rows);
 });
 
+router.get('/caregiver-requests', async (req, res) => {
+  const [rows] = await pool.execute(
+    `SELECT cp.id,u.email,cp.relationship,cp.linked_at,cp.status
+     FROM caregiver_patients cp JOIN users u ON u.id=cp.caregiver_id
+     WHERE cp.patient_id=? AND cp.status='pending' ORDER BY cp.linked_at DESC`,
+    [req.user.sub]
+  );
+  res.json(rows);
+});
+
+router.post('/caregiver-requests/:linkId/decision', async (req, res) => {
+  if (typeof req.body?.approve !== 'boolean') return res.status(400).json({ error: 'approve must be true or false' });
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const [[link]] = await conn.execute(
+      `SELECT id,caregiver_id,patient_id FROM caregiver_patients
+       WHERE id=? AND patient_id=? AND status='pending' FOR UPDATE`,
+      [req.params.linkId, req.user.sub]
+    );
+    if (!link) { await conn.rollback(); return res.status(404).json({ error: 'Pending caregiver request not found' }); }
+    const status = req.body.approve ? 'active' : 'rejected';
+    const eventType = req.body.approve ? 'approved' : 'rejected';
+    await conn.execute('UPDATE caregiver_patients SET status=? WHERE id=?', [status, link.id]);
+    await conn.execute(
+      `INSERT INTO caregiver_link_audit
+       (id,link_id,caregiver_id,patient_id,event_type,actor_user_id)
+       VALUES (?,?,?,?,?,?)`,
+      [uuidv4(), link.id, link.caregiver_id, link.patient_id, eventType, req.user.sub]
+    );
+    await recordAudit({
+      actor: { id: req.user.sub, role: 'patient' },
+      action: req.body.approve ? 'CAREGIVER_LINK_APPROVED' : 'CAREGIVER_LINK_REJECTED',
+      entityType: 'caregiver_link', entityId: link.id, patientId: req.user.sub, executor: conn,
+    });
+    await createPortalNotification({
+      userId: link.caregiver_id, type: 'CAREGIVER_LINK_UPDATED',
+      title: req.body.approve ? 'Caregiver access approved' : 'Caregiver request declined',
+      body: req.body.approve ? 'The patient approved your caregiver connection.' : 'The patient did not approve this caregiver connection.',
+      actionPath: '/caregiver/home', eventKey: `caregiver-link-decision:${link.id}:${status}`, executor: conn,
+    });
+    await conn.commit();
+    publishUser(link.caregiver_id, 'CAREGIVER_LINK_UPDATED', { action: status });
+    res.json({ id: link.id, status });
+  } catch (error) { await conn.rollback(); throw error; } finally { conn.release(); }
+});
+
 router.patch('/caregivers/:linkId/permissions', async (req, res) => {
   if (typeof req.body?.can_manage_medications !== 'boolean') {
     return res.status(400).json({ error: 'can_manage_medications must be true or false' });
@@ -295,6 +357,9 @@ router.patch('/caregivers/:linkId/permissions', async (req, res) => {
     [req.body.can_manage_medications ? 1 : 0, req.params.linkId, req.user.sub]
   );
   if (!result.affectedRows) return res.status(404).json({ error: 'Caregiver link not found' });
+  const [[link]] = await pool.execute('SELECT caregiver_id FROM caregiver_patients WHERE id=? AND patient_id=?', [req.params.linkId, req.user.sub]);
+  await recordAudit({ actor: { id: req.user.sub, role: 'patient' }, action: 'CAREGIVER_PERMISSION_UPDATED', entityType: 'caregiver_link', entityId: req.params.linkId, patientId: req.user.sub, metadata: { can_manage_medications: req.body.can_manage_medications } });
+  if (link) publishUser(link.caregiver_id, 'CAREGIVER_LINK_UPDATED', { action: 'permissions', can_manage_medications: req.body.can_manage_medications });
   res.json({ can_manage_medications: req.body.can_manage_medications });
 });
 
@@ -323,7 +388,10 @@ router.delete('/caregivers/:linkId', async (req, res) => {
        VALUES (?, ?, ?, ?, 'revoked', ?)`,
       [uuidv4(), link.id, link.caregiver_id, link.patient_id, req.user.sub]
     );
+    await recordAudit({ actor: { id: req.user.sub, role: 'patient' }, action: 'CAREGIVER_LINK_REVOKED', entityType: 'caregiver_link', entityId: link.id, patientId: req.user.sub, executor: conn });
+    await createPortalNotification({ userId: link.caregiver_id, type: 'CAREGIVER_LINK_UPDATED', title: 'Caregiver access revoked', body: 'The patient revoked this caregiver connection.', actionPath: '/caregiver/home', eventKey: `caregiver-link-revoked:${link.id}`, executor: conn });
     await conn.commit();
+    publishUser(link.caregiver_id, 'CAREGIVER_LINK_UPDATED', { action: 'revoked' });
     return res.status(204).end();
   } catch (error) {
     await conn.rollback();
@@ -355,6 +423,9 @@ router.post('/medications', async (req, res) => {
     source = 'OTC_SELF',
     is_prn,
     dosage_instruction,
+    label_direction,
+    food_instruction,
+    timing_note,
     start_date,
     end_date,
     schedule_only = false,
@@ -373,10 +444,12 @@ router.post('/medications', async (req, res) => {
   // 1. Restricted-substance check (TC-11) — decline before anything is stored.
   const restricted = await findRestricted(drug_name);
   if (restricted) {
-    console.warn(
-      `[restricted] patient ${req.user.sub} attempted to encode "${drug_name}" ` +
-        `(matched ${restricted.generic_name}/${restricted.category})`
-    );
+    if (process.env.NODE_ENV !== 'test') {
+      console.warn(
+        `[restricted] patient ${req.user.sub} attempted to encode "${drug_name}" ` +
+          `(matched ${restricted.generic_name}/${restricted.category})`
+      );
+    }
     return res.status(403).json({
       error: 'restricted_substance',
       redirect: 'visit_nearest_branch',
@@ -410,8 +483,9 @@ router.post('/medications', async (req, res) => {
       await conn.execute(
         `INSERT INTO medications
            (id, patient_id, drug_id, drug_name_raw, source, is_prn, frequency,
-            frequency_code, dosage_instruction, start_date, end_date, status)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            frequency_code, dosage_instruction, label_direction, food_instruction,
+            timing_note, start_date, end_date, status)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           medId,
           req.user.sub,
@@ -422,12 +496,17 @@ router.post('/medications', async (req, res) => {
           frequency ?? null,
           frequencyCode,
           dosage_instruction ?? null,
+          label_direction ?? null,
+          food_instruction ?? null,
+          timing_note ?? null,
           start_date ?? null,
           end_date ?? null,
           status,
         ]
       );
+      await recordAudit({ actor: { id: req.user.sub, role: 'patient' }, action: 'MEDICATION_CREATED', entityType: 'medication', entityId: medId, patientId: req.user.sub, metadata: { status }, executor: conn });
       await conn.commit();
+      await medicationChanged(req.user.sub, 'MEDICATION_CREATED', medId, drug_name);
       return res.status(201).json({
         id: medId,
         status,
@@ -447,8 +526,9 @@ router.post('/medications', async (req, res) => {
     await conn.execute(
       `INSERT INTO medications
          (id, patient_id, drug_id, drug_name_raw, source, is_prn, frequency,
-          frequency_code, dosage_instruction, start_date, end_date, status)
-       VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, 'pending_drug')`,
+          frequency_code, dosage_instruction, label_direction, food_instruction,
+          timing_note, start_date, end_date, status)
+       VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending_drug')`,
       [
         medId,
         req.user.sub,
@@ -458,6 +538,9 @@ router.post('/medications', async (req, res) => {
         frequency ?? null,
         frequencyCode,
         dosage_instruction ?? null,
+        label_direction ?? null,
+        food_instruction ?? null,
+        timing_note ?? null,
         start_date ?? null,
         end_date ?? null,
       ]
@@ -468,7 +551,9 @@ router.post('/medications', async (req, res) => {
        VALUES (?, ?, ?, ?, ?)`,
       [uuidv4(), req.user.sub, medId, drug_name, frequency ?? null]
     );
+    await recordAudit({ actor: { id: req.user.sub, role: 'patient' }, action: 'MEDICATION_CREATED', entityType: 'medication', entityId: medId, patientId: req.user.sub, metadata: { status: 'pending_drug' }, executor: conn });
     await conn.commit();
+    await medicationChanged(req.user.sub, 'MEDICATION_CREATED', medId, drug_name);
     return res.status(202).json({
       id: medId,
       status: 'pending_drug',
@@ -486,9 +571,15 @@ router.post('/medications', async (req, res) => {
 // ── GET /api/patient/medications ──────────────────────────────────────────────
 router.get('/medications', async (req, res) => {
   const [rows] = await pool.execute(
-    `SELECT m.id, m.drug_id, m.drug_name_raw, m.source, m.is_prn, m.frequency, m.frequency_code,
-            m.dosage_instruction, m.start_date, m.end_date, m.status, m.created_at, m.updated_at,
-            dr.rx_class,
+    `SELECT m.id, m.drug_id, m.drug_name_raw, m.brand_name_snapshot,
+            m.strength_value, m.strength_unit, m.dosage_form_snapshot,
+            m.source, m.is_prn, m.frequency, m.frequency_code,
+            m.dosage_instruction, m.label_direction, m.food_instruction, m.timing_note,
+            m.quantity_on_hand, m.quantity_unit, m.entry_method, m.ocr_confidence,
+            m.patient_confirmed,
+            m.start_date, m.end_date, m.status, m.created_at, m.updated_at,
+            dr.rx_class, dr.meal_instruction, dr.administration_instruction,
+            dr.guidance_do, dr.guidance_dont, dr.evidence_source_url,
             pp.status AS prescription_status, pp.decision_reason AS prescription_reason,
             pp.review_stage AS prescription_review_stage
      FROM medications m
@@ -519,12 +610,14 @@ router.patch('/medications/:id', async (req, res) => {
   if (parsed.error) return res.status(parsed.error.status).json(parsed.error);
   const result = await updateMedication(req.user.sub, req.params.id, parsed);
   if (result.error) return res.status(result.error.status).json(result.error);
+  await medicationChanged(req.user.sub, 'MEDICATION_UPDATED', req.params.id, result.medication?.drug_name_raw);
   res.json(result);
 });
 
 router.post('/medications/:id/stop', async (req, res) => {
   const result = await stopMedication(req.user.sub, req.params.id, req.body?.expected_updated_at);
   if (result.error) return res.status(result.error.status).json(result.error);
+  if (!result.already_stopped) await medicationChanged(req.user.sub, 'MEDICATION_STOPPED', req.params.id, result.medication?.drug_name_raw);
   res.json(result);
 });
 
@@ -553,6 +646,7 @@ router.post(
     if (result.error === 'not_pending') {
       return res.status(409).json({ error: 'This medication is not awaiting validation' });
     }
+    await prescriptionChanged({ patientId: req.user.sub, prescriptionId: result.photoId, status: 'pending' });
     res.status(201).json({
       photo_id: result.photoId,
       status: 'pending',
@@ -567,7 +661,12 @@ router.post(
 // engine is deterministic and pure; this endpoint does NOT persist — the patient
 // reviews the proposal and confirms it separately (UC-03 steps 4–6).
 router.get('/schedule', async (req, res) => {
-  const proposal = await proposeForPatient(req.user.sub);
+  const medicationIds = String(req.query.medication_ids || '')
+    .split(',')
+    .map((id) => id.trim())
+    .filter(Boolean)
+    .slice(0, 50);
+  const proposal = await proposeForPatient(req.user.sub, medicationIds);
   res.json(proposal);
 });
 
@@ -582,20 +681,42 @@ router.post('/schedule/validate', async (req, res) => {
   res.json(await validateMove(req.user.sub, doses, index));
 });
 
+router.post('/schedule/analyze', async (req, res) => {
+  const doses = Array.isArray(req.body?.slots) ? req.body.slots : [];
+  res.json({ safety: await analyzeAdjustedLayout(req.user.sub, doses) });
+});
+
 // ── POST /api/patient/schedule/confirm ────────────────────────────────────────
 // Persist the confirmed plan (is_confirmed = TRUE), bumping schedule_version.
 // An optional `slots` body carries the patient's ±60-min adjustments (D-E),
 // re-validated server-side before persisting. Replaces prior not-yet-taken doses.
 router.post('/schedule/confirm', async (req, res) => {
-  const result = await confirmForPatient(req.user.sub, req.body?.slots);
+  const medicationIds = Array.isArray(req.body?.medication_ids)
+    ? req.body.medication_ids.map(String).filter(Boolean).slice(0, 50)
+    : [];
+  const source = req.body?.source === 'manual' ? 'manual' : 'suggested';
+  const result = await confirmForPatient(req.user.sub, req.body?.slots, medicationIds, { source });
+  if (result.error === 'schedule_verification_failed') {
+    return res.status(409).json({
+      error: 'This schedule cannot be saved because a verified time-gap rule is violated or required verified information is unavailable',
+      safety: result.safety,
+    });
+  }
   if (result.error === 'invalid_layout') {
     return res
       .status(409)
       .json({ error: 'A dose violates a spacing rule', violation: result.violation });
   }
+  if (result.error === 'invalid_time') {
+    return res.status(400).json({ error: 'Choose a valid reminder time for every medicine' });
+  }
+  if (result.error === 'invalid_date') {
+    return res.status(400).json({ error: 'Choose at least one treatment day within the medicine start and end dates' });
+  }
   if (result.error === 'unknown_medication') {
     return res.status(400).json({ error: 'Unknown medication in the adjusted layout' });
   }
+  await scheduleChanged(req.user.sub, result.version);
   res.status(201).json({ message: 'Schedule confirmed', ...result });
 });
 
@@ -623,6 +744,16 @@ router.delete('/schedule/items', async (req, res) => {
 // confirmation UI and the on-device notification schedule.
 router.get('/doses/today', async (req, res) => {
   res.json(await todayDoses(req.user.sub));
+});
+
+// ── GET /api/patient/doses/calendar ───────────────────────────────────────────
+// Date-specific history for the medication calendar. Dashboard summaries remain
+// intentionally limited to today's endpoint above.
+router.get('/doses/calendar', async (req, res) => {
+  const result = await dosesForDate(req.user.sub, req.query.date, req.query.status || 'all');
+  if (result.error === 'invalid_date') return res.status(400).json({ error: 'A valid date is required' });
+  if (result.error === 'invalid_status') return res.status(400).json({ error: 'Invalid dose status' });
+  res.json(result);
 });
 
 // ── POST /api/patient/doses/:scheduleId/log ───────────────────────────────────
@@ -673,6 +804,7 @@ router.post('/inquiries', async (req, res) => {
   if (result.error === 'pharmacist_not_found') {
     return res.status(404).json({ error: 'Selected pharmacist is not available at this branch' });
   }
+  await inquiryChanged({ patientId: req.user.sub, threadId: result.thread_id, action: 'created' });
   res.status(201).json(result);
 });
 
@@ -686,6 +818,7 @@ router.post('/inquiries/:id/messages', async (req, res) => {
   const result = await postMessage(req.params.id, 'patient', req.user.sub, message);
   if (result.error === 'not_found') return res.status(404).json({ error: 'Thread not found' });
   if (result.error === 'closed') return res.status(409).json({ error: 'This inquiry is closed' });
+  await inquiryChanged({ patientId: req.user.sub, threadId: req.params.id, action: 'patient_message' });
   res.status(201).json(result);
 });
 
@@ -698,6 +831,7 @@ router.get('/inquiries/:id/messages', async (req, res) => {
 router.post('/inquiries/:id/close', async (req, res) => {
   const result = await closeThread(req.params.id, 'patient', req.user.sub);
   if (result.error === 'not_found') return res.status(404).json({ error: 'Thread not found' });
+  await inquiryChanged({ patientId: req.user.sub, threadId: req.params.id, action: 'closed' });
   res.json({ message: 'Inquiry completed and saved to consultation history', ...result });
 });
 
@@ -731,6 +865,7 @@ router.post('/refills', async (req, res) => {
         'Please upload your prescription for validation first.',
     });
   }
+  await orderChanged({ patientId: req.user.sub, kind: 'refill', orderId: result.id, status: result.status, created: true });
   res.status(201).json(result);
 });
 
@@ -765,6 +900,7 @@ router.post('/deliveries', async (req, res) => {
         'Please upload your prescription for validation first.',
     });
   }
+  await orderChanged({ patientId: req.user.sub, kind: 'delivery', orderId: result.id, status: result.status, created: true });
   res.status(201).json(result);
 });
 

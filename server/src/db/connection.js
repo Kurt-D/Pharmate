@@ -30,6 +30,16 @@ export const pool = mysql.createPool({
   typeCast: parseStructuredJson,
 });
 
+// Several integration suites explicitly close the shared pool. Jest's global
+// teardown also closes it for suites that only reach it through the Express
+// app. Make shutdown idempotent so both paths can safely coexist.
+const endPool = pool.end.bind(pool);
+let poolEndPromise;
+pool.end = () => {
+  poolEndPromise ??= endPool();
+  return poolEndPromise;
+};
+
 export function createUploadsDir() {
   const dir = path.resolve(process.env.UPLOADS_DIR || './uploads');
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });

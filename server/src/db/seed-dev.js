@@ -9,6 +9,7 @@ import 'dotenv/config';
 import { createConnection } from 'mysql2/promise';
 import bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
+import { encrypt } from '../utils/crypto.js';
 
 const DEV_PASSWORD = 'Pharmate@dev1';
 
@@ -90,18 +91,33 @@ async function seed() {
   }
 
   // ── Role-specific rows ───────────────────────────────────────────────────
-  const [existingPat] = await conn.execute('SELECT id FROM patients WHERE id = ?', [patientUserId]);
+  const [existingPat] = await conn.execute(
+    'SELECT id, full_name_enc, medical_condition_enc FROM patients WHERE id = ?',
+    [patientUserId]
+  );
+  const encryptedDevName = encrypt('Juan dela Cruz');
+  const encryptedDevCondition = encrypt('Hypertension');
   if (existingPat.length === 0) {
     // Chronic condition on file + priority_flag=1 stands in for an approved
     // prescription (PART 4, flag 7) so the Priority/Standard badge is testable.
     // In production the flag is DERIVED from pharmacist validation, never seeded.
     await conn.execute(
       `INSERT INTO patients (id, patient_code, full_name_enc, medical_condition_enc, priority_flag)
-       VALUES (?, 'PM-DEV001', 'DEV_PLAINTEXT_Juan_dela_Cruz', 'DEV_PLAINTEXT_Hypertension', 1)`,
-      [patientUserId]
+       VALUES (?, 'PM-DEV001', ?, ?, 1)`,
+      [patientUserId, encryptedDevName, encryptedDevCondition]
     );
     await conn.execute('INSERT INTO patient_anchors (patient_id) VALUES (?)', [patientUserId]);
     await conn.execute('INSERT INTO patient_preferences (patient_id) VALUES (?)', [patientUserId]);
+  } else if (
+    String(existingPat[0].full_name_enc || '').startsWith('DEV_PLAINTEXT_') ||
+    String(existingPat[0].medical_condition_enc || '').startsWith('DEV_PLAINTEXT_')
+  ) {
+    await conn.execute(
+      `UPDATE patients
+       SET full_name_enc = ?, medical_condition_enc = ?
+       WHERE id = ?`,
+      [encryptedDevName, encryptedDevCondition, patientUserId]
+    );
   }
 
   const [existingPharm] = await conn.execute('SELECT id FROM pharmacists WHERE id = ?', [
@@ -110,7 +126,7 @@ async function seed() {
   if (existingPharm.length === 0) {
     await conn.execute(
       'INSERT INTO pharmacists (id, full_name, license_number, branch_id) VALUES (?, ?, ?, ?)',
-      [pharmacistUserId, 'Dra. Dev Pharmacist', 'PH-DEV-001', activeBranchId]
+      [pharmacistUserId, 'Dev Pharmacist', 'PH-DEV-001', activeBranchId]
     );
   }
 
@@ -149,6 +165,14 @@ async function seed() {
       [drugAId, drugBId, pharmacistUserId]
     );
   }
+  await conn.execute(
+    `INSERT INTO medication_rule_variants
+       (id,drug_id,strength,dosage_form,schedule_rule_status,rule_version)
+     SELECT UUID(),drug.id,NULLIF(drug.common_strength,''),NULLIF(drug.dosage_form,''),
+            drug.clinical_rule_status,drug.rule_version
+     FROM drug_reference drug
+     WHERE NOT EXISTS (SELECT 1 FROM medication_rule_variants rule_record WHERE rule_record.drug_id=drug.id)`
+  );
 
   await conn.end();
   console.log('Dev seed complete.');

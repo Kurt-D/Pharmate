@@ -206,6 +206,14 @@ async function run() {
     await conn.execute('DELETE FROM restricted_substances');
 
     const nameToId = await seedFormulary(conn);
+    await conn.execute(
+      `INSERT INTO medication_rule_variants
+         (id,drug_id,strength,dosage_form,schedule_rule_status,rule_version)
+       SELECT UUID(),drug.id,NULLIF(drug.common_strength,''),NULLIF(drug.dosage_form,''),
+              drug.clinical_rule_status,drug.rule_version
+       FROM drug_reference drug
+       WHERE NOT EXISTS (SELECT 1 FROM medication_rule_variants rule_record WHERE rule_record.drug_id=drug.id)`
+    );
     const { inserted, unmatched } = await seedInteractions(conn, nameToId);
     const restrictedCount = await seedRestricted(conn);
 

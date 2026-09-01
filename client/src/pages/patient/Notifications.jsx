@@ -51,6 +51,19 @@ export default function Notifications() {
     }
   }
 
+  async function markRead(id) {
+    try {
+      const response = await api(`/api/patient/notifications/${id}/read`, { method: 'PATCH' });
+      setItems((all) =>
+        (all || []).map((item) =>
+          item.id === id ? { ...item, read_at: response.data.read_at } : item
+        )
+      );
+    } catch {
+      // Keep the item unread so the patient can retry.
+    }
+  }
+
   return (
     <main className="pm-notifications-page">
       <header>
@@ -79,7 +92,10 @@ export default function Notifications() {
       ) : items.length ? (
         <section className="pm-notification-list">
           {items.map((item) => (
-            <article className={item.read_at ? '' : 'unread'} key={item.id}>
+            <article
+              className={`${item.read_at ? '' : 'unread'} notification-type-${item.type}`}
+              key={item.id}
+            >
               <span>
                 <Icon name="bell" />
               </span>
@@ -87,6 +103,11 @@ export default function Notifications() {
                 <strong>{item.title}</strong>
                 <p>{item.message}</p>
                 <time>{new Date(item.created_at).toLocaleString()}</time>
+                {!item.read_at && (
+                  <button onClick={() => markRead(item.id)} type="button">
+                    {tr('Mark as read', 'Markahang nabasa')}
+                  </button>
+                )}
               </div>
             </article>
           ))}

@@ -27,6 +27,10 @@ const PASSWORD = 'TestPass@123';
 let patientToken;
 let pharmacistToken;
 
+afterAll(async () => {
+  await pool.end();
+});
+
 beforeAll(async () => {
   // Register and log in a patient
   await request(app)
@@ -48,7 +52,7 @@ beforeAll(async () => {
     email: PHARMACIST_EMAIL,
     password: PASSWORD,
     role: 'pharmacist',
-    fullName: 'Dr. Test Pharmacist',
+    fullName: 'Test Pharmacist',
   });
   const pharmRes = await request(app).post('/api/auth/login').send({
     email: PHARMACIST_EMAIL,

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { api } from '../../api.js';
+import { useRealtime } from '../../hooks/useRealtime.js';
 import pharmateLogo from '../../assets/pharmate-logo-transparent.png';
 import pharmacistWelcome from '../../assets/pharmacist-welcome.png';
 import '../../styles/pharmacist-dashboard.css';
@@ -66,8 +67,7 @@ const MOCK_PRESCRIPTIONS = [
   {
     id: 'RX-260824-019',
     patient: 'PT-1042',
-    doctor: 'Dr. Maria L. Santos',
-    license: 'PRC 0118427',
+    documentSource: 'Patient-uploaded prescription',
     drug: 'Atorvastatin 20 mg tablet',
     instruction: 'Take one tablet once daily at bedtime',
     frequency: 'Every 24 hours · 30 days',
@@ -77,8 +77,7 @@ const MOCK_PRESCRIPTIONS = [
   {
     id: 'RX-260824-021',
     patient: 'PT-1178',
-    doctor: 'Dr. Rafael P. Cruz',
-    license: 'PRC 0097611',
+    documentSource: 'Patient-uploaded prescription',
     drug: 'Apixaban 5 mg tablet',
     instruction: 'Take one tablet every 12 hours',
     frequency: 'Twice daily · 90 days',
@@ -88,8 +87,7 @@ const MOCK_PRESCRIPTIONS = [
   {
     id: 'RX-260824-024',
     patient: 'PT-1239',
-    doctor: 'Dr. Elena G. Reyes',
-    license: 'PRC 0142208',
+    documentSource: 'Patient-uploaded prescription',
     drug: 'Celecoxib 200 mg capsule',
     instruction: 'Take one capsule after a meal when needed',
     frequency: 'Maximum once daily · 14 days',
@@ -690,8 +688,8 @@ function PrescriptionValidation({
                 <p>{selected.frequency}</p>
               </div>
               <div className="phd-rx-document__signature">
-                <span>{selected.doctor}</span>
-                <small>{selected.license}</small>
+                <span>{selected.documentSource}</span>
+                <small>Pending pharmacist validation</small>
               </div>
             </div>
             <div className="phd-document-tools" aria-label="Document controls">
@@ -724,11 +722,8 @@ function PrescriptionValidation({
                   <dd>{selected.patient}</dd>
                 </div>
                 <div>
-                  <dt>Prescriber</dt>
-                  <dd>
-                    {selected.doctor}
-                    <small>{selected.license}</small>
-                  </dd>
+                  <dt>Document source</dt>
+                  <dd>{selected.documentSource}</dd>
                 </div>
                 <div>
                   <dt>Medication</dt>
@@ -1469,7 +1464,7 @@ function Settings({ settings, setSettings, saved, onSave }) {
   );
 }
 
-function AdherenceTracking() {
+function AdherenceTracking({ refreshSignal = 0 }) {
   const [data, setData] = useState({ summary: {}, trend: [], patients: [] });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -1493,7 +1488,7 @@ function AdherenceTracking() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [refreshSignal]);
 
   const filteredPatients = data.patients.filter((patient) => {
     if (filter === 'attention') return patient.adherence_pct < 80 || patient.missed > 0;
@@ -1780,6 +1775,24 @@ export default function PharmacistDashboard() {
     soundAlerts: false,
     tokenSignals: true,
   });
+  const [liveRefresh, setLiveRefresh] = useState(0);
+  const realtimeStatus = useRealtime((event) => {
+    if (
+      [
+        'dispense-log',
+        'LIVE_DISPENSE_LOG',
+        'MEDICATION_CREATED',
+        'MEDICATION_UPDATED',
+        'MEDICATION_STOPPED',
+        'SCHEDULE_CONFIRMED',
+        'ORDER_STATUS_CHANGED',
+        'INQUIRY_UPDATED',
+        'FORMULARY_UPDATED',
+      ].includes(event)
+    ) {
+      setLiveRefresh((value) => value + 1);
+    }
+  });
 
   const metrics = useMemo(
     () => ({
@@ -1990,7 +2003,12 @@ export default function PharmacistDashboard() {
           </div>
           <div className="phd-topbar__status">
             <span>
-              <i /> Clinical systems operational
+              <i className={realtimeStatus === 'live' ? '' : 'is-connecting'} />{' '}
+              {realtimeStatus === 'live'
+                ? 'Live clinical monitoring'
+                : realtimeStatus === 'offline'
+                  ? 'Offline · reconnecting'
+                  : 'Connecting live monitoring'}
             </span>
             <button aria-label="View alerts" onClick={() => selectTab('overview')} type="button">
               <Icon name="alert" />
@@ -2036,7 +2054,7 @@ export default function PharmacistDashboard() {
               setSelectedId={setSelectedPatientId}
             />
           )}
-          {activeTab === 'adherence' && <AdherenceTracking />}
+          {activeTab === 'adherence' && <AdherenceTracking refreshSignal={liveRefresh} />}
           {activeTab === 'settings' && (
             <Settings
               onSave={saveSettings}

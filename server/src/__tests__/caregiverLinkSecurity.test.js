@@ -78,6 +78,16 @@ test('patient creates a hashed, single-use 15-minute invite and lists safe metad
   expect(JSON.stringify(row)).not.toContain(patientA.id);
 });
 
+test('profile caregiver-code endpoint generates the same secure invite shape', async () => {
+  const created = await request(app)
+    .post('/api/patient/caregiver-link-code')
+    .set(auth(patientA.token));
+  expect(created.status).toBe(201);
+  expect(created.body.code).toMatch(/^[A-Z2-9]{3}-[A-Z2-9]{3}$/);
+  expect(created.body.expires_in_seconds).toBe(15 * 60);
+  expect(created.body.single_use).toBe(true);
+});
+
 test('expired invite is not listed and cannot be redeemed', async () => {
   const created = await request(app).post('/api/patient/invite').set(auth(patientA.token));
   await pool.execute(
@@ -118,10 +128,37 @@ test('caregiver redeems successfully without patient_id leakage', async () => {
     .post('/api/caregiver/link')
     .set(auth(caregiverA.token))
     .send({ code: invite.body.code, relationship: 'Daughter' });
-  expect(linked.status).toBe(201);
-  expect(linked.body).toEqual({ message: 'Linked to patient', relationship: 'Daughter' });
+  expect(linked.status).toBe(202);
+  expect(linked.body).toEqual({
+    message: 'Link request sent. The patient must approve it.',
+    relationship: 'Daughter',
+    status: 'pending',
+  });
   expect(JSON.stringify(linked.body)).not.toContain('patient_id');
   expect(JSON.stringify(linked.body)).not.toContain(patientA.id);
+
+  const caregiverPending = await request(app)
+    .get('/api/caregiver/link-requests')
+    .set(auth(caregiverA.token));
+  expect(caregiverPending.status).toBe(200);
+  expect(caregiverPending.body).toEqual([
+    expect.objectContaining({
+      patient_code: patientCodeA,
+      relationship: 'Daughter',
+      status: 'pending',
+    }),
+  ]);
+  expect(JSON.stringify(caregiverPending.body)).not.toContain(patientA.id);
+
+  const requests = await request(app)
+    .get('/api/patient/caregiver-requests')
+    .set(auth(patientA.token));
+  expect(requests.body).toHaveLength(1);
+  const approved = await request(app)
+    .post(`/api/patient/caregiver-requests/${requests.body[0].id}/decision`)
+    .set(auth(patientA.token))
+    .send({ approve: true });
+  expect(approved.status).toBe(200);
 });
 
 test('two concurrent caregivers cannot redeem the same invite', async () => {
@@ -136,10 +173,10 @@ test('two concurrent caregivers cannot redeem the same invite', async () => {
       .set(auth(caregiverC.token))
       .send({ code: invite.body.code }),
   ]);
-  expect(results.map((result) => result.status).sort()).toEqual([201, 409]);
+  expect(results.map((result) => result.status).sort()).toEqual([202, 409]);
 
   const [[count]] = await pool.execute(
-    "SELECT COUNT(*) AS total FROM caregiver_patients WHERE patient_id = ? AND status = 'active'",
+    "SELECT COUNT(*) AS total FROM caregiver_patients WHERE patient_id = ? AND status = 'pending'",
     [patientB.id]
   );
   expect(count.total).toBe(1);

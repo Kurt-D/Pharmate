@@ -7,6 +7,10 @@ import { createAccessToken, createPrivilegedTestUser } from './helpers/testUsers
 const CURRENT_PASSWORD = 'CorrectHorseBattery1';
 const NEW_PASSWORD = 'EvenSaferPassword2026';
 
+afterAll(async () => {
+  await pool.end();
+});
+
 async function createUser(role = 'caregiver') {
   const email = `${role}.session.${Date.now()}.${Math.random()}@test.pharmate`;
   const id = await createPrivilegedTestUser({ email, password: CURRENT_PASSWORD, role });

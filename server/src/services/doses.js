@@ -19,9 +19,56 @@ import { parseClock } from '../../engine/time.js';
 import { raiseMissedAlerts } from './alerts.js';
 import { createPatientNotification } from './patientNotifications.js';
 import { publishPatientAdherence } from './caregiverEvents.js';
+import { publishDoseActivity } from './realtimeEvents.js';
 
 const VALID_METHODS = ['fcm', 'local', 'manual', 'ocr'];
 const MANILA_OFFSET_MS = 8 * 3600 * 1000;
+
+function manilaDayKey(value = new Date()) {
+  const shifted = new Date(new Date(value).getTime() + MANILA_OFFSET_MS);
+  return shifted.toISOString().slice(0, 10);
+}
+
+function dayBounds(dayKey) {
+  const start = new Date(`${dayKey}T00:00:00+08:00`);
+  return { start, end: new Date(start.getTime() + 24 * 60 * 60 * 1000) };
+}
+
+const CALENDAR_STATUSES = {
+  all: null,
+  upcoming: ['scheduled', 'snoozed'],
+  missed: ['missed'],
+  taken: ['taken', 'taken_late'],
+};
+
+function serializeDose(r) {
+  return {
+    schedule_id: r.schedule_id,
+    medication_id: r.medication_id,
+    drug_name: r.drug_name_raw,
+    scheduled_time: r.scheduled_time,
+    logged_at: r.logged_at ?? null,
+    status: r.status,
+    reason: r.generated_reason,
+    dosage_instruction: r.dosage_instruction ?? null,
+    strength: r.strength_value
+      ? `${Number(r.strength_value)} ${r.strength_unit || ''}`.trim()
+      : null,
+    dosage_form: r.dosage_form_snapshot ?? null,
+  };
+}
+
+async function emitDoseActivity(patientId, scheduleId, status, loggedAt) {
+  try {
+    await publishDoseActivity(patientId, scheduleId, status, loggedAt);
+  } catch (error) {
+    // Live delivery is best-effort: a temporary stream failure must never undo
+    // or misreport a dose that was already safely stored in MySQL.
+    if (process.env.NODE_ENV !== 'test') {
+      console.error('[realtime] dose update could not be published:', error.message);
+    }
+  }
+}
 
 /** Minute-of-day (Asia/Manila) of an absolute instant. */
 function manilaMinuteOfDay(date) {
@@ -31,28 +78,63 @@ function manilaMinuteOfDay(date) {
 
 /** The patient's current confirmed day plan (latest version for each medicine). */
 export async function todayDoses(patientId) {
+  const { start, end } = dayBounds(manilaDayKey());
   const [rows] = await pool.execute(
     `SELECT ms.id AS schedule_id, ms.medication_id, ms.scheduled_time, ms.status,
-            ms.generated_reason, m.drug_name_raw
+            ms.generated_reason, m.drug_name_raw, m.dosage_instruction,
+            m.strength_value, m.strength_unit, m.dosage_form_snapshot,
+            (SELECT dl.logged_at FROM dose_logs dl
+              WHERE dl.schedule_id=ms.id AND dl.status IN ('taken','taken_late')
+              ORDER BY dl.created_at DESC LIMIT 1) AS logged_at
+       FROM medication_schedules ms
+       JOIN medications m ON m.id=ms.medication_id
+      WHERE ms.patient_id=? AND (
+        (ms.status IN ('scheduled','snoozed') AND ms.scheduled_time>=?
+          AND ms.schedule_version=(SELECT COALESCE(MAX(schedule_version),0)
+            FROM medication_schedules WHERE patient_id=? AND medication_id=ms.medication_id))
+        OR
+        (ms.status IN ('taken','taken_late','missed')
+          AND ms.scheduled_time>=? AND ms.scheduled_time<?)
+      )
+      ORDER BY ms.scheduled_time ASC`,
+    [patientId, start, patientId, start, end]
+  );
+  return rows.map(serializeDose);
+}
+
+/** Dose history for one Manila calendar day, optionally narrowed by UI status. */
+export async function dosesForDate(patientId, date, status = 'all') {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(date)) || Number.isNaN(Date.parse(`${date}T00:00:00Z`))) {
+    return { error: 'invalid_date' };
+  }
+  if (!Object.hasOwn(CALENDAR_STATUSES, status)) return { error: 'invalid_status' };
+  const { start, end } = dayBounds(date);
+  const selectedStatuses = CALENDAR_STATUSES[status];
+  const statusClause = selectedStatuses
+    ? ` AND ms.status IN (${selectedStatuses.map(() => '?').join(',')})`
+    : '';
+  const [rows] = await pool.execute(
+    `SELECT ms.id AS schedule_id, ms.medication_id, ms.scheduled_time, ms.status,
+            ms.generated_reason, m.drug_name_raw, m.dosage_instruction,
+            m.strength_value, m.strength_unit, m.dosage_form_snapshot,
+            (SELECT dl.logged_at
+               FROM dose_logs dl
+              WHERE dl.schedule_id = ms.id AND dl.status IN ('taken','taken_late')
+              ORDER BY dl.created_at DESC LIMIT 1) AS logged_at
      FROM medication_schedules ms
      JOIN medications m ON m.id = ms.medication_id
      WHERE ms.patient_id = ?
-       AND ms.schedule_version = (
+       AND ms.scheduled_time >= ? AND ms.scheduled_time < ?
+       AND (ms.status IN ('taken','taken_late','missed') OR ms.schedule_version = (
          SELECT COALESCE(MAX(schedule_version), 0)
          FROM medication_schedules
          WHERE patient_id = ? AND medication_id = ms.medication_id
-       )
+       ))
+       ${statusClause}
      ORDER BY ms.scheduled_time ASC`,
-    [patientId, patientId]
+    [patientId, start, end, patientId, ...(selectedStatuses || [])]
   );
-  return rows.map((r) => ({
-    schedule_id: r.schedule_id,
-    medication_id: r.medication_id,
-    drug_name: r.drug_name_raw,
-    scheduled_time: r.scheduled_time,
-    status: r.status,
-    reason: r.generated_reason,
-  }));
+  return rows.map(serializeDose);
 }
 
 /**
@@ -109,6 +191,7 @@ export async function logDose(patientId, scheduleId, opts = {}) {
     status,
     logged_at: loggedAt.toISOString(),
   });
+  await emitDoseActivity(patientId, scheduleId, status, loggedAt);
   return { status, log_id: logId, reflow };
 }
 
@@ -189,6 +272,7 @@ export async function sweepMissed(now = new Date()) {
           scheduled_time: r.scheduled_time,
           medicine_name: r.drug_name_raw,
         });
+        await emitDoseActivity(r.patient_id, r.id, 'missed', now);
       }
     }
   }

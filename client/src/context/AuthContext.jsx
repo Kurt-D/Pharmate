@@ -1,8 +1,10 @@
 /* oxlint-disable react/only-export-components */
-import { createContext, useContext, useState, useCallback } from 'react';
-import { apiUrl } from '../config.js';
+import { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import axios from 'axios';
+import { API_BASE, apiUrl } from '../config.js';
 
 const AuthContext = createContext(null);
+const authenticatedHttp = axios.create({ baseURL: API_BASE || undefined });
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(() => {
@@ -29,6 +31,15 @@ export function AuthProvider({ children }) {
     sessionStorage.setItem('pm_refresh', refreshToken);
     sessionStorage.setItem('pm_user', JSON.stringify(userData));
     setUser(userData);
+  }, []);
+
+  useEffect(() => {
+    const interceptor = authenticatedHttp.interceptors.request.use((config) => {
+      const token = sessionStorage.getItem('pm_token') || localStorage.getItem('pm_token');
+      if (token) config.headers.Authorization = `Bearer ${token}`;
+      return config;
+    });
+    return () => authenticatedHttp.interceptors.request.eject(interceptor);
   }, []);
 
   const logout = useCallback(async () => {

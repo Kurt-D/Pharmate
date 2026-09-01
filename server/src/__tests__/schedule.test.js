@@ -10,12 +10,17 @@
  */
 import request from 'supertest';
 import app from '../index.js';
+import { pool } from '../db/connection.js';
 
 const PATIENT_EMAIL = `patient.s4.${Date.now()}@test.pharmate`;
 const PASSWORD = 'TestPass@123';
 
 let token;
 const auth = () => ({ Authorization: `Bearer ${token}` });
+
+afterAll(async () => {
+  await pool.end();
+});
 
 beforeAll(async () => {
   await request(app)
@@ -163,5 +168,76 @@ describe('POST /api/patient/schedule/confirm — adjusted layout re-validation',
       .send({ slots: doses });
     expect(res.status).toBe(409);
     expect(res.body.violation.drug).toMatch(/paracetamol/i);
+  });
+
+  test('a patient-created manual schedule is saved without generated-schedule rule validation', async () => {
+    const sched = await request(app).get('/api/patient/schedule').set(auth());
+    const doses = toDoses(sched.body.slots);
+    const end = new Date(`${sched.body.generation_date}T00:00:00Z`);
+    end.setUTCDate(end.getUTCDate() + 2);
+    const endDate = end.toISOString().slice(0, 10);
+    await pool.execute('UPDATE medications SET start_date=?, end_date=? WHERE id=?', [
+      sched.body.generation_date, endDate, doses[0].medication_id,
+    ]);
+    doses.forEach((dose) => { dose.dates = [sched.body.generation_date, endDate]; });
+    doses[1].minute = 11 * 60; // This would fail the generated schedule gap check.
+    const res = await request(app)
+      .post('/api/patient/schedule/confirm')
+      .set(auth())
+      .send({ source: 'manual', slots: doses });
+
+    expect(res.status).toBe(201);
+    expect(res.body.count).toBe(doses.length * 2);
+  });
+});
+
+describe('new-medicine schedule scope', () => {
+  test('suggests and saves only the medicine selected in the add-medicine flow', async () => {
+    const email = `patient.schedule.scope.${Date.now()}@test.pharmate`;
+    await request(app)
+      .post('/api/auth/register')
+      .send({ email, password: PASSWORD, role: 'patient', full_name: 'Schedule Scope Tester' });
+    const scopedToken = (
+      await request(app).post('/api/auth/login').send({ email, password: PASSWORD })
+    ).body.accessToken;
+    const scopedAuth = { Authorization: `Bearer ${scopedToken}` };
+
+    const paracetamol = await request(app)
+      .post('/api/patient/medications')
+      .set(scopedAuth)
+      .send({ drug_name: 'paracetamol', frequency: 'OD', source: 'OTC_SELF', is_prn: false });
+    const cetirizine = await request(app)
+      .post('/api/patient/medications')
+      .set(scopedAuth)
+      .send({ drug_name: 'cetirizine', frequency: 'OD', source: 'OTC_SELF', is_prn: false });
+
+    await request(app)
+      .post('/api/patient/schedule/confirm')
+      .set(scopedAuth)
+      .send({ medication_ids: [paracetamol.body.id] })
+      .expect(201);
+
+    const proposal = await request(app)
+      .get(`/api/patient/schedule?medication_ids=${cetirizine.body.id}`)
+      .set(scopedAuth)
+      .expect(200);
+
+    expect(proposal.body.slots.length).toBeGreaterThan(0);
+    expect(new Set(proposal.body.slots.map((slot) => slot.medication_id))).toEqual(
+      new Set([cetirizine.body.id])
+    );
+
+    await request(app)
+      .post('/api/patient/schedule/confirm')
+      .set(scopedAuth)
+      .send({ medication_ids: [cetirizine.body.id] })
+      .expect(201);
+
+    const doses = await request(app).get('/api/patient/doses/today').set(scopedAuth).expect(200);
+    const scheduledMedicineIds = new Set(
+      doses.body.filter((dose) => dose.status === 'scheduled').map((dose) => dose.medication_id)
+    );
+    expect(scheduledMedicineIds.has(paracetamol.body.id)).toBe(true);
+    expect(scheduledMedicineIds.has(cetirizine.body.id)).toBe(true);
   });
 });
