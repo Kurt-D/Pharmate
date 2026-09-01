@@ -49,9 +49,6 @@ jobs:
           DB_PASS: pharmate
           JWT_SECRET: ci-secret-access
           JWT_REFRESH_SECRET: ci-secret-refresh
-          # Quoted: an unquoted all-digit scalar is parsed by YAML as the integer 0,
-          # which reaches Node as AES_KEY="0" (len 1) and makes every encrypt() throw
-          # "AES_KEY must be 64 hex chars". Must stay a 64-hex-char string.
           AES_KEY: '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef'
         run: npm --prefix server run migrate
 
@@ -64,6 +61,10 @@ jobs:
           DB_PASS: pharmate
         run: npm --prefix server run seed:formulary -- --allow-unverified
 
+      - name: Setup Jest Test Database Permissions
+        run: |
+          mysql -h 127.0.0.1 -u root -proot -e "CREATE DATABASE IF NOT EXISTS pharmate_jest_test; GRANT ALL PRIVILEGES ON pharmate_jest_test.* TO 'pharmate'@'%'; FLUSH PRIVILEGES;"
+
       - name: Jest unit tests
         env:
           DB_HOST: 127.0.0.1
@@ -73,21 +74,12 @@ jobs:
           DB_PASS: pharmate
           JWT_SECRET: ci-secret-access
           JWT_REFRESH_SECRET: ci-secret-refresh
-          # Quoted: an unquoted all-digit scalar is parsed by YAML as the integer 0,
-          # which reaches Node as AES_KEY="0" (len 1) and makes every encrypt() throw
-          # "AES_KEY must be 64 hex chars". Must stay a 64-hex-char string.
           AES_KEY: '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef'
-          BCRYPT_COST: '4' # fast hashing in tests only; production stays at 12 (D-G)
+          BCRYPT_COST: '4'
         run: npm --prefix server test
 
       - name: ESLint (server)
         run: npm --prefix server run lint
-
-      # PII containment (Sprint 2 exit gate) is enforced by the Jest integration
-      # test in src/__tests__/auth.test.js ("PII containment — staff responses
-      # must not expose plaintext PII"), which registers a patient with known
-      # plaintext PII and asserts it never appears in any staff-facing response.
-      # That test runs in the Jest step above, so no separate grep step is needed.
 
   client-lint:
     name: Client lint
