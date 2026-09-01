@@ -399,13 +399,11 @@ router.post('/save-reminders', async (req, res) => {
     }
     if (!generated.result.can_save) {
       await conn.rollback();
-      return res
-        .status(409)
-        .json({
-          error:
-            'PharMate could not create reminder times that follow all the available instructions. Check your medicine label or prescription.',
-          ...generated.result,
-        });
+      return res.status(409).json({
+        error:
+          'PharMate could not create reminder times that follow all the available instructions. Check your medicine label or prescription.',
+        ...generated.result,
+      });
     }
     const { medicationIds, createdMedicationIds } = await upsertMedicationIntakes(
       conn,
@@ -461,14 +459,12 @@ router.post('/save-reminders', async (req, res) => {
       );
     }
     await scheduleChanged(req.user.sub, Number(versionRow.version));
-    res
-      .status(201)
-      .json({
-        message: 'Schedule created successfully',
-        count,
-        version: Number(versionRow.version),
-        schedule: generated.result.schedule,
-      });
+    res.status(201).json({
+      message: 'Schedule created successfully',
+      count,
+      version: Number(versionRow.version),
+      schedule: generated.result.schedule,
+    });
   } catch (error) {
     await conn.rollback();
     if (error.status) return res.status(error.status).json({ error: error.message });

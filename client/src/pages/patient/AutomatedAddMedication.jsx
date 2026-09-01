@@ -450,13 +450,11 @@ export default function AutomatedAddMedication() {
     }
   }
   function manualRows() {
-    return [...new Set(manualTimes)]
-      .sort()
-      .map((time, index) => ({
-        time,
-        minute: Number(time.slice(0, 2)) * 60 + Number(time.slice(3, 5)),
-        dose: index + 1,
-      }));
+    return [...new Set(manualTimes)].sort().map((time, index) => ({
+      time,
+      minute: Number(time.slice(0, 2)) * 60 + Number(time.slice(3, 5)),
+      dose: index + 1,
+    }));
   }
   function requestConfirmation(title, message, onContinue) {
     setConfirmation({ title, message, onContinue });

@@ -516,14 +516,12 @@ router.post('/link', inviteLimit, failedInviteLimit, async (req, res) => {
     );
     if (['active', 'pending'].includes(existing?.status)) {
       await conn.rollback();
-      return res
-        .status(409)
-        .json({
-          error:
-            existing.status === 'active'
-              ? 'Already linked to this patient'
-              : 'Link request is awaiting patient approval',
-        });
+      return res.status(409).json({
+        error:
+          existing.status === 'active'
+            ? 'Already linked to this patient'
+            : 'Link request is awaiting patient approval',
+      });
     }
 
     const [claimed] = await conn.execute(
@@ -585,13 +583,11 @@ router.post('/link', inviteLimit, failedInviteLimit, async (req, res) => {
   }
 
   publishUser(requestedPatientId, 'CAREGIVER_LINK_UPDATED', { action: 'requested' });
-  res
-    .status(202)
-    .json({
-      message: 'Link request sent. The patient must approve it.',
-      relationship,
-      status: 'pending',
-    });
+  res.status(202).json({
+    message: 'Link request sent. The patient must approve it.',
+    relationship,
+    status: 'pending',
+  });
 });
 
 export default router;
