@@ -37,9 +37,7 @@ async function main() {
     password: process.env.DB_PASS || '',
   });
   await conn.query(`DROP DATABASE IF EXISTS \`${DB}\``);
-  await conn.query(
-    `CREATE DATABASE \`${DB}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`
-  );
+  await conn.query(`CREATE DATABASE \`${DB}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`);
   await conn.end();
   console.log(`Recreated disposable database \`${DB}\`.`);
 

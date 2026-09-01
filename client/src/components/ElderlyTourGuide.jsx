@@ -4,12 +4,16 @@ import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, BookOpen, Check, X } from 'l
 export function TourReplayCard({ audience = 'patient', onReplay }) {
   return (
     <section className="pm-tour-replay" aria-labelledby={`${audience}-tour-replay-title`}>
-      <span aria-hidden="true"><BookOpen /></span>
+      <span aria-hidden="true">
+        <BookOpen />
+      </span>
       <div>
         <h2 id={`${audience}-tour-replay-title`}>Help &amp; App Guide</h2>
         <p>Review the important controls directly on the screen.</p>
       </div>
-      <button onClick={onReplay} type="button">Open Guide</button>
+      <button onClick={onReplay} type="button">
+        Open Guide
+      </button>
     </section>
   );
 }
@@ -83,7 +87,10 @@ export default function ElderlyTourGuide({ onClose, onStepChange, open, steps })
 
       if (centerY < window.innerHeight * 0.42) {
         setPointer({ direction: 'up', left: centerX - 28, top: rect.bottom + 10 });
-        setCardStyle({ bottom: 'auto', top: Math.max(12, Math.min(rect.bottom + 78, window.innerHeight - 245)) });
+        setCardStyle({
+          bottom: 'auto',
+          top: Math.max(12, Math.min(rect.bottom + 78, window.innerHeight - 245)),
+        });
       } else {
         setPointer({ direction: 'down', left: centerX - 28, top: rect.top - 66 });
         setCardStyle({ bottom: Math.max(12, window.innerHeight - rect.top + 76), top: 'auto' });
@@ -121,7 +128,9 @@ export default function ElderlyTourGuide({ onClose, onStepChange, open, steps })
   return (
     <div className="pm-elderly-tour" role="presentation">
       <div className={`pm-elderly-tour__shade ${spotlight ? 'has-spotlight' : ''}`} />
-      {spotlight && <div aria-hidden="true" className="pm-elderly-tour__spotlight" style={spotlight} />}
+      {spotlight && (
+        <div aria-hidden="true" className="pm-elderly-tour__spotlight" style={spotlight} />
+      )}
       {pointer && (
         <span
           aria-hidden="true"
@@ -149,7 +158,9 @@ export default function ElderlyTourGuide({ onClose, onStepChange, open, steps })
         >
           Skip Tour <X />
         </button>
-        <small className="pm-pointer-spotlight__step">Step {index + 1} of {steps.length}</small>
+        <small className="pm-pointer-spotlight__step">
+          Step {index + 1} of {steps.length}
+        </small>
         <h2 id={titleId}>{step.title}</h2>
         <p id={descriptionId}>{step.description}</p>
         <div className="pm-elderly-tour__navigation">

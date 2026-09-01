@@ -177,9 +177,13 @@ describe('POST /api/patient/schedule/confirm — adjusted layout re-validation',
     end.setUTCDate(end.getUTCDate() + 2);
     const endDate = end.toISOString().slice(0, 10);
     await pool.execute('UPDATE medications SET start_date=?, end_date=? WHERE id=?', [
-      sched.body.generation_date, endDate, doses[0].medication_id,
+      sched.body.generation_date,
+      endDate,
+      doses[0].medication_id,
     ]);
-    doses.forEach((dose) => { dose.dates = [sched.body.generation_date, endDate]; });
+    doses.forEach((dose) => {
+      dose.dates = [sched.body.generation_date, endDate];
+    });
     doses[1].minute = 11 * 60; // This would fail the generated schedule gap check.
     const res = await request(app)
       .post('/api/patient/schedule/confirm')

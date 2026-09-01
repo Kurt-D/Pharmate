@@ -127,17 +127,28 @@ export default function CaregiverDashboard({
           </p>
         </header>
         {pendingLinks.length > 0 && (
-          <section className="rounded-2xl border border-amber-200 bg-amber-50 p-5 shadow-sm" role="status">
+          <section
+            className="rounded-2xl border border-amber-200 bg-amber-50 p-5 shadow-sm"
+            role="status"
+          >
             <span className="mx-auto grid h-16 w-16 place-items-center rounded-full bg-white text-amber-700 shadow-sm">
               <Clock3 className="h-8 w-8" />
             </span>
-            <h2 className="mb-0 mt-4 text-xl font-bold text-slate-900">Waiting for patient approval</h2>
+            <h2 className="mb-0 mt-4 text-xl font-bold text-slate-900">
+              Waiting for patient approval
+            </h2>
             <p className="mb-0 mt-2 text-sm font-medium leading-6 text-slate-700">
-              Your code was accepted. The patient must open Profile → Caregiver Access and approve your request before monitoring begins.
+              Your code was accepted. The patient must open Profile → Caregiver Access and approve
+              your request before monitoring begins.
             </p>
             {pendingLinks.map((request) => (
-              <div className="mt-4 rounded-xl border border-amber-200 bg-white p-3 text-left" key={request.id}>
-                <strong className="block text-sm text-slate-900">Patient {request.patient_code}</strong>
+              <div
+                className="mt-4 rounded-xl border border-amber-200 bg-white p-3 text-left"
+                key={request.id}
+              >
+                <strong className="block text-sm text-slate-900">
+                  Patient {request.patient_code}
+                </strong>
                 <small className="text-slate-600">{request.relationship} · Approval pending</small>
               </div>
             ))}
@@ -195,9 +206,7 @@ export default function CaregiverDashboard({
         <p className="mb-0 mt-1 text-sm font-medium leading-5 text-slate-600">
           Keep {patientLabel || 'your linked patient'} on track today.
         </p>
-        <span
-          className={`cg-live-status ${realtimeStatus === 'live' ? 'is-live' : 'is-preview'}`}
-        >
+        <span className={`cg-live-status ${realtimeStatus === 'live' ? 'is-live' : 'is-preview'}`}>
           <Activity className="h-4 w-4" />
           {realtimeStatus === 'live'
             ? previewMode
@@ -444,7 +453,11 @@ export default function CaregiverDashboard({
               onClick={() => setShowAllStock((value) => !value)}
               type="button"
             >
-              {showAllStock ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
+              {showAllStock ? (
+                <ChevronUp className="h-5 w-5" />
+              ) : (
+                <ChevronDown className="h-5 w-5" />
+              )}
               {showAllStock ? 'Show less' : `See all ${visibleStockAlerts.length} stock alerts`}
             </button>
           )}

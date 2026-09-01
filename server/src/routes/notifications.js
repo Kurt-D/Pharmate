@@ -8,11 +8,15 @@ router.use(requireAuth);
 router.get('/', async (req, res) => {
   const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 30, 1), 100);
   const before = req.query.before ? new Date(req.query.before) : null;
-  if (before && Number.isNaN(before.getTime())) return res.status(400).json({ error: 'Invalid before cursor' });
+  if (before && Number.isNaN(before.getTime()))
+    return res.status(400).json({ error: 'Invalid before cursor' });
   const unreadOnly = req.query.unread_only === 'true';
   const clauses = ['user_id=?'];
   const params = [req.user.sub];
-  if (before) { clauses.push('created_at < ?'); params.push(before); }
+  if (before) {
+    clauses.push('created_at < ?');
+    params.push(before);
+  }
   if (unreadOnly) clauses.push('read_at IS NULL');
   const [rows] = await pool.execute(
     `SELECT id,type,title,body,action_path,read_at,created_at
@@ -25,7 +29,8 @@ router.get('/', async (req, res) => {
     [req.user.sub]
   );
   res.json({
-    notifications: rows.slice(0, limit), unread_count: Number(count.unread_count),
+    notifications: rows.slice(0, limit),
+    unread_count: Number(count.unread_count),
     next_cursor: rows.length > limit ? rows[limit - 1].created_at : null,
   });
 });

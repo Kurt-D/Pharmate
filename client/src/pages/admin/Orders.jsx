@@ -405,142 +405,146 @@ export default function Orders() {
         </footer>
       </div>
 
-      {selected && createPortal((
-        <div
-          className="admin-order-drawer-backdrop"
-          onMouseDown={(event) => event.target === event.currentTarget && setSelected(null)}
-        >
-          <aside
-            className="admin-order-drawer"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="order-detail-title"
+      {selected &&
+        createPortal(
+          <div
+            className="admin-order-drawer-backdrop"
+            onMouseDown={(event) => event.target === event.currentTarget && setSelected(null)}
           >
-            <header>
-              <div>
-                <small>ORDER DETAILS</small>
-                <h3 id="order-detail-title">{orderReference(selected)}</h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setSelected(null)}
-                aria-label="Close order details"
-              >
-                <X size={20} />
-              </button>
-            </header>
-            <section className="admin-order-drawer-summary">
-              <StatusBadge status={selected.status} />
-              <h4>{selected.drug}</h4>
-              <p>
-                {selected.kind === 'delivery'
-                  ? 'Doorstep delivery request'
-                  : 'Branch refill request'}{' '}
-                for <b>{selected.patient_code}</b>.
-              </p>
-            </section>
-            <dl>
-              <div>
-                <dt>Patient code</dt>
-                <dd>{selected.patient_code}</dd>
-              </div>
-              <div>
-                <dt>Order type</dt>
-                <dd>{selected.kind}</dd>
-              </div>
-              <div>
-                <dt>Pharmacy branch</dt>
-                <dd>{selected.branch}</dd>
-              </div>
-              <div>
-                <dt>Medicine class</dt>
-                <dd>
-                  {selected.rx_class === 'RX' || selected.source === 'RX_VALIDATED'
-                    ? 'Prescription verified'
-                    : 'OTC'}
-                </dd>
-              </div>
-              <div>
-                <dt>Requested</dt>
-                <dd>{formatDate(selected.requested_at)}</dd>
-              </div>
-              <div>
-                <dt>Last status update</dt>
-                <dd>{formatDate(selected.updated_at)}</dd>
-              </div>
-            </dl>
-            <section className="admin-order-progress">
-              <h4>Fulfilment progress</h4>
-              <OrderTimeline order={selected} />
-            </section>
-            <footer>
-              {nextAction(selected) ? (
+            <aside
+              className="admin-order-drawer"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="order-detail-title"
+            >
+              <header>
+                <div>
+                  <small>ORDER DETAILS</small>
+                  <h3 id="order-detail-title">{orderReference(selected)}</h3>
+                </div>
                 <button
-                  className="primary"
                   type="button"
-                  onClick={() => setConfirmAction({ order: selected, ...nextAction(selected) })}
+                  onClick={() => setSelected(null)}
+                  aria-label="Close order details"
                 >
-                  {nextAction(selected).label}
-                  <ChevronRight size={17} />
+                  <X size={20} />
                 </button>
-              ) : null}
-              {!['ready', 'delivered', 'cancelled'].includes(selected.status) ? (
-                <button
-                  className="danger"
-                  type="button"
-                  onClick={() =>
-                    setConfirmAction({
-                      order: selected,
-                      status: 'cancelled',
-                      label: 'Cancel order',
-                    })
-                  }
-                >
-                  Cancel order
-                </button>
-              ) : null}
-            </footer>
-          </aside>
-        </div>
-      ), document.body)}
+              </header>
+              <section className="admin-order-drawer-summary">
+                <StatusBadge status={selected.status} />
+                <h4>{selected.drug}</h4>
+                <p>
+                  {selected.kind === 'delivery'
+                    ? 'Doorstep delivery request'
+                    : 'Branch refill request'}{' '}
+                  for <b>{selected.patient_code}</b>.
+                </p>
+              </section>
+              <dl>
+                <div>
+                  <dt>Patient code</dt>
+                  <dd>{selected.patient_code}</dd>
+                </div>
+                <div>
+                  <dt>Order type</dt>
+                  <dd>{selected.kind}</dd>
+                </div>
+                <div>
+                  <dt>Pharmacy branch</dt>
+                  <dd>{selected.branch}</dd>
+                </div>
+                <div>
+                  <dt>Medicine class</dt>
+                  <dd>
+                    {selected.rx_class === 'RX' || selected.source === 'RX_VALIDATED'
+                      ? 'Prescription verified'
+                      : 'OTC'}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Requested</dt>
+                  <dd>{formatDate(selected.requested_at)}</dd>
+                </div>
+                <div>
+                  <dt>Last status update</dt>
+                  <dd>{formatDate(selected.updated_at)}</dd>
+                </div>
+              </dl>
+              <section className="admin-order-progress">
+                <h4>Fulfilment progress</h4>
+                <OrderTimeline order={selected} />
+              </section>
+              <footer>
+                {nextAction(selected) ? (
+                  <button
+                    className="primary"
+                    type="button"
+                    onClick={() => setConfirmAction({ order: selected, ...nextAction(selected) })}
+                  >
+                    {nextAction(selected).label}
+                    <ChevronRight size={17} />
+                  </button>
+                ) : null}
+                {!['ready', 'delivered', 'cancelled'].includes(selected.status) ? (
+                  <button
+                    className="danger"
+                    type="button"
+                    onClick={() =>
+                      setConfirmAction({
+                        order: selected,
+                        status: 'cancelled',
+                        label: 'Cancel order',
+                      })
+                    }
+                  >
+                    Cancel order
+                  </button>
+                ) : null}
+              </footer>
+            </aside>
+          </div>,
+          document.body
+        )}
 
-      {confirmAction && createPortal((
-        <div className="admin-order-confirm-backdrop">
-          <section
-            className="admin-order-confirm"
-            role="alertdialog"
-            aria-modal="true"
-            aria-labelledby="confirm-order-title"
-          >
-            <span className={confirmAction.status === 'cancelled' ? 'danger' : ''}>
-              {confirmAction.status === 'cancelled' ? (
-                <XCircle size={25} />
-              ) : (
-                <PackageCheck size={25} />
-              )}
-            </span>
-            <h3 id="confirm-order-title">{confirmAction.label}?</h3>
-            <p>
-              {confirmAction.status === 'cancelled'
-                ? 'This removes the order from active fulfilment. The patient will need to place a new request.'
-                : `This will move ${orderReference(confirmAction.order)} to “${STATUS_LABELS[confirmAction.status]}”.`}
-            </p>
-            <div>
-              <button type="button" onClick={() => setConfirmAction(null)} disabled={saving}>
-                Go back
-              </button>
-              <button
-                className={confirmAction.status === 'cancelled' ? 'danger' : 'primary'}
-                type="button"
-                onClick={processOrder}
-                disabled={saving}
-              >
-                {saving ? 'Saving…' : confirmAction.label}
-              </button>
-            </div>
-          </section>
-        </div>
-      ), document.body)}
+      {confirmAction &&
+        createPortal(
+          <div className="admin-order-confirm-backdrop">
+            <section
+              className="admin-order-confirm"
+              role="alertdialog"
+              aria-modal="true"
+              aria-labelledby="confirm-order-title"
+            >
+              <span className={confirmAction.status === 'cancelled' ? 'danger' : ''}>
+                {confirmAction.status === 'cancelled' ? (
+                  <XCircle size={25} />
+                ) : (
+                  <PackageCheck size={25} />
+                )}
+              </span>
+              <h3 id="confirm-order-title">{confirmAction.label}?</h3>
+              <p>
+                {confirmAction.status === 'cancelled'
+                  ? 'This removes the order from active fulfilment. The patient will need to place a new request.'
+                  : `This will move ${orderReference(confirmAction.order)} to “${STATUS_LABELS[confirmAction.status]}”.`}
+              </p>
+              <div>
+                <button type="button" onClick={() => setConfirmAction(null)} disabled={saving}>
+                  Go back
+                </button>
+                <button
+                  className={confirmAction.status === 'cancelled' ? 'danger' : 'primary'}
+                  type="button"
+                  onClick={processOrder}
+                  disabled={saving}
+                >
+                  {saving ? 'Saving…' : confirmAction.label}
+                </button>
+              </div>
+            </section>
+          </div>,
+          document.body
+        )}
     </section>
   );
 }

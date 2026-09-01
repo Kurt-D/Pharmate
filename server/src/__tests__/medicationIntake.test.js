@@ -27,20 +27,26 @@ test('accepts a patient-confirmed formulary match and normalizes strength', () =
   const result = validateIntakeRecord(validRecord(), verifiedDrug);
   expect(result.error).toBeUndefined();
   expect(result.value).toMatchObject({
-    medicine_name: 'Paracetamol', dosage_form: 'Tablet',
-    strength_value: 500, strength_unit: 'mg', quantity_on_hand: 30,
+    medicine_name: 'Paracetamol',
+    dosage_form: 'Tablet',
+    strength_value: 500,
+    strength_unit: 'mg',
+    quantity_on_hand: 30,
   });
   expect(parseStrength('5 mL')).toEqual({ value: 5, unit: 'mL' });
 });
 
 test('preserves the strength and form the patient confirmed from the medicine label', () => {
-  const result = validateIntakeRecord(validRecord({
-    custom_strength: '250 mg',
-    dosage_form: 'Capsule',
-    purpose: 'Pain relief',
-    end_date: manilaToday(),
-    refill_reminders_enabled: true,
-  }), verifiedDrug);
+  const result = validateIntakeRecord(
+    validRecord({
+      custom_strength: '250 mg',
+      dosage_form: 'Capsule',
+      purpose: 'Pain relief',
+      end_date: manilaToday(),
+      refill_reminders_enabled: true,
+    }),
+    verifiedDrug
+  );
 
   expect(result.error).toBeUndefined();
   expect(result.value).toMatchObject({
@@ -53,10 +59,12 @@ test('preserves the strength and form the patient confirmed from the medicine la
 });
 
 test('accepts an exact verified brand name but rejects an unrelated typed medicine', () => {
-  expect(validateIntakeRecord(validRecord({ medicine_name: 'Biogesic' }), verifiedDrug).error)
-    .toBeUndefined();
-  expect(validateIntakeRecord(validRecord({ medicine_name: 'Ibuprofen' }), verifiedDrug).error)
-    .toMatch(/Confirm Paracetamol/);
+  expect(
+    validateIntakeRecord(validRecord({ medicine_name: 'Biogesic' }), verifiedDrug).error
+  ).toBeUndefined();
+  expect(
+    validateIntakeRecord(validRecord({ medicine_name: 'Ibuprofen' }), verifiedDrug).error
+  ).toMatch(/Confirm Paracetamol/);
 });
 
 test.each([
@@ -72,10 +80,23 @@ test.each([
 });
 
 test('requires valid OCR confidence and never treats OCR as confirmation', () => {
-  expect(validateIntakeRecord(validRecord({
-    entry_method: 'OCR', ocr_confidence: 0.9, patient_confirmed: false,
-  }), verifiedDrug).error).toMatch(/Review and confirm/);
-  expect(validateIntakeRecord(validRecord({
-    entry_method: 'OCR', ocr_confidence: 2,
-  }), verifiedDrug).error).toMatch(/between 0 and 1/);
+  expect(
+    validateIntakeRecord(
+      validRecord({
+        entry_method: 'OCR',
+        ocr_confidence: 0.9,
+        patient_confirmed: false,
+      }),
+      verifiedDrug
+    ).error
+  ).toMatch(/Review and confirm/);
+  expect(
+    validateIntakeRecord(
+      validRecord({
+        entry_method: 'OCR',
+        ocr_confidence: 2,
+      }),
+      verifiedDrug
+    ).error
+  ).toMatch(/between 0 and 1/);
 });

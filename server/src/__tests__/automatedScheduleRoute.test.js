@@ -56,27 +56,29 @@ test('suggested schedule reuses an existing medicine and persists dosage and sta
     .set(auth(token))
     .send({
       review_confirmed: true,
-      medications: [{
-        drug_id: drug.id,
-        medicine_name: 'Paracetamol',
-        custom_strength: '500 mg',
-        dosage_form: 'Tablet',
-        dosage_instruction: 'Take 1 tablet',
-        quantity_on_hand: 30,
-        quantity_unit: 'tablets',
-        start_date: '2026-09-01',
-        end_date: '2026-09-07',
-        entry_method: 'MANUAL',
-        label_frequency: 'QID',
-        label_food_instruction: 'NONE',
-        patient_confirmed: true,
-      }],
+      medications: [
+        {
+          drug_id: drug.id,
+          medicine_name: 'Paracetamol',
+          custom_strength: '500 mg',
+          dosage_form: 'Tablet',
+          dosage_instruction: 'Take 1 tablet',
+          quantity_on_hand: 30,
+          quantity_unit: 'tablets',
+          start_date: '2026-09-01',
+          end_date: '2026-09-07',
+          entry_method: 'MANUAL',
+          label_frequency: 'QID',
+          label_food_instruction: 'NONE',
+          patient_confirmed: true,
+        },
+      ],
     });
 
   expect(saved.status).toBe(201);
   expect(saved.body.count).toBe(28);
   const [[medicineCount]] = await pool.execute(
-    'SELECT COUNT(*) AS count FROM medications WHERE patient_id=? AND drug_id=? AND status=\'active\'',
+    "SELECT COUNT(*) AS count FROM medications WHERE patient_id=? AND drug_id=? AND status='active'",
     [patientId, drug.id]
   );
   expect(Number(medicineCount.count)).toBe(1);
@@ -87,8 +89,11 @@ test('suggested schedule reuses an existing medicine and persists dosage and sta
     [medicationId]
   );
   expect(medicine).toEqual({
-    dosage_instruction: 'Take 1 tablet', quantity_on_hand: '30.00',
-    quantity_unit: 'tablets', patient_confirmed: 1, start_date: '2026-09-01',
+    dosage_instruction: 'Take 1 tablet',
+    quantity_on_hand: '30.00',
+    quantity_unit: 'tablets',
+    patient_confirmed: 1,
+    start_date: '2026-09-01',
   });
   const [[scheduled]] = await pool.execute(
     `SELECT COUNT(*) AS count,
@@ -100,9 +105,7 @@ test('suggested schedule reuses an existing medicine and persists dosage and sta
   expect(Number(scheduled.count)).toBe(28);
   expect(scheduled.start_date).toBe('2026-09-01');
   expect(scheduled.end_date).toBe('2026-09-07');
-  const visibleDoses = await request(app)
-    .get('/api/patient/doses/today')
-    .set(auth(token));
+  const visibleDoses = await request(app).get('/api/patient/doses/today').set(auth(token));
   expect(visibleDoses.status).toBe(200);
   expect(visibleDoses.body.filter((dose) => dose.medication_id === medicationId)).toHaveLength(28);
 });
@@ -110,7 +113,10 @@ test('suggested schedule reuses an existing medicine and persists dosage and sta
 test('suggested schedule cannot be saved before Step 3 confirmation', async () => {
   const email = `automated.unconfirmed.${Date.now()}@test.pharmate`;
   await request(app).post('/api/auth/register').send({
-    email, password: PASSWORD, role: 'patient', full_name: 'Unconfirmed Schedule Patient',
+    email,
+    password: PASSWORD,
+    role: 'patient',
+    full_name: 'Unconfirmed Schedule Patient',
   });
   const login = await request(app).post('/api/auth/login').send({ email, password: PASSWORD });
   const response = await request(app)
@@ -124,17 +130,28 @@ test('suggested schedule cannot be saved before Step 3 confirmation', async () =
 test('suggested scheduling rejects duplicate active ingredients before persistence', async () => {
   const email = `automated.duplicate.${Date.now()}@test.pharmate`;
   await request(app).post('/api/auth/register').send({
-    email, password: PASSWORD, role: 'patient', full_name: 'Duplicate Schedule Patient',
+    email,
+    password: PASSWORD,
+    role: 'patient',
+    full_name: 'Duplicate Schedule Patient',
   });
   const login = await request(app).post('/api/auth/login').send({ email, password: PASSWORD });
   const [[drug]] = await pool.execute(
     "SELECT id FROM drug_reference WHERE LOWER(generic_name)='paracetamol' LIMIT 1"
   );
   const medicine = {
-    drug_id: drug.id, medicine_name: 'Paracetamol', custom_strength: '500 mg',
-    dosage_form: 'Tablet', dosage_instruction: 'Take 1 tablet', quantity_on_hand: 30,
-    quantity_unit: 'tablets', start_date: '2026-09-01', entry_method: 'MANUAL',
-    label_frequency: 'QID', label_food_instruction: 'NONE', patient_confirmed: true,
+    drug_id: drug.id,
+    medicine_name: 'Paracetamol',
+    custom_strength: '500 mg',
+    dosage_form: 'Tablet',
+    dosage_instruction: 'Take 1 tablet',
+    quantity_on_hand: 30,
+    quantity_unit: 'tablets',
+    start_date: '2026-09-01',
+    entry_method: 'MANUAL',
+    label_frequency: 'QID',
+    label_food_instruction: 'NONE',
+    patient_confirmed: true,
   };
   const response = await request(app)
     .post('/api/medications/generate-schedule')
@@ -147,21 +164,28 @@ test('suggested scheduling rejects duplicate active ingredients before persisten
 test('medicine search tolerates a minor spelling mistake and separates catalog availability from timing verification', async () => {
   const email = `catalog.search.${Date.now()}@test.pharmate`;
   await request(app).post('/api/auth/register').send({
-    email, password: PASSWORD, role: 'patient', full_name: 'Catalog Search Patient',
+    email,
+    password: PASSWORD,
+    role: 'patient',
+    full_name: 'Catalog Search Patient',
   });
   const login = await request(app).post('/api/auth/login').send({ email, password: PASSWORD });
   const response = await request(app)
     .get('/api/medications/search?q=paracetmol')
     .set(auth(login.body.accessToken));
   expect(response.status).toBe(200);
-  expect(response.body.some((medicine) => medicine.generic_name.toLowerCase() === 'paracetamol'))
-    .toBe(true);
+  expect(
+    response.body.some((medicine) => medicine.generic_name.toLowerCase() === 'paracetamol')
+  ).toBe(true);
 });
 
 test('an available catalog medicine uses confirmed label frequency when its catalog timing rule is incomplete', async () => {
   const email = `catalog.manual.${Date.now()}@test.pharmate`;
   await request(app).post('/api/auth/register').send({
-    email, password: PASSWORD, role: 'patient', full_name: 'Manual Catalog Patient',
+    email,
+    password: PASSWORD,
+    role: 'patient',
+    full_name: 'Manual Catalog Patient',
   });
   const login = await request(app).post('/api/auth/login').send({ email, password: PASSWORD });
   const [[drug]] = await pool.execute(
@@ -173,10 +197,17 @@ test('an available catalog medicine uses confirmed label frequency when its cata
     [drug.id]
   );
   const medicine = {
-    drug_id: drug.id, medicine_name: 'cetirizine', custom_strength: '10 mg',
-    dosage_form: 'tablet', dosage_instruction: '1 tablet', quantity_on_hand: 20,
-    quantity_unit: 'tablets', start_date: '2026-09-01', entry_method: 'MANUAL',
-    label_food_instruction: 'NONE', patient_confirmed: true,
+    drug_id: drug.id,
+    medicine_name: 'cetirizine',
+    custom_strength: '10 mg',
+    dosage_form: 'tablet',
+    dosage_instruction: '1 tablet',
+    quantity_on_hand: 20,
+    quantity_unit: 'tablets',
+    start_date: '2026-09-01',
+    entry_method: 'MANUAL',
+    label_food_instruction: 'NONE',
+    patient_confirmed: true,
   };
   await request(app)
     .post('/api/medications/generate-schedule')

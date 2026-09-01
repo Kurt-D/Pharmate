@@ -4,8 +4,14 @@ import { parseFrequency } from '../../engine/frequencyParser.js';
 import { createPatientNotification } from './patientNotifications.js';
 
 const EDITABLE = new Set([
-  'dosage_instruction', 'label_direction', 'food_instruction', 'timing_note',
-  'frequency', 'is_prn', 'start_date', 'end_date',
+  'dosage_instruction',
+  'label_direction',
+  'food_instruction',
+  'timing_note',
+  'frequency',
+  'is_prn',
+  'start_date',
+  'end_date',
 ]);
 const CONTROL = new Set(['expected_updated_at']);
 const EVENTS = new Set(['updated', 'stopped', 'cancelled']);

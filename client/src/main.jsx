@@ -13,8 +13,4 @@ const application = googleClientId ? (
   <App />
 );
 
-createRoot(document.getElementById('root')).render(
-  <StrictMode>
-    {application}
-  </StrictMode>
-);
+createRoot(document.getElementById('root')).render(<StrictMode>{application}</StrictMode>);

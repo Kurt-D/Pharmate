@@ -50,9 +50,21 @@ function PatientIcon({ name, size = 23 }) {
       </>
     ),
     star: <path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-2.9-5.6 2.9 1.1-6.2L3 9.6l6.2-.9Z" />,
-    flame: <path d="M12.5 3s.8 3-1.7 5.7C8.4 11.2 9 14 11 15.2c-.2-2 1.2-3.2 2.4-4.2.2 2.1 2.6 3.6 2.6 6.1A4.1 4.1 0 0 1 11.9 21C8.1 21 5 18.2 5 14.6 5 9.7 9 7.7 12.5 3Z" />,
-    gift: <><path d="M4 10h16v10H4Z" /><path d="M12 10v10M3 7h18v3H3ZM12 7H8.8a2 2 0 1 1 2-3.2L12 7Zm0 0h3.2a2 2 0 1 0-2-3.2L12 7Z" /></>,
-    warning: <><path d="M12 3 2.8 20h18.4Z" /><path d="M12 9v4M12 17h.01" /></>,
+    flame: (
+      <path d="M12.5 3s.8 3-1.7 5.7C8.4 11.2 9 14 11 15.2c-.2-2 1.2-3.2 2.4-4.2.2 2.1 2.6 3.6 2.6 6.1A4.1 4.1 0 0 1 11.9 21C8.1 21 5 18.2 5 14.6 5 9.7 9 7.7 12.5 3Z" />
+    ),
+    gift: (
+      <>
+        <path d="M4 10h16v10H4Z" />
+        <path d="M12 10v10M3 7h18v3H3ZM12 7H8.8a2 2 0 1 1 2-3.2L12 7Zm0 0h3.2a2 2 0 1 0-2-3.2L12 7Z" />
+      </>
+    ),
+    warning: (
+      <>
+        <path d="M12 3 2.8 20h18.4Z" />
+        <path d="M12 9v4M12 17h.01" />
+      </>
+    ),
     check: <path d="m5 12 4 4L19 6" />,
     bell: (
       <>
@@ -471,7 +483,10 @@ export default function PatientLayout() {
             <div className="pm-notification-modal-list">
               {notifications.length ? (
                 notifications.map((item) => (
-                  <article className={`${item.read_at ? '' : 'unread'} type-${item.type}`} key={item.id}>
+                  <article
+                    className={`${item.read_at ? '' : 'unread'} type-${item.type}`}
+                    key={item.id}
+                  >
                     <span>
                       <PatientIcon name="bell" size={18} />
                     </span>

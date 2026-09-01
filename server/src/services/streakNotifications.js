@@ -2,11 +2,7 @@ import { pool } from '../db/connection.js';
 import { sendPush } from './notifications.js';
 import { createPatientNotification } from './patientNotifications.js';
 import { publishUser } from './realtimeEvents.js';
-import {
-  getStreakStatus,
-  listPatientsForStreakJob,
-  manilaDayKey,
-} from './streakLifecycle.js';
+import { getStreakStatus, listPatientsForStreakJob, manilaDayKey } from './streakLifecycle.js';
 
 async function sendLifecyclePush(patient, notification) {
   if (!patient.fcm_token || !notification) return false;

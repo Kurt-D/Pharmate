@@ -87,8 +87,13 @@ try {
           short_description,common_strength,dosage_form,catalog_source,is_restricted,availability,rx_class,is_provisional,
           catalog_status)
          VALUES (?,JSON_ARRAY(),?,?,?,?,?,?,?,?,0,1,?,1,?)`,
-        [name, row.therapeutic_category || null, ...metadata, rxClass,
-          row.common_strength && row.dosage_form ? 'VERIFIED' : 'INCOMPLETE']
+        [
+          name,
+          row.therapeutic_category || null,
+          ...metadata,
+          rxClass,
+          row.common_strength && row.dosage_form ? 'VERIFIED' : 'INCOMPLETE',
+        ]
       );
       report.inserted++;
     }

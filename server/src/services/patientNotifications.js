@@ -196,7 +196,8 @@ export async function createPatientNotification({
           'streak_days',
           'warning_level',
           'dose_count',
-        ].includes(key) && (typeof value === 'string' || Number.isInteger(value))
+        ].includes(key) &&
+        (typeof value === 'string' || Number.isInteger(value))
     )
   );
   const [result] = await executor.execute(

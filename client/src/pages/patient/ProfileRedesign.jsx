@@ -168,7 +168,9 @@ export default function ProfileRedesign() {
       ]);
 
     if (profileResult.status === 'rejected') {
-      setErrorTitle(tr('Unable to load your latest profile', 'Hindi ma-load ang pinakabagong profile'));
+      setErrorTitle(
+        tr('Unable to load your latest profile', 'Hindi ma-load ang pinakabagong profile')
+      );
       setError(profileResult.reason?.message || 'Internal server error');
       return;
     }
@@ -255,12 +257,17 @@ export default function ProfileRedesign() {
     setError('');
     try {
       await api(`/api/patient/caregiver-requests/${linkId}/decision`, {
-        method: 'POST', body: { approve },
+        method: 'POST',
+        body: { approve },
       });
       setMessage(approve ? 'Caregiver request approved.' : 'Caregiver request declined.');
       await load();
       setCaregiverDecision(null);
-    } catch (e) { setError(e.message); } finally { setBusy(false); }
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
   }
   async function revokeCaregiver(linkId) {
     setBusy(true);
@@ -269,7 +276,11 @@ export default function ProfileRedesign() {
       await api(`/api/patient/caregivers/${linkId}`, { method: 'DELETE' });
       setMessage('Caregiver access was revoked.');
       await load();
-    } catch (e) { setError(e.message); } finally { setBusy(false); }
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
   }
   async function copyCode() {
     if (!invite?.code) return;
@@ -338,13 +349,14 @@ export default function ProfileRedesign() {
         <div className="pm-banner pm-banner--warn pm-profile-alert">
           <Icon name="shield" />
           <span>
-            <strong>
-              {errorTitle || tr('Something went wrong', 'May nangyaring problema')}
-            </strong>
+            <strong>{errorTitle || tr('Something went wrong', 'May nangyaring problema')}</strong>
             <small>
               {error && error !== 'Internal server error'
                 ? error
-                : tr('Please try again in a moment.', 'Pakisubukan muli pagkalipas ng ilang sandali.')}
+                : tr(
+                    'Please try again in a moment.',
+                    'Pakisubukan muli pagkalipas ng ilang sandali.'
+                  )}
             </small>
           </span>
         </div>
@@ -468,15 +480,27 @@ export default function ProfileRedesign() {
         {caregiverRequests.length > 0 && (
           <div className="pm-linked-caregivers pm-caregiver-requests">
             <div className="pm-caregiver-request-heading">
-              <span><Icon name="shield" size={18} /></span>
+              <span>
+                <Icon name="shield" size={18} />
+              </span>
               <p>
-                <strong>{tr('Caregiver approval needed', 'Kailangan ng caregiver approval')}</strong>
-                <small>{tr('Review who is asking to access your health information.', 'Suriin kung sino ang humihiling ng access sa iyong health information.')}</small>
+                <strong>
+                  {tr('Caregiver approval needed', 'Kailangan ng caregiver approval')}
+                </strong>
+                <small>
+                  {tr(
+                    'Review who is asking to access your health information.',
+                    'Suriin kung sino ang humihiling ng access sa iyong health information.'
+                  )}
+                </small>
               </p>
             </div>
             {caregiverRequests.map((item) => (
               <span key={item.id}>
-                <span><b>{item.email}</b><small>{item.relationship || 'Caregiver'}</small></span>
+                <span>
+                  <b>{item.email}</b>
+                  <small>{item.relationship || 'Caregiver'}</small>
+                </span>
                 <span className="pm-caregiver-request-actions">
                   <button
                     disabled={busy}
@@ -523,7 +547,8 @@ export default function ProfileRedesign() {
               <Icon name="copy" size={18} /> {t('profile.copy')}
             </button>
             <button disabled={busy} onClick={generateCode} type="button">
-              <Icon name="refresh" size={18} /> {busy ? tr('Generating…', 'Ginagawa…') : t('profile.newCode')}
+              <Icon name="refresh" size={18} />{' '}
+              {busy ? tr('Generating…', 'Ginagawa…') : t('profile.newCode')}
             </button>
           </div>
         </div>
@@ -805,7 +830,9 @@ export default function ProfileRedesign() {
               <button
                 className={caregiverDecision.approve ? 'is-approve' : 'is-decline'}
                 disabled={busy}
-                onClick={() => decideCaregiverRequest(caregiverDecision.request.id, caregiverDecision.approve)}
+                onClick={() =>
+                  decideCaregiverRequest(caregiverDecision.request.id, caregiverDecision.approve)
+                }
                 type="button"
               >
                 {busy

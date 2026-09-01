@@ -23,8 +23,7 @@ export const CAREGIVER_ELDERLY_TOUR_STEPS = [
     title: '1. Check Today’s Medicine Progress',
     description:
       'This card shows how many scheduled medicines your linked patient has taken, which are coming up, and which are overdue.',
-    voicePrompt:
-      'This card shows your linked patient’s medicine progress for today.',
+    voicePrompt: 'This card shows your linked patient’s medicine progress for today.',
   },
   {
     id: 'caregiver-reminder',

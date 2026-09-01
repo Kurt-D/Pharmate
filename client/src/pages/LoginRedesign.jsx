@@ -401,8 +401,16 @@ export default function LoginRedesign() {
                 </div>
               ) : (
                 <>
-                  {error && <div className="auth-alert error" role="alert">{error}</div>}
-                  {message && <div className="auth-alert success" role="status">{message}</div>}
+                  {error && (
+                    <div className="auth-alert error" role="alert">
+                      {error}
+                    </div>
+                  )}
+                  {message && (
+                    <div className="auth-alert success" role="status">
+                      {message}
+                    </div>
+                  )}
                 </>
               )}
             </div>
@@ -476,7 +484,10 @@ export default function LoginRedesign() {
                 onError={setError}
               />
 
-              <button className="auth-primary" disabled={loading || loginLocked || !captchaComplete}>
+              <button
+                className="auth-primary"
+                disabled={loading || loginLocked || !captchaComplete}
+              >
                 {loading ? <span className="auth-spinner" aria-hidden="true" /> : null}
                 {loading ? 'Signing in…' : 'Login'}
               </button>

@@ -22,7 +22,9 @@ function slot(med, minuteOfDay, reason) {
 function internallyValid(times, minimumMinutes) {
   if (!minimumMinutes || times.length < 2) return true;
   const ordered = [...times].sort((a, b) => a - b);
-  return ordered.every((value, index) => index === 0 || value - ordered[index - 1] >= minimumMinutes);
+  return ordered.every(
+    (value, index) => index === 0 || value - ordered[index - 1] >= minimumMinutes
+  );
 }
 
 function intervalCandidates(med, info, anchors) {
@@ -64,7 +66,8 @@ function anchoredCandidates(med, info) {
       const times = selected.map((choice) => choice.time);
       if (!internallyValid(times, minimumMinutes)) return;
       const deviation = selected.reduce((sum, choice) => sum + Math.abs(choice.offset), 0);
-      const modifier = info.modifier === 'PC' ? 'after ' : info.modifier === 'AC' ? 'before ' : 'at ';
+      const modifier =
+        info.modifier === 'PC' ? 'after ' : info.modifier === 'AC' ? 'before ' : 'at ';
       combinations.push({
         deviation,
         slots: selected.map((choice, slotIndex) =>
@@ -83,11 +86,13 @@ function anchoredCandidates(med, info) {
   }
 
   visit(0, []);
-  combinations.sort((a, b) =>
-    a.deviation - b.deviation ||
-    a.slots.map((item) => item.minuteOfDay).join(',').localeCompare(
-      b.slots.map((item) => item.minuteOfDay).join(',')
-    )
+  combinations.sort(
+    (a, b) =>
+      a.deviation - b.deviation ||
+      a.slots
+        .map((item) => item.minuteOfDay)
+        .join(',')
+        .localeCompare(b.slots.map((item) => item.minuteOfDay).join(','))
   );
   return combinations;
 }

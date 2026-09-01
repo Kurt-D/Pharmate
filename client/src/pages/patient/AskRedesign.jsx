@@ -226,22 +226,32 @@ export default function AskRedesign() {
 
   useEffect(() => {
     const query = historyQuery.trim().toLowerCase();
-    if (query.length < 2) { setHistorySearchResults([]); setHistorySearchLoading(false); return undefined; }
+    if (query.length < 2) {
+      setHistorySearchResults([]);
+      setHistorySearchLoading(false);
+      return undefined;
+    }
     let cancelled = false;
     const timer = setTimeout(async () => {
       setHistorySearchLoading(true);
       try {
         const candidates = threads.filter((item) => item.status === 'closed');
-        const messageGroups = await Promise.all(candidates.map(async (item) => {
-          const response = await api(`/api/patient/inquiries/${item.id}/messages`);
-          return { thread: item, messages: response.data };
-        }));
+        const messageGroups = await Promise.all(
+          candidates.map(async (item) => {
+            const response = await api(`/api/patient/inquiries/${item.id}/messages`);
+            return { thread: item, messages: response.data };
+          })
+        );
         if (cancelled) return;
         const results = [];
         for (const group of messageGroups) {
-          const heading = `${conversationLabels[group.thread.id] || ''} ${group.thread.subject || ''} ${group.thread.pharmacist_name || ''}`.toLowerCase();
-          const matchedMessages = group.messages.filter((message) => message.message.toLowerCase().includes(query));
-          if (heading.includes(query) && matchedMessages.length === 0) results.push({ thread: group.thread, message: null });
+          const heading =
+            `${conversationLabels[group.thread.id] || ''} ${group.thread.subject || ''} ${group.thread.pharmacist_name || ''}`.toLowerCase();
+          const matchedMessages = group.messages.filter((message) =>
+            message.message.toLowerCase().includes(query)
+          );
+          if (heading.includes(query) && matchedMessages.length === 0)
+            results.push({ thread: group.thread, message: null });
           for (const message of matchedMessages) results.push({ thread: group.thread, message });
         }
         setHistorySearchResults(results.slice(0, 20));
@@ -251,7 +261,10 @@ export default function AskRedesign() {
         if (!cancelled) setHistorySearchLoading(false);
       }
     }, 300);
-    return () => { cancelled = true; clearTimeout(timer); };
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
   }, [conversationLabels, historyQuery, threads]);
 
   async function start() {
@@ -315,7 +328,11 @@ export default function AskRedesign() {
       const subject = `Follow-up: ${conversation.subject || 'Medication consultation'}`;
       const response = await api('/api/patient/inquiries', {
         method: 'POST',
-        body: { subject, branch_id: conversation.branch_id, pharmacist_id: conversation.pharmacist_id },
+        body: {
+          subject,
+          branch_id: conversation.branch_id,
+          pharmacist_id: conversation.pharmacist_id,
+        },
       });
       await api(`/api/patient/inquiries/${response.data.thread_id}/messages`, {
         method: 'POST',
@@ -401,8 +418,16 @@ export default function AskRedesign() {
   const savedOpenThread = threads.find((item) => item.status === 'open');
   const closedThreads = threads.filter((item) => item.status === 'closed');
   const historyPreviewLimit = closedThreads.length > 2 ? 2 : 1;
-  const visibleMessages = chatQuery.trim() ? messages.filter((message) => message.message.toLowerCase().includes(chatQuery.trim().toLowerCase())) : messages;
-  const visibleHistoryMessages = historyMessageQuery.trim() ? historyMessages.filter((message) => message.message.toLowerCase().includes(historyMessageQuery.trim().toLowerCase())) : historyMessages;
+  const visibleMessages = chatQuery.trim()
+    ? messages.filter((message) =>
+        message.message.toLowerCase().includes(chatQuery.trim().toLowerCase())
+      )
+    : messages;
+  const visibleHistoryMessages = historyMessageQuery.trim()
+    ? historyMessages.filter((message) =>
+        message.message.toLowerCase().includes(historyMessageQuery.trim().toLowerCase())
+      )
+    : historyMessages;
   return (
     <main className="pm-ask-page">
       <header>
@@ -431,7 +456,9 @@ export default function AskRedesign() {
       {tourChatChoiceVisible && (
         <section className="pm-ask-card pm-tour-chat-choice" aria-label="Chat type tutorial">
           <div className="pm-ask-priority-heading">
-            <span><ChatIcon name="star" /></span>
+            <span>
+              <ChatIcon name="star" />
+            </span>
             <div>
               <h2>{tr('Choose Your Chat Type', 'Piliin ang Uri ng Chat')}</h2>
               <p>
@@ -459,9 +486,13 @@ export default function AskRedesign() {
               role="radio"
               type="button"
             >
-              <span><ChatIcon name="user" /></span>
+              <span>
+                <ChatIcon name="user" />
+              </span>
               <strong>{tr('Standard Chat', 'Standard Chat')}</strong>
-              <small>{tr('Free · Regular pharmacist queue', 'Libre · Regular pharmacist queue')}</small>
+              <small>
+                {tr('Free · Regular pharmacist queue', 'Libre · Regular pharmacist queue')}
+              </small>
               <b>{tr('No token needed', 'Walang token')}</b>
             </button>
             <button
@@ -472,7 +503,9 @@ export default function AskRedesign() {
               role="radio"
               type="button"
             >
-              <span><ChatIcon name={priorityTokens < 1 ? 'lock' : 'star'} /></span>
+              <span>
+                <ChatIcon name={priorityTokens < 1 ? 'lock' : 'star'} />
+              </span>
               <strong>{tr('Priority Chat', 'Priority Chat')}</strong>
               <small>{tr('Faster handling by the pharmacist', 'Mas mabilis na pag-asikaso')}</small>
               <b>
@@ -491,75 +524,313 @@ export default function AskRedesign() {
         </section>
       ) : !thread ? (
         <>
-          {requestStep === 0 && <div className="pm-ask-home-options">
-            <section className="pm-ask-card pm-ask-home-card">
-              <span className="pm-ask-home-icon"><ChatIcon name="user" /></span>
-              <div><h2>{tr('Ask a Pharmacist', 'Magtanong sa Parmasyutiko')}</h2><p>{tr('Start a new private conversation about your medicine.', 'Magsimula ng pribadong usapan tungkol sa iyong gamot.')}</p></div>
-              <button className="pm-ask-primary" onClick={() => { setUsePriority(false); setRequestStep(1); }} type="button">{tr('Ask a Pharmacist', 'Magtanong sa Parmasyutiko')}</button>
-            </section>
-            <section className="pm-ask-card pm-ask-home-card pm-ask-history-card">
-              <span className="pm-ask-home-icon"><ChatIcon name="bookmark" /></span>
-              <div><h2>{tr('Conversation History', 'Kasaysayan ng Usapan')}</h2><p>{savedOpenThread ? tr('You have a conversation in progress.', 'May usapan kang kasalukuyang nagpapatuloy.') : tr(`${closedThreads.length} saved conversation${closedThreads.length === 1 ? '' : 's'}`, `${closedThreads.length} naka-save na usapan`)}</p></div>
-              <label className="pm-conversation-search"><ChatIcon name="search" /><input aria-label={tr('Search conversation messages', 'Maghanap sa mga mensahe')} onChange={(event) => setHistoryQuery(event.target.value)} placeholder={tr('Search messages or pharmacist', 'Maghanap ng mensahe o parmasyutiko')} value={historyQuery} />{historyQuery && <button aria-label={tr('Clear search', 'Burahin ang hinahanap')} onClick={() => setHistoryQuery('')} type="button"><ChatIcon name="close" /></button>}</label>
-              {historyQuery.trim().length >= 2 && <div className="pm-conversation-search-results">{historySearchLoading ? <p>{tr('Searching conversations…', 'Naghahanap sa mga usapan…')}</p> : historySearchResults.length ? historySearchResults.map((result, index) => <button key={`${result.thread.id}-${result.message?.id || index}`} onClick={() => viewHistory(result.thread, historyQuery)} type="button"><span><ChatIcon name="user" /></span><div><strong>{result.thread.pharmacist_name || tr('PharMate Pharmacist', 'Parmasyutiko ng PharMate')}</strong><small>{result.message?.message || result.thread.subject}</small></div></button>) : <p>{tr('No matching messages found.', 'Walang nahanap na katugmang mensahe.')}</p>}</div>}
-              {savedOpenThread && <button className="pm-ask-primary" onClick={() => setThread(savedOpenThread)} type="button">{tr('Resume Current Conversation', 'Ipagpatuloy ang Kasalukuyang Usapan')}</button>}
-              {closedThreads.length > 0 && <button className="pm-ask-secondary" onClick={() => setShowAllHistory((value) => !value)} type="button">{showAllHistory ? tr('Hide Conversation History', 'Itago ang Kasaysayan') : tr('View Conversation History', 'Tingnan ang Kasaysayan')}</button>}
-            </section>
-          </div>}
-
-          {requestStep === 1 && <section className="pm-ask-card pm-ask-single-step">
-            <button className="pm-ask-back" onClick={() => setRequestStep(0)} type="button"><ChatIcon name="back" />{tr('Back', 'Bumalik')}</button>
-            <h2>{tr('Choose your pharmacy branch', 'Piliin ang branch ng parmasya')}</h2>
-            <p>{tr('Choose the pharmacy you normally use.', 'Piliin ang parmasyang karaniwan mong ginagamit.')}</p>
-            <select value={branchId} onChange={(event) => setBranchId(event.target.value)}><option value="">{tr('Choose a branch', 'Pumili ng branch')}</option>{branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name} — {branch.address}</option>)}</select>
-            <button className="pm-ask-primary" disabled={!branchId} onClick={() => setRequestStep(2)} type="button">{tr('Continue', 'Magpatuloy')}</button>
-          </section>}
-
-          {requestStep === 2 && <section className="pm-ask-card pm-ask-single-step">
-            <button className="pm-ask-back" onClick={() => setRequestStep(1)} type="button"><ChatIcon name="back" />{tr('Back', 'Bumalik')}</button>
-            <h2>{tr('Choose a pharmacist', 'Pumili ng parmasyutiko')}</h2>
-            <p>{tr('Choose who you would like to ask.', 'Piliin kung sino ang gusto mong tanungin.')}</p>
-            {pharmacists.length === 0 && <p className="pm-ask-empty">{tr('No pharmacist is currently listed for this branch.', 'Walang parmasyutikong nakalista sa branch na ito ngayon.')}</p>}
-            {pharmacists.map((item) => <button className={`pm-pharmacist-option ${pharmacist?.id === item.id ? 'selected' : ''}`} key={item.id} onClick={() => setPharmacist(item)} type="button"><b>{item.full_name.split(/\s+/).map((part) => part[0]).slice(0, 2).join('')}</b><span><strong>{item.full_name}</strong><small>{tr('Licensed pharmacist', 'Lisensyadong parmasyutiko')}</small></span><em>{pharmacist?.id === item.id ? tr('Selected', 'Napili') : tr('Choose', 'Piliin')}</em></button>)}
-            <button className="pm-ask-primary" disabled={!pharmacist} onClick={() => setRequestStep(3)} type="button">{tr('Continue', 'Magpatuloy')}</button>
-          </section>}
-
-          {requestStep === 3 && <section className="pm-ask-card pm-ask-single-step">
-            <button className="pm-ask-back" onClick={() => setRequestStep(2)} type="button"><ChatIcon name="back" />{tr('Back', 'Bumalik')}</button>
-            <h2>{tr('What would you like to ask?', 'Ano ang gusto mong itanong?')}</h2>
-            <p>{tr('Write your medicine question below.', 'Isulat sa ibaba ang tanong mo tungkol sa gamot.')}</p>
-            <textarea onChange={(event) => setQuestion(event.target.value)} placeholder={tr('Type your question here…', 'I-type ang tanong dito…')} rows={5} value={question} />
-            <fieldset className="pm-chat-type-choice">
-              <legend>{tr('Choose your chat type', 'Piliin ang uri ng chat')}</legend>
-              <div className="pm-chat-token-balance">
-                <span>{tr('Your Priority Tokens', 'Iyong Priority Tokens')}</span>
-                <strong>{priorityTokens}</strong>
-              </div>
-              <button aria-pressed={!usePriority} className={!usePriority ? 'selected' : ''} onClick={() => setUsePriority(false)} type="button">
-                <span><ChatIcon name="user" /></span>
-                <div><strong>{tr('Standard Chat', 'Standard Chat')}</strong><small>{tr('Regular pharmacist queue · No token needed', 'Regular na pila · Walang token')}</small></div>
-              </button>
-              <button aria-disabled={priorityTokens < 1} aria-pressed={usePriority} className={usePriority ? 'selected priority' : 'priority'} disabled={priorityTokens < 1} onClick={() => setUsePriority(true)} type="button">
-                <span><ChatIcon name={priorityTokens < 1 ? 'lock' : 'star'} /></span>
+          {requestStep === 0 && (
+            <div className="pm-ask-home-options">
+              <section className="pm-ask-card pm-ask-home-card">
+                <span className="pm-ask-home-icon">
+                  <ChatIcon name="user" />
+                </span>
                 <div>
-                  <strong>{tr('Priority Chat', 'Priority Chat')}</strong>
-                  <small>
-                    {priorityTokens < 1
-                      ? tr('No priority tokens available', 'Walang priority token')
-                      : tr(`${priorityTokens} ${priorityTokens === 1 ? 'token' : 'tokens'} available · Uses 1`, `${priorityTokens} token ang available · Gumagamit ng 1`)}
-                  </small>
+                  <h2>{tr('Ask a Pharmacist', 'Magtanong sa Parmasyutiko')}</h2>
+                  <p>
+                    {tr(
+                      'Start a new private conversation about your medicine.',
+                      'Magsimula ng pribadong usapan tungkol sa iyong gamot.'
+                    )}
+                  </p>
                 </div>
+                <button
+                  className="pm-ask-primary"
+                  onClick={() => {
+                    setUsePriority(false);
+                    setRequestStep(1);
+                  }}
+                  type="button"
+                >
+                  {tr('Ask a Pharmacist', 'Magtanong sa Parmasyutiko')}
+                </button>
+              </section>
+              <section className="pm-ask-card pm-ask-home-card pm-ask-history-card">
+                <span className="pm-ask-home-icon">
+                  <ChatIcon name="bookmark" />
+                </span>
+                <div>
+                  <h2>{tr('Conversation History', 'Kasaysayan ng Usapan')}</h2>
+                  <p>
+                    {savedOpenThread
+                      ? tr(
+                          'You have a conversation in progress.',
+                          'May usapan kang kasalukuyang nagpapatuloy.'
+                        )
+                      : tr(
+                          `${closedThreads.length} saved conversation${closedThreads.length === 1 ? '' : 's'}`,
+                          `${closedThreads.length} naka-save na usapan`
+                        )}
+                  </p>
+                </div>
+                <label className="pm-conversation-search">
+                  <ChatIcon name="search" />
+                  <input
+                    aria-label={tr('Search conversation messages', 'Maghanap sa mga mensahe')}
+                    onChange={(event) => setHistoryQuery(event.target.value)}
+                    placeholder={tr(
+                      'Search messages or pharmacist',
+                      'Maghanap ng mensahe o parmasyutiko'
+                    )}
+                    value={historyQuery}
+                  />
+                  {historyQuery && (
+                    <button
+                      aria-label={tr('Clear search', 'Burahin ang hinahanap')}
+                      onClick={() => setHistoryQuery('')}
+                      type="button"
+                    >
+                      <ChatIcon name="close" />
+                    </button>
+                  )}
+                </label>
+                {historyQuery.trim().length >= 2 && (
+                  <div className="pm-conversation-search-results">
+                    {historySearchLoading ? (
+                      <p>{tr('Searching conversations…', 'Naghahanap sa mga usapan…')}</p>
+                    ) : historySearchResults.length ? (
+                      historySearchResults.map((result, index) => (
+                        <button
+                          key={`${result.thread.id}-${result.message?.id || index}`}
+                          onClick={() => viewHistory(result.thread, historyQuery)}
+                          type="button"
+                        >
+                          <span>
+                            <ChatIcon name="user" />
+                          </span>
+                          <div>
+                            <strong>
+                              {result.thread.pharmacist_name ||
+                                tr('PharMate Pharmacist', 'Parmasyutiko ng PharMate')}
+                            </strong>
+                            <small>{result.message?.message || result.thread.subject}</small>
+                          </div>
+                        </button>
+                      ))
+                    ) : (
+                      <p>
+                        {tr('No matching messages found.', 'Walang nahanap na katugmang mensahe.')}
+                      </p>
+                    )}
+                  </div>
+                )}
+                {savedOpenThread && (
+                  <button
+                    className="pm-ask-primary"
+                    onClick={() => setThread(savedOpenThread)}
+                    type="button"
+                  >
+                    {tr('Resume Current Conversation', 'Ipagpatuloy ang Kasalukuyang Usapan')}
+                  </button>
+                )}
+                {closedThreads.length > 0 && (
+                  <button
+                    className="pm-ask-secondary"
+                    onClick={() => setShowAllHistory((value) => !value)}
+                    type="button"
+                  >
+                    {showAllHistory
+                      ? tr('Hide Conversation History', 'Itago ang Kasaysayan')
+                      : tr('View Conversation History', 'Tingnan ang Kasaysayan')}
+                  </button>
+                )}
+              </section>
+            </div>
+          )}
+
+          {requestStep === 1 && (
+            <section className="pm-ask-card pm-ask-single-step">
+              <button className="pm-ask-back" onClick={() => setRequestStep(0)} type="button">
+                <ChatIcon name="back" />
+                {tr('Back', 'Bumalik')}
               </button>
-              {priorityTokens < 1 && (
-                <div className="pm-chat-priority-learn">
-                  <span>{tr('Earn tokens by completing your Adherence Streak.', 'Kumuha ng token sa pagkumpleto ng Adherence Streak.')}</span>
-                  <a href="/patient/streak">{tr('Learn more', 'Alamin pa')}</a>
-                </div>
+              <h2>{tr('Choose your pharmacy branch', 'Piliin ang branch ng parmasya')}</h2>
+              <p>
+                {tr(
+                  'Choose the pharmacy you normally use.',
+                  'Piliin ang parmasyang karaniwan mong ginagamit.'
+                )}
+              </p>
+              <select value={branchId} onChange={(event) => setBranchId(event.target.value)}>
+                <option value="">{tr('Choose a branch', 'Pumili ng branch')}</option>
+                {branches.map((branch) => (
+                  <option key={branch.id} value={branch.id}>
+                    {branch.name} — {branch.address}
+                  </option>
+                ))}
+              </select>
+              <button
+                className="pm-ask-primary"
+                disabled={!branchId}
+                onClick={() => setRequestStep(2)}
+                type="button"
+              >
+                {tr('Continue', 'Magpatuloy')}
+              </button>
+            </section>
+          )}
+
+          {requestStep === 2 && (
+            <section className="pm-ask-card pm-ask-single-step">
+              <button className="pm-ask-back" onClick={() => setRequestStep(1)} type="button">
+                <ChatIcon name="back" />
+                {tr('Back', 'Bumalik')}
+              </button>
+              <h2>{tr('Choose a pharmacist', 'Pumili ng parmasyutiko')}</h2>
+              <p>
+                {tr(
+                  'Choose who you would like to ask.',
+                  'Piliin kung sino ang gusto mong tanungin.'
+                )}
+              </p>
+              {pharmacists.length === 0 && (
+                <p className="pm-ask-empty">
+                  {tr(
+                    'No pharmacist is currently listed for this branch.',
+                    'Walang parmasyutikong nakalista sa branch na ito ngayon.'
+                  )}
+                </p>
               )}
-            </fieldset>
-            <button className="pm-ask-primary" disabled={!question.trim()} onClick={start} type="button">{tr('Send Question', 'Ipadala ang Tanong')}</button>
-            <div className="pm-ask-security"><ChatIcon name="shield" /><span><strong>{tr('Private and secure', 'Pribado at ligtas')}</strong><small>{tr('Only the pharmacist can view this conversation.', 'Ang parmasyutiko lamang ang makakakita sa usapang ito.')}</small></span></div>
-          </section>}
+              {pharmacists.map((item) => (
+                <button
+                  className={`pm-pharmacist-option ${pharmacist?.id === item.id ? 'selected' : ''}`}
+                  key={item.id}
+                  onClick={() => setPharmacist(item)}
+                  type="button"
+                >
+                  <b>
+                    {item.full_name
+                      .split(/\s+/)
+                      .map((part) => part[0])
+                      .slice(0, 2)
+                      .join('')}
+                  </b>
+                  <span>
+                    <strong>{item.full_name}</strong>
+                    <small>{tr('Licensed pharmacist', 'Lisensyadong parmasyutiko')}</small>
+                  </span>
+                  <em>
+                    {pharmacist?.id === item.id ? tr('Selected', 'Napili') : tr('Choose', 'Piliin')}
+                  </em>
+                </button>
+              ))}
+              <button
+                className="pm-ask-primary"
+                disabled={!pharmacist}
+                onClick={() => setRequestStep(3)}
+                type="button"
+              >
+                {tr('Continue', 'Magpatuloy')}
+              </button>
+            </section>
+          )}
+
+          {requestStep === 3 && (
+            <section className="pm-ask-card pm-ask-single-step">
+              <button className="pm-ask-back" onClick={() => setRequestStep(2)} type="button">
+                <ChatIcon name="back" />
+                {tr('Back', 'Bumalik')}
+              </button>
+              <h2>{tr('What would you like to ask?', 'Ano ang gusto mong itanong?')}</h2>
+              <p>
+                {tr(
+                  'Write your medicine question below.',
+                  'Isulat sa ibaba ang tanong mo tungkol sa gamot.'
+                )}
+              </p>
+              <textarea
+                onChange={(event) => setQuestion(event.target.value)}
+                placeholder={tr('Type your question here…', 'I-type ang tanong dito…')}
+                rows={5}
+                value={question}
+              />
+              <fieldset className="pm-chat-type-choice">
+                <legend>{tr('Choose your chat type', 'Piliin ang uri ng chat')}</legend>
+                <div className="pm-chat-token-balance">
+                  <span>{tr('Your Priority Tokens', 'Iyong Priority Tokens')}</span>
+                  <strong>{priorityTokens}</strong>
+                </div>
+                <button
+                  aria-pressed={!usePriority}
+                  className={!usePriority ? 'selected' : ''}
+                  onClick={() => setUsePriority(false)}
+                  type="button"
+                >
+                  <span>
+                    <ChatIcon name="user" />
+                  </span>
+                  <div>
+                    <strong>{tr('Standard Chat', 'Standard Chat')}</strong>
+                    <small>
+                      {tr(
+                        'Regular pharmacist queue · No token needed',
+                        'Regular na pila · Walang token'
+                      )}
+                    </small>
+                  </div>
+                </button>
+                <button
+                  aria-disabled={priorityTokens < 1}
+                  aria-pressed={usePriority}
+                  className={usePriority ? 'selected priority' : 'priority'}
+                  disabled={priorityTokens < 1}
+                  onClick={() => setUsePriority(true)}
+                  type="button"
+                >
+                  <span>
+                    <ChatIcon name={priorityTokens < 1 ? 'lock' : 'star'} />
+                  </span>
+                  <div>
+                    <strong>{tr('Priority Chat', 'Priority Chat')}</strong>
+                    <small>
+                      {priorityTokens < 1
+                        ? tr('No priority tokens available', 'Walang priority token')
+                        : tr(
+                            `${priorityTokens} ${priorityTokens === 1 ? 'token' : 'tokens'} available · Uses 1`,
+                            `${priorityTokens} token ang available · Gumagamit ng 1`
+                          )}
+                    </small>
+                  </div>
+                </button>
+                {priorityTokens < 1 && (
+                  <div className="pm-chat-priority-learn">
+                    <span>
+                      {tr(
+                        'Earn tokens by completing your Adherence Streak.',
+                        'Kumuha ng token sa pagkumpleto ng Adherence Streak.'
+                      )}
+                    </span>
+                    <a href="/patient/streak">{tr('Learn more', 'Alamin pa')}</a>
+                  </div>
+                )}
+              </fieldset>
+              <button
+                className="pm-ask-primary"
+                disabled={!question.trim()}
+                onClick={start}
+                type="button"
+              >
+                {tr('Send Question', 'Ipadala ang Tanong')}
+              </button>
+              <div className="pm-ask-security">
+                <ChatIcon name="shield" />
+                <span>
+                  <strong>{tr('Private and secure', 'Pribado at ligtas')}</strong>
+                  <small>
+                    {tr(
+                      'Only the pharmacist can view this conversation.',
+                      'Ang parmasyutiko lamang ang makakakita sa usapang ito.'
+                    )}
+                  </small>
+                </span>
+              </div>
+            </section>
+          )}
         </>
       ) : (
         <section
@@ -591,9 +862,38 @@ export default function AskRedesign() {
                 </em>
               )}
             </span>
-            <button className="pm-chat-search-button" aria-label={tr('Search this conversation', 'Maghanap sa usapang ito')} onClick={() => setChatSearchOpen((value) => !value)} type="button"><ChatIcon name={chatSearchOpen ? 'close' : 'search'} /></button>
+            <button
+              className="pm-chat-search-button"
+              aria-label={tr('Search this conversation', 'Maghanap sa usapang ito')}
+              onClick={() => setChatSearchOpen((value) => !value)}
+              type="button"
+            >
+              <ChatIcon name={chatSearchOpen ? 'close' : 'search'} />
+            </button>
           </div>
-          {chatSearchOpen && <label className="pm-chat-inline-search"><ChatIcon name="search" /><input autoFocus onChange={(event) => setChatQuery(event.target.value)} placeholder={tr('Search messages in this conversation', 'Maghanap ng mensahe sa usapang ito')} value={chatQuery} />{chatQuery && <button aria-label={tr('Clear search', 'Burahin ang hinahanap')} onClick={() => setChatQuery('')} type="button"><ChatIcon name="close" /></button>}</label>}
+          {chatSearchOpen && (
+            <label className="pm-chat-inline-search">
+              <ChatIcon name="search" />
+              <input
+                autoFocus
+                onChange={(event) => setChatQuery(event.target.value)}
+                placeholder={tr(
+                  'Search messages in this conversation',
+                  'Maghanap ng mensahe sa usapang ito'
+                )}
+                value={chatQuery}
+              />
+              {chatQuery && (
+                <button
+                  aria-label={tr('Clear search', 'Burahin ang hinahanap')}
+                  onClick={() => setChatQuery('')}
+                  type="button"
+                >
+                  <ChatIcon name="close" />
+                </button>
+              )}
+            </label>
+          )}
           <div className="pm-chat-secure">
             ♢{' '}
             {tr(
@@ -692,7 +992,11 @@ export default function AskRedesign() {
                 </span>
               </div>
             ))}
-            {chatQuery.trim() && visibleMessages.length === 0 && <p className="pm-chat-search-empty">{tr('No matching messages found.', 'Walang nahanap na katugmang mensahe.')}</p>}
+            {chatQuery.trim() && visibleMessages.length === 0 && (
+              <p className="pm-chat-search-empty">
+                {tr('No matching messages found.', 'Walang nahanap na katugmang mensahe.')}
+              </p>
+            )}
           </div>
           {thread.status === 'open' && thread.validation_status === 'accepted' && (
             <div className="pm-chat-compose">
@@ -724,106 +1028,117 @@ export default function AskRedesign() {
           )}
         </section>
       )}
-      {!restoringThread && !thread && requestStep === 0 && showAllHistory && closedThreads.length > 0 && (
-        <section className="pm-ask-card pm-chat-history">
-          <header className="pm-chat-history-header">
-            <div>
-              <h2>{tr('Conversation History', 'Kasaysayan ng Usapan')}</h2>
-              <small>
-                {tr(
-                  `${closedThreads.length} saved conversation${closedThreads.length === 1 ? '' : 's'}`,
-                  `${closedThreads.length} naka-save na usapan`
-                )}
-              </small>
-            </div>
-            {closedThreads.length > historyPreviewLimit && (
-              <button
-                aria-expanded={showAllHistory}
-                onClick={() => setShowAllHistory((value) => !value)}
-                type="button"
-              >
-                {showAllHistory
-                  ? tr('Show less', 'Mas kaunti')
-                  : tr('See all', 'Tingnan lahat')}
-              </button>
-            )}
-          </header>
-          {closedThreads
-            .slice(0, showAllHistory ? closedThreads.length : historyPreviewLimit)
-            .map((item) => (
-              <article
-                key={item.id}
-                className={`pm-history-entry ${historyThread?.id === item.id ? 'selected' : ''}`}
-              >
-                <div className="pm-history-entry-summary">
-                  <span className="pm-history-bookmark-icon pm-history-pharmacist-icon">
-                    <ChatIcon name="user" />
-                  </span>
-                  <span>
-                    <strong>
-                      {conversationLabels[item.id] ||
-                        item.subject ||
-                        tr('Medication conversation', 'Usapan tungkol sa gamot')}
-                    </strong>
-                    {conversationLabels[item.id] && (
-                      <small>
-                        {tr('Topic:', 'Paksa:')}{' '}
-                        {item.subject || tr('Medication conversation', 'Usapan tungkol sa gamot')}
-                      </small>
-                    )}
-                    <small>{new Date(item.closed_at || item.opened_at).toLocaleDateString()}</small>
-                    <small className="pm-history-pharmacist-name">{item.pharmacist_name || tr('PharMate Pharmacist', 'Parmasyutiko ng PharMate')}</small>
-                    <span
-                      className={`pm-history-chat-type ${item.priority === 'high' ? 'priority' : 'standard'}`}
-                    >
-                      <ChatIcon name={item.priority === 'high' ? 'star' : 'user'} />
-                      {item.priority === 'high'
-                        ? tr('Priority Chat', 'Priority Chat')
-                        : tr('Standard Chat', 'Standard Chat')}
+      {!restoringThread &&
+        !thread &&
+        requestStep === 0 &&
+        showAllHistory &&
+        closedThreads.length > 0 && (
+          <section className="pm-ask-card pm-chat-history">
+            <header className="pm-chat-history-header">
+              <div>
+                <h2>{tr('Conversation History', 'Kasaysayan ng Usapan')}</h2>
+                <small>
+                  {tr(
+                    `${closedThreads.length} saved conversation${closedThreads.length === 1 ? '' : 's'}`,
+                    `${closedThreads.length} naka-save na usapan`
+                  )}
+                </small>
+              </div>
+              {closedThreads.length > historyPreviewLimit && (
+                <button
+                  aria-expanded={showAllHistory}
+                  onClick={() => setShowAllHistory((value) => !value)}
+                  type="button"
+                >
+                  {showAllHistory ? tr('Show less', 'Mas kaunti') : tr('See all', 'Tingnan lahat')}
+                </button>
+              )}
+            </header>
+            {closedThreads
+              .slice(0, showAllHistory ? closedThreads.length : historyPreviewLimit)
+              .map((item) => (
+                <article
+                  key={item.id}
+                  className={`pm-history-entry ${historyThread?.id === item.id ? 'selected' : ''}`}
+                >
+                  <div className="pm-history-entry-summary">
+                    <span className="pm-history-bookmark-icon pm-history-pharmacist-icon">
+                      <ChatIcon name="user" />
                     </span>
-                  </span>
-                </div>
-                <div className="pm-history-entry-actions">
-                  <button onClick={() => viewHistory(item)} type="button">
-                    {tr('View messages', 'Tingnan ang mensahe')}
-                  </button>
-                  <button onClick={() => editConversationLabel(item)} type="button">
-                    <ChatIcon name="bookmark" />{' '}
-                    {conversationLabels[item.id]
-                      ? tr('Edit bookmark', 'Baguhin ang bookmark')
-                      : tr('Add bookmark', 'Magdagdag ng bookmark')}
-                  </button>
-                  <button className="pm-history-continue" onClick={() => reconnect(item)} type="button">
-                    {tr('Request to continue', 'Humiling na ipagpatuloy')}
-                  </button>
-                </div>
-                {editingLabelId === item.id && (
-                  <div className="pm-history-label-editor">
-                    <label htmlFor={`conversation-label-${item.id}`}>
-                      {tr('Conversation bookmark', 'Bookmark ng usapan')}
-                    </label>
-                    <input
-                      id={`conversation-label-${item.id}`}
-                      maxLength={50}
-                      onChange={(event) => setLabelDraft(event.target.value)}
-                      placeholder={tr(
-                        'Example: Missed morning dose',
-                        'Halimbawa: Nakaligtaang dose sa umaga'
+                    <span>
+                      <strong>
+                        {conversationLabels[item.id] ||
+                          item.subject ||
+                          tr('Medication conversation', 'Usapan tungkol sa gamot')}
+                      </strong>
+                      {conversationLabels[item.id] && (
+                        <small>
+                          {tr('Topic:', 'Paksa:')}{' '}
+                          {item.subject || tr('Medication conversation', 'Usapan tungkol sa gamot')}
+                        </small>
                       )}
-                      value={labelDraft}
-                    />
-                    <button onClick={() => saveConversationLabel(item.id)} type="button">
-                      {tr('Save label', 'I-save ang label')}
+                      <small>
+                        {new Date(item.closed_at || item.opened_at).toLocaleDateString()}
+                      </small>
+                      <small className="pm-history-pharmacist-name">
+                        {item.pharmacist_name ||
+                          tr('PharMate Pharmacist', 'Parmasyutiko ng PharMate')}
+                      </small>
+                      <span
+                        className={`pm-history-chat-type ${item.priority === 'high' ? 'priority' : 'standard'}`}
+                      >
+                        <ChatIcon name={item.priority === 'high' ? 'star' : 'user'} />
+                        {item.priority === 'high'
+                          ? tr('Priority Chat', 'Priority Chat')
+                          : tr('Standard Chat', 'Standard Chat')}
+                      </span>
+                    </span>
+                  </div>
+                  <div className="pm-history-entry-actions">
+                    <button onClick={() => viewHistory(item)} type="button">
+                      {tr('View messages', 'Tingnan ang mensahe')}
                     </button>
-                    <button onClick={() => setEditingLabelId(null)} type="button">
-                      {tr('Cancel', 'Kanselahin')}
+                    <button onClick={() => editConversationLabel(item)} type="button">
+                      <ChatIcon name="bookmark" />{' '}
+                      {conversationLabels[item.id]
+                        ? tr('Edit bookmark', 'Baguhin ang bookmark')
+                        : tr('Add bookmark', 'Magdagdag ng bookmark')}
+                    </button>
+                    <button
+                      className="pm-history-continue"
+                      onClick={() => reconnect(item)}
+                      type="button"
+                    >
+                      {tr('Request to continue', 'Humiling na ipagpatuloy')}
                     </button>
                   </div>
-                )}
-              </article>
-            ))}
-        </section>
-      )}
+                  {editingLabelId === item.id && (
+                    <div className="pm-history-label-editor">
+                      <label htmlFor={`conversation-label-${item.id}`}>
+                        {tr('Conversation bookmark', 'Bookmark ng usapan')}
+                      </label>
+                      <input
+                        id={`conversation-label-${item.id}`}
+                        maxLength={50}
+                        onChange={(event) => setLabelDraft(event.target.value)}
+                        placeholder={tr(
+                          'Example: Missed morning dose',
+                          'Halimbawa: Nakaligtaang dose sa umaga'
+                        )}
+                        value={labelDraft}
+                      />
+                      <button onClick={() => saveConversationLabel(item.id)} type="button">
+                        {tr('Save label', 'I-save ang label')}
+                      </button>
+                      <button onClick={() => setEditingLabelId(null)} type="button">
+                        {tr('Cancel', 'Kanselahin')}
+                      </button>
+                    </div>
+                  )}
+                </article>
+              ))}
+          </section>
+        )}
       {historyThread && (
         <div className="pm-history-modal-backdrop">
           <section
@@ -864,7 +1179,14 @@ export default function AskRedesign() {
                     : tr('Standard Chat', 'Standard Chat')}
                 </span>
               </div>
-              <button className="pm-history-search-button" aria-label={tr('Search this conversation', 'Maghanap sa usapang ito')} onClick={() => setChatSearchOpen((value) => !value)} type="button"><ChatIcon name={chatSearchOpen ? 'close' : 'search'} /></button>
+              <button
+                className="pm-history-search-button"
+                aria-label={tr('Search this conversation', 'Maghanap sa usapang ito')}
+                onClick={() => setChatSearchOpen((value) => !value)}
+                type="button"
+              >
+                <ChatIcon name={chatSearchOpen ? 'close' : 'search'} />
+              </button>
             </header>
             <div className="pm-history-secure">
               <ChatIcon name="shield" />
@@ -875,7 +1197,29 @@ export default function AskRedesign() {
                 )}
               </span>
             </div>
-            {chatSearchOpen && <label className="pm-chat-inline-search pm-history-inline-search"><ChatIcon name="search" /><input autoFocus onChange={(event) => setHistoryMessageQuery(event.target.value)} placeholder={tr('Search messages in this conversation', 'Maghanap ng mensahe sa usapang ito')} value={historyMessageQuery} />{historyMessageQuery && <button aria-label={tr('Clear search', 'Burahin ang hinahanap')} onClick={() => setHistoryMessageQuery('')} type="button"><ChatIcon name="close" /></button>}</label>}
+            {chatSearchOpen && (
+              <label className="pm-chat-inline-search pm-history-inline-search">
+                <ChatIcon name="search" />
+                <input
+                  autoFocus
+                  onChange={(event) => setHistoryMessageQuery(event.target.value)}
+                  placeholder={tr(
+                    'Search messages in this conversation',
+                    'Maghanap ng mensahe sa usapang ito'
+                  )}
+                  value={historyMessageQuery}
+                />
+                {historyMessageQuery && (
+                  <button
+                    aria-label={tr('Clear search', 'Burahin ang hinahanap')}
+                    onClick={() => setHistoryMessageQuery('')}
+                    type="button"
+                  >
+                    <ChatIcon name="close" />
+                  </button>
+                )}
+              </label>
+            )}
             <div className="pm-history-message-list">
               <div className="pm-history-date-divider">
                 <span>
@@ -921,7 +1265,12 @@ export default function AskRedesign() {
                 })
               ) : (
                 <p className="pm-history-message-empty">
-                  {historyMessageQuery.trim() ? tr('No matching messages found.', 'Walang nahanap na katugmang mensahe.') : tr('No messages were saved in this consultation.', 'Walang mensaheng na-save sa konsultasyong ito.')}
+                  {historyMessageQuery.trim()
+                    ? tr('No matching messages found.', 'Walang nahanap na katugmang mensahe.')
+                    : tr(
+                        'No messages were saved in this consultation.',
+                        'Walang mensaheng na-save sa konsultasyong ito.'
+                      )}
                 </p>
               )}
             </div>

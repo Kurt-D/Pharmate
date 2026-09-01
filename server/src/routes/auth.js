@@ -112,10 +112,9 @@ function lockDurationMinutes(failedAttempts) {
 async function createSession(user, executor = pool) {
   let extra = {};
   if (user.role === 'patient') {
-    const [patientRows] = await executor.execute(
-      'SELECT patient_code FROM patients WHERE id = ?',
-      [user.id]
-    );
+    const [patientRows] = await executor.execute('SELECT patient_code FROM patients WHERE id = ?', [
+      user.id,
+    ]);
     extra = { patientCode: patientRows[0]?.patient_code ?? null };
   }
   const accessToken = signAccess({
@@ -136,10 +135,11 @@ async function createSession(user, executor = pool) {
 
 async function createPatientRecords(conn, userId, fullName) {
   const patientCode = await generatePatientCode();
-  await conn.execute(
-    'INSERT INTO patients (id, patient_code, full_name_enc) VALUES (?, ?, ?)',
-    [userId, patientCode, fullName ? encrypt(fullName) : null]
-  );
+  await conn.execute('INSERT INTO patients (id, patient_code, full_name_enc) VALUES (?, ?, ?)', [
+    userId,
+    patientCode,
+    fullName ? encrypt(fullName) : null,
+  ]);
   await conn.execute('INSERT INTO patient_anchors (patient_id) VALUES (?)', [userId]);
   await conn.execute('INSERT INTO patient_preferences (patient_id) VALUES (?)', [userId]);
 }
@@ -349,7 +349,9 @@ router.post('/google', loginLimit, async (req, res) => {
 
     if (user && (!user.is_active || user.role !== 'patient')) {
       await conn.rollback();
-      return res.status(403).json({ error: 'Google sign-in is available only to patient accounts' });
+      return res
+        .status(403)
+        .json({ error: 'Google sign-in is available only to patient accounts' });
     }
     if (user && user.google_id && user.google_id !== googleId) {
       await conn.rollback();
@@ -391,54 +393,60 @@ router.post('/google', loginLimit, async (req, res) => {
 });
 
 // ── POST /api/auth/forgot-password ───────────────────────────────────────────
-router.post('/forgot-password', forgotIpLimit, verifyCaptcha, forgotEmailLimit, async (req, res) => {
-  const email = normalizeEmail(req.body?.email);
-  const pin = String(randomInt(100_000, 1_000_000));
-  // Hash even for an unknown email to reduce account-enumeration timing differences.
-  const pinHash = await bcrypt.hash(pin, BCRYPT_COST);
-  let delivery = null;
+router.post(
+  '/forgot-password',
+  forgotIpLimit,
+  verifyCaptcha,
+  forgotEmailLimit,
+  async (req, res) => {
+    const email = normalizeEmail(req.body?.email);
+    const pin = String(randomInt(100_000, 1_000_000));
+    // Hash even for an unknown email to reduce account-enumeration timing differences.
+    const pinHash = await bcrypt.hash(pin, BCRYPT_COST);
+    let delivery = null;
 
-  if (email) {
-    const conn = await pool.getConnection();
-    try {
-      await conn.beginTransaction();
-      const [rows] = await conn.execute(
-        'SELECT id, email FROM users WHERE email = ? AND is_active = 1 FOR UPDATE',
-        [email]
-      );
-      const user = rows[0];
-      if (user) {
-        await conn.execute(
-          'UPDATE password_resets SET is_used = 1 WHERE user_id = ? AND is_used = 0',
-          [user.id]
+    if (email) {
+      const conn = await pool.getConnection();
+      try {
+        await conn.beginTransaction();
+        const [rows] = await conn.execute(
+          'SELECT id, email FROM users WHERE email = ? AND is_active = 1 FOR UPDATE',
+          [email]
         );
-        await conn.execute(
-          `INSERT INTO password_resets (user_id, pin_hash, expires_at)
+        const user = rows[0];
+        if (user) {
+          await conn.execute(
+            'UPDATE password_resets SET is_used = 1 WHERE user_id = ? AND is_used = 0',
+            [user.id]
+          );
+          await conn.execute(
+            `INSERT INTO password_resets (user_id, pin_hash, expires_at)
            VALUES (?, ?, ?)`,
-          [user.id, pinHash, new Date(Date.now() + RESET_PIN_TTL_MS)]
-        );
-        delivery = { email: user.email, pin };
+            [user.id, pinHash, new Date(Date.now() + RESET_PIN_TTL_MS)]
+          );
+          delivery = { email: user.email, pin };
+        }
+        await conn.commit();
+      } catch (error) {
+        await conn.rollback();
+        throw error;
+      } finally {
+        conn.release();
       }
-      await conn.commit();
-    } catch (error) {
-      await conn.rollback();
-      throw error;
-    } finally {
-      conn.release();
     }
-  }
 
-  // Delivery happens after persistence. Failure is deliberately hidden so this endpoint's
-  // status and body cannot disclose whether an eligible account was found.
-  if (delivery) {
-    try {
-      await deliverPasswordReset(delivery);
-    } catch {
-      console.error('Password-reset email delivery failed');
+    // Delivery happens after persistence. Failure is deliberately hidden so this endpoint's
+    // status and body cannot disclose whether an eligible account was found.
+    if (delivery) {
+      try {
+        await deliverPasswordReset(delivery);
+      } catch {
+        console.error('Password-reset email delivery failed');
+      }
     }
+    res.status(200).json(FORGOT_RESPONSE);
   }
-  res.status(200).json(FORGOT_RESPONSE);
-});
+);
 
 // ── POST /api/auth/verify-pin ────────────────────────────────────────────────
 router.post(['/verify-pin', '/verify-reset-pin'], verifyPinLimit, async (req, res) => {
@@ -474,10 +482,11 @@ router.post(['/verify-pin', '/verify-reset-pin'], verifyPinLimit, async (req, re
     if (!valid) {
       if (record && !record.is_used && new Date(record.expires_at) > new Date()) {
         const attempts = Number(record.attempts) + 1;
-        await conn.execute(
-          'UPDATE password_resets SET attempts = ?, is_used = ? WHERE id = ?',
-          [attempts, attempts >= RESET_PIN_MAX_ATTEMPTS ? 1 : 0, record.id]
-        );
+        await conn.execute('UPDATE password_resets SET attempts = ?, is_used = ? WHERE id = ?', [
+          attempts,
+          attempts >= RESET_PIN_MAX_ATTEMPTS ? 1 : 0,
+          record.id,
+        ]);
       }
       await conn.commit();
       return res.status(400).json(INVALID_PIN_RESPONSE);
@@ -563,10 +572,9 @@ router.post('/reset-password', resetLimit, async (req, res) => {
        WHERE id = ?`,
       [passwordHash, record.user_id]
     );
-    await conn.execute(
-      'UPDATE password_resets SET is_used = 1 WHERE id = ? AND is_used = 0',
-      [record.id]
-    );
+    await conn.execute('UPDATE password_resets SET is_used = 1 WHERE id = ? AND is_used = 0', [
+      record.id,
+    ]);
     await conn.execute(
       'UPDATE refresh_tokens SET revoked = 1, revoked_at = NOW(3) WHERE user_id = ? AND revoked = 0',
       [record.user_id]

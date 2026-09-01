@@ -129,8 +129,22 @@ describe('CSP solver metadata and hard-constraint validation', () => {
     const input = {
       anchors: ANCHORS,
       medications: [
-        { id: 'csp-a', drugId: PARA, drugName: 'Medicine A', frequencyCode: 'q8h', minIntervalHours: 8, maxDailyDoses: 3 },
-        { id: 'csp-b', drugId: IBU, drugName: 'Medicine B', frequencyCode: 'BID', minIntervalHours: 12, maxDailyDoses: 2 },
+        {
+          id: 'csp-a',
+          drugId: PARA,
+          drugName: 'Medicine A',
+          frequencyCode: 'q8h',
+          minIntervalHours: 8,
+          maxDailyDoses: 3,
+        },
+        {
+          id: 'csp-b',
+          drugId: IBU,
+          drugName: 'Medicine B',
+          frequencyCode: 'BID',
+          minIntervalHours: 12,
+          maxDailyDoses: 2,
+        },
       ],
       interactions: [{ drugAId: PARA, drugBId: IBU, minGapHours: 2, type: 'SPACING' }],
     };

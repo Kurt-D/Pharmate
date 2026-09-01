@@ -33,13 +33,12 @@ export function validateEnvironment(env = process.env) {
   if (env.NODE_ENV === 'production') {
     if (!env.GOOGLE_CLIENT_ID?.trim()) errors.push('GOOGLE_CLIENT_ID is required in production');
   }
-  const captchaProvider = String(env.CAPTCHA_PROVIDER || 'turnstile').trim().toLowerCase();
+  const captchaProvider = String(env.CAPTCHA_PROVIDER || 'turnstile')
+    .trim()
+    .toLowerCase();
   const captchaDisabledInDevelopment =
     env.NODE_ENV === 'development' && env.DISABLE_CAPTCHA === 'true';
-  if (
-    env.DISABLE_CAPTCHA === 'true' &&
-    !['development', 'test'].includes(env.NODE_ENV)
-  ) {
+  if (env.DISABLE_CAPTCHA === 'true' && !['development', 'test'].includes(env.NODE_ENV)) {
     errors.push('DISABLE_CAPTCHA is allowed only when NODE_ENV=development');
   }
   if (!['turnstile', 'self-hosted'].includes(captchaProvider)) {

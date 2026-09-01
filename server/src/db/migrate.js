@@ -37,9 +37,7 @@ async function ensureMigrationsTable(conn) {
 }
 
 async function appliedMigrations(conn) {
-  const [rows] = await conn.execute(
-    'SELECT filename FROM schema_migrations ORDER BY filename'
-  );
+  const [rows] = await conn.execute('SELECT filename FROM schema_migrations ORDER BY filename');
   return new Set(rows.map((r) => r.filename));
 }
 
@@ -60,10 +58,7 @@ async function run() {
       console.log(`Applying migration: ${file}`);
       const sql = fs.readFileSync(path.join(MIGRATIONS_DIR, file), 'utf8');
       await conn.query(sql);
-      await conn.execute(
-        'INSERT INTO schema_migrations (filename) VALUES (?)',
-        [file]
-      );
+      await conn.execute('INSERT INTO schema_migrations (filename) VALUES (?)', [file]);
       count++;
     }
 

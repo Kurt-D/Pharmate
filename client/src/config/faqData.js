@@ -17,7 +17,8 @@ const faqData = [
     tourStep: {
       id: 'create-schedule',
       path: '/patient/medications',
-      target: '.pm-med-setup-empty .pm-primary-large, .pm-med-setup-empty .pm-med-section-head button, .pm-med-library .pm-med-section-head button',
+      target:
+        '.pm-med-setup-empty .pm-primary-large, .pm-med-setup-empty .pm-med-section-head button, .pm-med-library .pm-med-section-head button',
       title: 'Create a Medicine Schedule',
       description:
         'Tap this plus button to add a medicine, set the dose, and choose daily reminder times.',

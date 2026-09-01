@@ -12,9 +12,24 @@ import {
 } from 'lucide-react';
 
 const DOSE_STYLES = {
-  upcoming: { title: 'Upcoming doses', color: 'text-amber-700', card: 'border-amber-200 bg-amber-50', badge: 'border-amber-200 bg-white text-amber-700' },
-  overdue: { title: 'Missed doses', color: 'text-rose-700', card: 'border-rose-200 bg-rose-50', badge: 'border-rose-200 bg-white text-rose-700' },
-  taken: { title: 'Taken doses', color: 'text-emerald-700', card: 'border-emerald-200 bg-emerald-50', badge: 'border-emerald-200 bg-white text-emerald-700' },
+  upcoming: {
+    title: 'Upcoming doses',
+    color: 'text-amber-700',
+    card: 'border-amber-200 bg-amber-50',
+    badge: 'border-amber-200 bg-white text-amber-700',
+  },
+  overdue: {
+    title: 'Missed doses',
+    color: 'text-rose-700',
+    card: 'border-rose-200 bg-rose-50',
+    badge: 'border-rose-200 bg-white text-rose-700',
+  },
+  taken: {
+    title: 'Taken doses',
+    color: 'text-emerald-700',
+    card: 'border-emerald-200 bg-emerald-50',
+    badge: 'border-emerald-200 bg-white text-emerald-700',
+  },
 };
 
 function DoseSection({ status, doses, onReminder }) {
@@ -24,22 +39,42 @@ function DoseSection({ status, doses, onReminder }) {
     <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
       <div className="flex items-center justify-between gap-3">
         <h2 className={`m-0 text-base font-bold ${style.color}`}>{style.title}</h2>
-        <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-600">{doses.length}</span>
+        <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-600">
+          {doses.length}
+        </span>
       </div>
       <div className="mt-3 grid gap-2">
         {doses.slice(0, 3).map((dose) => (
           <article className={`rounded-xl border p-3 ${style.card}`} key={dose.id}>
             <div className="flex items-start gap-3">
-              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white text-blue-600"><Pill className="h-5 w-5" /></span>
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white text-blue-600">
+                <Pill className="h-5 w-5" />
+              </span>
               <div className="min-w-0 flex-1">
                 <strong className="block truncate text-sm text-slate-900">{dose.medicine}</strong>
-                <small className="mt-1 block font-medium leading-5 text-slate-600">{dose.instructions}</small>
-                <span className="mt-1 inline-flex items-center gap-1 text-xs font-bold text-slate-700"><Clock3 className="h-3.5 w-3.5" />{dose.time}</span>
+                <small className="mt-1 block font-medium leading-5 text-slate-600">
+                  {dose.instructions}
+                </small>
+                <span className="mt-1 inline-flex items-center gap-1 text-xs font-bold text-slate-700">
+                  <Clock3 className="h-3.5 w-3.5" />
+                  {dose.time}
+                </span>
               </div>
-              <span className={`rounded-full border px-2 py-1 text-[10px] font-bold ${style.badge}`}>{status === 'overdue' ? 'Missed' : status === 'taken' ? 'Taken' : 'Upcoming'}</span>
+              <span
+                className={`rounded-full border px-2 py-1 text-[10px] font-bold ${style.badge}`}
+              >
+                {status === 'overdue' ? 'Missed' : status === 'taken' ? 'Taken' : 'Upcoming'}
+              </span>
             </div>
             {status !== 'taken' && (
-              <button className="mt-3 flex min-h-[46px] w-full items-center justify-center gap-2 rounded-xl border border-blue-200 bg-white px-3 text-sm font-bold text-blue-700 active:scale-[.99]" onClick={() => onReminder(dose)} type="button"><Send className="h-4 w-4" />Send notification reminder</button>
+              <button
+                className="mt-3 flex min-h-[46px] w-full items-center justify-center gap-2 rounded-xl border border-blue-200 bg-white px-3 text-sm font-bold text-blue-700 active:scale-[.99]"
+                onClick={() => onReminder(dose)}
+                type="button"
+              >
+                <Send className="h-4 w-4" />
+                Send notification reminder
+              </button>
             )}
           </article>
         ))}
@@ -55,11 +90,72 @@ function DoseCalendar({ timeline, onClose }) {
   const firstDay = new Date(year, month, 1).getDay();
   const days = new Date(year, month + 1, 0).getDate();
   return (
-    <div className="fixed inset-0 z-[85] flex items-end justify-center bg-slate-950/45 sm:items-center sm:p-4" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
-      <section aria-labelledby="caregiver-calendar-title" aria-modal="true" className="w-full max-w-md rounded-t-3xl bg-white p-5 shadow-2xl sm:rounded-3xl" role="dialog">
-        <div className="flex items-start justify-between gap-3"><div><p className="m-0 text-xs font-bold uppercase tracking-wide text-blue-700">Patient schedule</p><h2 className="mb-0 mt-1 text-xl font-bold text-slate-900" id="caregiver-calendar-title">{now.toLocaleDateString([], { month: 'long', year: 'numeric' })}</h2></div><button aria-label="Close calendar" className="grid h-11 w-11 place-items-center rounded-xl bg-slate-100 text-slate-700" onClick={onClose} type="button"><X className="h-5 w-5" /></button></div>
-        <div className="mt-5 grid grid-cols-7 gap-1 text-center text-xs font-bold text-slate-500">{['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map((day) => <span key={day}>{day}</span>)}{Array.from({ length: firstDay }, (_, index) => <span key={`blank-${index}`} />)}{Array.from({ length: days }, (_, index) => { const day = index + 1; const today = day === now.getDate(); return <span className={`grid min-h-[42px] place-items-center rounded-full ${today ? 'bg-blue-600 text-white' : 'text-slate-800'}`} key={day}>{day}</span>; })}</div>
-        <div className="mt-5 rounded-xl border border-blue-100 bg-blue-50 p-4"><strong className="text-sm text-slate-900">Today’s doses</strong><div className="mt-2 flex flex-wrap gap-2"><span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-bold text-amber-800">{timeline.filter((dose) => dose.status === 'upcoming').length} Upcoming</span><span className="rounded-full bg-rose-100 px-2.5 py-1 text-xs font-bold text-rose-800">{timeline.filter((dose) => dose.status === 'overdue').length} Missed</span><span className="rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-800">{timeline.filter((dose) => dose.status === 'taken').length} Taken</span></div></div>
+    <div
+      className="fixed inset-0 z-[85] flex items-end justify-center bg-slate-950/45 sm:items-center sm:p-4"
+      role="presentation"
+      onMouseDown={(event) => event.target === event.currentTarget && onClose()}
+    >
+      <section
+        aria-labelledby="caregiver-calendar-title"
+        aria-modal="true"
+        className="w-full max-w-md rounded-t-3xl bg-white p-5 shadow-2xl sm:rounded-3xl"
+        role="dialog"
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="m-0 text-xs font-bold uppercase tracking-wide text-blue-700">
+              Patient schedule
+            </p>
+            <h2
+              className="mb-0 mt-1 text-xl font-bold text-slate-900"
+              id="caregiver-calendar-title"
+            >
+              {now.toLocaleDateString([], { month: 'long', year: 'numeric' })}
+            </h2>
+          </div>
+          <button
+            aria-label="Close calendar"
+            className="grid h-11 w-11 place-items-center rounded-xl bg-slate-100 text-slate-700"
+            onClick={onClose}
+            type="button"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+        <div className="mt-5 grid grid-cols-7 gap-1 text-center text-xs font-bold text-slate-500">
+          {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
+            <span key={day}>{day}</span>
+          ))}
+          {Array.from({ length: firstDay }, (_, index) => (
+            <span key={`blank-${index}`} />
+          ))}
+          {Array.from({ length: days }, (_, index) => {
+            const day = index + 1;
+            const today = day === now.getDate();
+            return (
+              <span
+                className={`grid min-h-[42px] place-items-center rounded-full ${today ? 'bg-blue-600 text-white' : 'text-slate-800'}`}
+                key={day}
+              >
+                {day}
+              </span>
+            );
+          })}
+        </div>
+        <div className="mt-5 rounded-xl border border-blue-100 bg-blue-50 p-4">
+          <strong className="text-sm text-slate-900">Today’s doses</strong>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-bold text-amber-800">
+              {timeline.filter((dose) => dose.status === 'upcoming').length} Upcoming
+            </span>
+            <span className="rounded-full bg-rose-100 px-2.5 py-1 text-xs font-bold text-rose-800">
+              {timeline.filter((dose) => dose.status === 'overdue').length} Missed
+            </span>
+            <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-800">
+              {timeline.filter((dose) => dose.status === 'taken').length} Taken
+            </span>
+          </div>
+        </div>
       </section>
     </div>
   );
@@ -115,7 +211,6 @@ export default function CaregiverRefills({
     return () => window.clearTimeout(timer);
   }, [adding, drugQuery, onSearchDrugs, selectedDrug]);
 
-
   async function addMedicine() {
     if (!canManageMedications) return;
     setAddBusy(true);
@@ -165,7 +260,10 @@ export default function CaregiverRefills({
           className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm"
           aria-labelledby="medication-actions-title"
         >
-          <h2 className="mb-3 mt-0 text-base font-bold text-slate-900" id="medication-actions-title">
+          <h2
+            className="mb-3 mt-0 text-base font-bold text-slate-900"
+            id="medication-actions-title"
+          >
             Medication actions
           </h2>
           <div className="grid gap-2">
@@ -212,14 +310,50 @@ export default function CaregiverRefills({
       )}
       <section className="rounded-2xl border border-blue-200 bg-blue-50 p-4">
         <div className="flex items-center justify-between gap-3">
-          <div><span className="text-xs font-bold uppercase tracking-wide text-blue-700">Dose monitoring</span><h2 className="mb-0 mt-1 text-lg font-bold text-slate-900">Today’s medicine schedule</h2><p className="mb-0 mt-1 text-sm font-medium text-slate-600">Send the patient a reminder when a dose is due or missed.</p></div>
-          <button aria-label="View medication calendar" className="grid h-12 w-12 shrink-0 place-items-center rounded-xl border border-blue-200 bg-white text-blue-700" onClick={() => setCalendarOpen(true)} type="button"><CalendarDays className="h-6 w-6" /></button>
+          <div>
+            <span className="text-xs font-bold uppercase tracking-wide text-blue-700">
+              Dose monitoring
+            </span>
+            <h2 className="mb-0 mt-1 text-lg font-bold text-slate-900">
+              Today’s medicine schedule
+            </h2>
+            <p className="mb-0 mt-1 text-sm font-medium text-slate-600">
+              Send the patient a reminder when a dose is due or missed.
+            </p>
+          </div>
+          <button
+            aria-label="View medication calendar"
+            className="grid h-12 w-12 shrink-0 place-items-center rounded-xl border border-blue-200 bg-white text-blue-700"
+            onClick={() => setCalendarOpen(true)}
+            type="button"
+          >
+            <CalendarDays className="h-6 w-6" />
+          </button>
         </div>
-        <button className="mt-3 flex min-h-[48px] w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 text-sm font-bold text-white" onClick={() => setCalendarOpen(true)} type="button"><CalendarDays className="h-5 w-5" />View Calendar</button>
+        <button
+          className="mt-3 flex min-h-[48px] w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 text-sm font-bold text-white"
+          onClick={() => setCalendarOpen(true)}
+          type="button"
+        >
+          <CalendarDays className="h-5 w-5" />
+          View Calendar
+        </button>
       </section>
-      <DoseSection status="upcoming" doses={timeline.filter((dose) => dose.status === 'upcoming')} onReminder={onSendReminder} />
-      <DoseSection status="overdue" doses={timeline.filter((dose) => dose.status === 'overdue')} onReminder={onSendReminder} />
-      <DoseSection status="taken" doses={timeline.filter((dose) => dose.status === 'taken')} onReminder={onSendReminder} />
+      <DoseSection
+        status="upcoming"
+        doses={timeline.filter((dose) => dose.status === 'upcoming')}
+        onReminder={onSendReminder}
+      />
+      <DoseSection
+        status="overdue"
+        doses={timeline.filter((dose) => dose.status === 'overdue')}
+        onReminder={onSendReminder}
+      />
+      <DoseSection
+        status="taken"
+        doses={timeline.filter((dose) => dose.status === 'taken')}
+        onReminder={onSendReminder}
+      />
       {/* Active medicines were intentionally removed from the caregiver Medication page.
       <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="flex items-center justify-between gap-3">

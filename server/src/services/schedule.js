@@ -57,15 +57,10 @@ function mealAnchoredFrequency(frequencyCode, mealInstruction = '') {
       instruction
     );
   if (!hasMealTiming) return frequencyCode;
-  const modifier = /before/.test(instruction)
-    ? ':AC'
-    : /after/.test(instruction)
-      ? ':PC'
-      : '';
+  const modifier = /before/.test(instruction) ? ':AC' : /after/.test(instruction) ? ':PC' : '';
   if (/evening meal|dinner/.test(instruction) && frequencyCode === 'QD')
     return `MEALMAP(0,0,1)${modifier}`;
-  if (/lunch|noon/.test(instruction) && frequencyCode === 'QD')
-    return `MEALMAP(0,1,0)${modifier}`;
+  if (/lunch|noon/.test(instruction) && frequencyCode === 'QD') return `MEALMAP(0,1,0)${modifier}`;
   const map = { QD: 'MEALMAP(1,0,0)', BID: 'MEALMAP(1,0,1)', TID: 'MEALMAP(1,1,1)' };
   return `${map[frequencyCode]}${modifier}`;
 }
@@ -191,11 +186,15 @@ export function classifyScheduleSafety(input, result, targetMedicationIds = []) 
   for (const med of input.medications) {
     if (!isRelevant([med.id])) continue;
     if (!med.drugId || (enforceVerifiedRules && !med.isVerified)) {
-      findings.push(finding({
-        code: 'UNVERIFIED_MEDICINE_RULE', level: 'unavailable',
-        title: 'Verified timing rule unavailable', message: NO_VERIFIED_RULE,
-        medicines: [med.id],
-      }));
+      findings.push(
+        finding({
+          code: 'UNVERIFIED_MEDICINE_RULE',
+          level: 'unavailable',
+          title: 'Verified timing rule unavailable',
+          message: NO_VERIFIED_RULE,
+          medicines: [med.id],
+        })
+      );
     }
   }
 
@@ -206,54 +205,78 @@ export function classifyScheduleSafety(input, result, targetMedicationIds = []) 
     if (!isRelevant([a.id, b.id])) continue;
     const names = [a.drugName, b.drugName];
     if (!rule.isVerified) {
-      if (enforceVerifiedRules) findings.push(finding({
-          code: 'UNVERIFIED_INTERACTION_RULE', level: 'unavailable',
-          title: 'Verified recommendation unavailable', message: NO_VERIFIED_RULE,
-          medicines: [a.id, b.id],
-        }));
+      if (enforceVerifiedRules)
+        findings.push(
+          finding({
+            code: 'UNVERIFIED_INTERACTION_RULE',
+            level: 'unavailable',
+            title: 'Verified recommendation unavailable',
+            message: NO_VERIFIED_RULE,
+            medicines: [a.id, b.id],
+          })
+        );
       continue;
     } else if (rule.type === 'AVOID' || ['high', 'contraindicated'].includes(rule.severity)) {
-      findings.push(finding({
-        code: 'VERIFIED_RULE_VIOLATION', level: 'unavailable', title: 'Verified recommendation unavailable',
-        message: `A verified safety rule does not allow PharMate to recommend reminder times for ${names.join(' with ')}. Review the medicine information or ask a pharmacist.`,
-        medicines: [a.id, b.id],
-        rule: { type: rule.type, severity: rule.severity, note: rule.notes || null },
-      }));
+      findings.push(
+        finding({
+          code: 'VERIFIED_RULE_VIOLATION',
+          level: 'unavailable',
+          title: 'Verified recommendation unavailable',
+          message: `A verified safety rule does not allow PharMate to recommend reminder times for ${names.join(' with ')}. Review the medicine information or ask a pharmacist.`,
+          medicines: [a.id, b.id],
+          rule: { type: rule.type, severity: rule.severity, note: rule.notes || null },
+        })
+      );
     } else if (rule.type === 'MONITOR') {
-      findings.push(finding({
-        code: 'MONITORING_REQUIRED', level: 'unavailable', title: 'Verified recommendation unavailable',
-        message: `${names.join(' and ')} have a verified monitoring notice, so PharMate cannot recommend a time gap. Follow the prescription label or ask a pharmacist.`,
-        medicines: [a.id, b.id],
-        rule: { type: rule.type, severity: rule.severity, note: rule.notes || null },
-      }));
+      findings.push(
+        finding({
+          code: 'MONITORING_REQUIRED',
+          level: 'unavailable',
+          title: 'Verified recommendation unavailable',
+          message: `${names.join(' and ')} have a verified monitoring notice, so PharMate cannot recommend a time gap. Follow the prescription label or ask a pharmacist.`,
+          medicines: [a.id, b.id],
+          rule: { type: rule.type, severity: rule.severity, note: rule.notes || null },
+        })
+      );
     } else if (rule.type === 'SPACING' && Number(rule.minGapHours) > 0) {
-      findings.push(finding({
-        code: 'VERIFIED_SPACING_RULE', level: 'adjusted', title: 'Verified time gap',
-        message: `Keep ${a.drugName} and ${b.drugName} at least ${Number(rule.minGapHours)} hour${Number(rule.minGapHours) === 1 ? '' : 's'} apart. The suggested times apply this verified interval.`,
-        medicines: [a.id, b.id],
-        rule: { type: rule.type, min_gap_hours: Number(rule.minGapHours) },
-      }));
+      findings.push(
+        finding({
+          code: 'VERIFIED_SPACING_RULE',
+          level: 'adjusted',
+          title: 'Verified time gap',
+          message: `Keep ${a.drugName} and ${b.drugName} at least ${Number(rule.minGapHours)} hour${Number(rule.minGapHours) === 1 ? '' : 's'} apart. The suggested times apply this verified interval.`,
+          medicines: [a.id, b.id],
+          rule: { type: rule.type, min_gap_hours: Number(rule.minGapHours) },
+        })
+      );
     }
   }
 
   for (const unresolved of result.unresolved) {
     if (!isRelevant([unresolved.medicationId])) continue;
-    findings.push(finding({
-      code: 'UNRESOLVED_SCHEDULE', level: 'unavailable',
-      title: 'Verified recommendation unavailable',
-      message: unresolved.reason || NO_VERIFIED_RULE,
-      medicines: [unresolved.medicationId],
-    }));
+    findings.push(
+      finding({
+        code: 'UNRESOLVED_SCHEDULE',
+        level: 'unavailable',
+        title: 'Verified recommendation unavailable',
+        message: unresolved.reason || NO_VERIFIED_RULE,
+        medicines: [unresolved.medicationId],
+      })
+    );
   }
 
   for (const requestedId of targetIds) {
     if (!input.medications.some((medicine) => String(medicine.id) === requestedId)) {
-      findings.push(finding({
-        code: 'UNKNOWN_SELECTED_MEDICINE', level: 'unavailable',
-        title: 'Verified recommendation unavailable',
-        message: 'The selected medicine is no longer active. Return to your medicine list and choose it again.',
-        medicines: [requestedId],
-      }));
+      findings.push(
+        finding({
+          code: 'UNKNOWN_SELECTED_MEDICINE',
+          level: 'unavailable',
+          title: 'Verified recommendation unavailable',
+          message:
+            'The selected medicine is no longer active. Return to your medicine list and choose it again.',
+          medicines: [requestedId],
+        })
+      );
     }
   }
 
@@ -264,16 +287,22 @@ export function classifyScheduleSafety(input, result, targetMedicationIds = []) 
       : findings.some((item) => item.level === 'adjusted')
         ? 'TIMING_ADJUSTED'
         : 'SAFE_SCHEDULE';
-  if (!findings.length) findings.push(finding({
-    code: 'VERIFIED_SAFE_SCHEDULE', level: 'safe', title: 'Safe schedule',
-    message: 'No timing conflict was found using PharMate’s current medication rules.',
-  }));
+  if (!findings.length)
+    findings.push(
+      finding({
+        code: 'VERIFIED_SAFE_SCHEDULE',
+        level: 'safe',
+        title: 'Safe schedule',
+        message: 'No timing conflict was found using PharMate’s current medication rules.',
+      })
+    );
 
   return {
     classification,
     can_save: ['SAFE_SCHEDULE', 'TIMING_ADJUSTED'].includes(classification),
     findings,
-    disclaimer: 'Reminder-time recommendations only. PharMate does not diagnose, prescribe, change doses or frequency, or replace advice from a licensed pharmacist.',
+    disclaimer:
+      'Reminder-time recommendations only. PharMate does not diagnose, prescribe, change doses or frequency, or replace advice from a licensed pharmacist.',
   };
 }
 
@@ -359,8 +388,12 @@ export async function proposeForPatient(patientId, targetMedicationIds = []) {
   const medications = orderedMedicines.filter((medicine) => {
     const key = [
       medicine.drugId || String(medicine.drugName).trim().toLowerCase(),
-      String(medicine.dosageInstruction || '').trim().toLowerCase(),
-      String(medicine.frequencyCode || medicine.frequency || '').trim().toLowerCase(),
+      String(medicine.dosageInstruction || '')
+        .trim()
+        .toLowerCase(),
+      String(medicine.frequencyCode || medicine.frequency || '')
+        .trim()
+        .toLowerCase(),
     ].join('|');
     if (seenMedicines.has(key)) return false;
     seenMedicines.add(key);
@@ -475,22 +508,33 @@ export async function validateMove(patientId, doses, index) {
 }
 
 export async function analyzeAdjustedLayout(patientId, doses) {
-  const targetMedicationIds = [...new Set((doses || []).map((dose) => dose.medication_id).filter(Boolean))];
+  const targetMedicationIds = [
+    ...new Set((doses || []).map((dose) => dose.medication_id).filter(Boolean)),
+  ];
   const proposal = await proposeForPatient(patientId, targetMedicationIds);
   const safety = { ...proposal.safety, findings: [...proposal.safety.findings] };
   if (!Array.isArray(doses) || !doses.length) {
-    return { ...safety, can_save: false, validation_error: 'At least one reminder time is required.' };
+    return {
+      ...safety,
+      can_save: false,
+      validation_error: 'At least one reminder time is required.',
+    };
   }
   for (let index = 0; index < doses.length; index += 1) {
     const result = await validateMove(patientId, doses, index);
     if (!result.ok) {
-      safety.findings.push(finding({
-        code: 'MANUAL_TIME_CONFLICT', level: 'manual', title: 'Manual review needed',
-        message: result.error === 'unknown_medication'
-          ? NO_VERIFIED_RULE
-          : `This reminder time is too close to ${result.violation?.drug || 'another medicine'}${result.violation?.min_gap_hours ? `. Keep at least ${result.violation.min_gap_hours} hours between them` : ''}.`,
-        medicines: [doses[index]?.medication_id].filter(Boolean),
-      }));
+      safety.findings.push(
+        finding({
+          code: 'MANUAL_TIME_CONFLICT',
+          level: 'manual',
+          title: 'Manual review needed',
+          message:
+            result.error === 'unknown_medication'
+              ? NO_VERIFIED_RULE
+              : `This reminder time is too close to ${result.violation?.drug || 'another medicine'}${result.violation?.min_gap_hours ? `. Keep at least ${result.violation.min_gap_hours} hours between them` : ''}.`,
+          medicines: [doses[index]?.medication_id].filter(Boolean),
+        })
+      );
     }
   }
   if (safety.findings.some((item) => item.level === 'manual')) {
@@ -510,7 +554,12 @@ export async function analyzeAdjustedLayout(patientId, doses) {
  * Replaces prior still-scheduled (not-yet-taken) doses; taken/missed rows are
  * immutable. Bumps schedule_version so dose logs can reference their version.
  */
-export async function confirmForPatient(patientId, adjusted, targetMedicationIds = [], options = {}) {
+export async function confirmForPatient(
+  patientId,
+  adjusted,
+  targetMedicationIds = [],
+  options = {}
+) {
   const isManual = options.source === 'manual';
   const normalizedTargetIds = [...new Set((targetMedicationIds || []).map(String).filter(Boolean))];
   const selectedIds = normalizedTargetIds.length
@@ -535,7 +584,11 @@ export async function confirmForPatient(patientId, adjusted, targetMedicationIds
       }
       if (isManual && dose.dates !== undefined) {
         const allowedDates = new Set(treatmentDateKeys(m.startDate, m.endDate));
-        if (!Array.isArray(dose.dates) || !dose.dates.length || dose.dates.some((date) => !/^\d{4}-\d{2}-\d{2}$/.test(date) || !allowedDates.has(date))) {
+        if (
+          !Array.isArray(dose.dates) ||
+          !dose.dates.length ||
+          dose.dates.some((date) => !/^\d{4}-\d{2}-\d{2}$/.test(date) || !allowedDates.has(date))
+        ) {
           return { error: 'invalid_date' };
         }
       }
@@ -564,12 +617,17 @@ export async function confirmForPatient(patientId, adjusted, targetMedicationIds
         };
       }
     }
-    generationDate = [...byId.values()].map((medicine) => medicine.startDate).filter(Boolean).sort()[0] || manilaToday();
+    generationDate =
+      [...byId.values()]
+        .map((medicine) => medicine.startDate)
+        .filter(Boolean)
+        .sort()[0] || manilaToday();
     slots = adjusted.flatMap((dose) => {
       const medicine = byId.get(dose.medication_id);
-      const dates = Array.isArray(dose.dates) && dose.dates.length
-        ? [...new Set(dose.dates)].sort()
-        : treatmentDateKeys(medicine?.startDate, medicine?.endDate);
+      const dates =
+        Array.isArray(dose.dates) && dose.dates.length
+          ? [...new Set(dose.dates)].sort()
+          : treatmentDateKeys(medicine?.startDate, medicine?.endDate);
       return dates.map((date) => ({
         medication_id: dose.medication_id,
         scheduled_time: wallClock(date, dose.minute),
@@ -617,8 +675,15 @@ export async function confirmForPatient(patientId, adjusted, targetMedicationIds
            (id, medication_id, patient_id, scheduled_time, generated_reason,
             schedule_source, is_confirmed, is_prn_slot, schedule_version, status)
          VALUES (?, ?, ?, ?, ?, ?, 1, 0, ?, 'scheduled')`,
-        [uuidv4(), s.medication_id, patientId, s.scheduled_time, s.generated_reason,
-          isManual ? 'MANUAL' : 'SUGGESTED', version]
+        [
+          uuidv4(),
+          s.medication_id,
+          patientId,
+          s.scheduled_time,
+          s.generated_reason,
+          isManual ? 'MANUAL' : 'SUGGESTED',
+          version,
+        ]
       );
     }
 

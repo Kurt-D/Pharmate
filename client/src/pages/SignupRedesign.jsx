@@ -147,35 +147,99 @@ export default function SignupRedesign() {
           <h1 id="signup-title">Create your account</h1>
           <p>Set up your secure PharMate patient profile.</p>
         </header>
-        {error && <div className="auth-alert error" role="alert">{error}</div>}
+        {error && (
+          <div className="auth-alert error" role="alert">
+            {error}
+          </div>
+        )}
         <form className="auth-form" onSubmit={submit}>
           <label>
             <span>Full name</span>
-            <input autoComplete="name" value={form.name} onChange={(event) => set('name', event.target.value)} placeholder="Enter your full name" required />
+            <input
+              autoComplete="name"
+              value={form.name}
+              onChange={(event) => set('name', event.target.value)}
+              placeholder="Enter your full name"
+              required
+            />
           </label>
           <label>
             <span>Email address</span>
-            <input autoComplete="email" type="email" value={form.email} onChange={(event) => set('email', event.target.value)} placeholder="Enter your email" required />
+            <input
+              autoComplete="email"
+              type="email"
+              value={form.email}
+              onChange={(event) => set('email', event.target.value)}
+              placeholder="Enter your email"
+              required
+            />
           </label>
-          <PasswordField label="Password" value={form.password} onChange={(event) => set('password', event.target.value)} visible={showPassword} onToggle={() => setShowPassword((current) => !current)} autoComplete="new-password" />
+          <PasswordField
+            label="Password"
+            value={form.password}
+            onChange={(event) => set('password', event.target.value)}
+            visible={showPassword}
+            onToggle={() => setShowPassword((current) => !current)}
+            autoComplete="new-password"
+          />
           <ul className="auth-password-rules" aria-label="Password requirements">
-            {passwordChecks.map((check) => <li className={check.met ? 'met' : ''} key={check.label}><span aria-hidden="true">{check.met ? '✓' : '○'}</span>{check.label}</li>)}
+            {passwordChecks.map((check) => (
+              <li className={check.met ? 'met' : ''} key={check.label}>
+                <span aria-hidden="true">{check.met ? '✓' : '○'}</span>
+                {check.label}
+              </li>
+            ))}
           </ul>
-          <PasswordField label="Confirm password" value={form.confirm} onChange={(event) => set('confirm', event.target.value)} visible={showConfirm} onToggle={() => setShowConfirm((current) => !current)} autoComplete="new-password" />
+          <PasswordField
+            label="Confirm password"
+            value={form.confirm}
+            onChange={(event) => set('confirm', event.target.value)}
+            visible={showConfirm}
+            onToggle={() => setShowConfirm((current) => !current)}
+            autoComplete="new-password"
+          />
           <label className="auth-check">
-            <input type="checkbox" checked={agreed} onChange={(event) => setAgreed(event.target.checked)} />
-            <span>I agree to the <a href="#terms">Terms of Service</a> and <a href="#privacy">Privacy Policy</a></span>
+            <input
+              type="checkbox"
+              checked={agreed}
+              onChange={(event) => setAgreed(event.target.checked)}
+            />
+            <span>
+              I agree to the <a href="#terms">Terms of Service</a> and{' '}
+              <a href="#privacy">Privacy Policy</a>
+            </span>
           </label>
-          <CaptchaChallenge ref={captchaRef} action="register" onChange={setCaptcha} onError={setError} />
-          <button className="auth-primary" disabled={loading || !captchaComplete}>{loading ? 'Creating account…' : 'Sign Up'}</button>
+          <CaptchaChallenge
+            ref={captchaRef}
+            action="register"
+            onChange={setCaptcha}
+            onError={setError}
+          />
+          <button className="auth-primary" disabled={loading || !captchaComplete}>
+            {loading ? 'Creating account…' : 'Sign Up'}
+          </button>
         </form>
         <div className="auth-divider">or sign up securely with</div>
         <div className="auth-google-button">
           {GOOGLE_CLIENT_ID ? (
-            <GoogleLogin onSuccess={(response) => submitGoogle(response.credential)} onError={() => setError('Google sign-up was cancelled or could not start.')} shape="rectangular" size="large" text="signup_with" theme="outline" width="390" />
-          ) : <button className="auth-google-disabled" disabled type="button">Sign up with Google (configuration required)</button>}
+            <GoogleLogin
+              onSuccess={(response) => submitGoogle(response.credential)}
+              onError={() => setError('Google sign-up was cancelled or could not start.')}
+              shape="rectangular"
+              size="large"
+              text="signup_with"
+              theme="outline"
+              width="390"
+            />
+          ) : (
+            <button className="auth-google-disabled" disabled type="button">
+              Sign up with Google (configuration required)
+            </button>
+          )}
         </div>
-        <p className="auth-signin">Already have an account? <Link to="/login">Sign in</Link></p>
+        <p className="auth-signin">
+          Already have an account? <Link to="/login">Sign in</Link>
+        </p>
       </section>
     </main>
   );

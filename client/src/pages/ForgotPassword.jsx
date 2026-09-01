@@ -8,7 +8,10 @@ import '../styles/auth.css';
 
 const PASSWORD_RULES = [
   { label: '12 or more characters', test: (value) => value.length >= 12 },
-  { label: 'Uppercase and lowercase letters', test: (value) => /[A-Z]/.test(value) && /[a-z]/.test(value) },
+  {
+    label: 'Uppercase and lowercase letters',
+    test: (value) => /[A-Z]/.test(value) && /[a-z]/.test(value),
+  },
   { label: 'At least one number', test: (value) => /\d/.test(value) },
   { label: 'At least one special character', test: (value) => /[^A-Za-z0-9]/.test(value) },
 ];
@@ -37,7 +40,9 @@ function PinBoxes({ value, onChange, disabled }) {
       {digits.map((digit, index) => (
         <input
           key={index}
-          ref={(element) => { refs.current[index] = element; }}
+          ref={(element) => {
+            refs.current[index] = element;
+          }}
           aria-label={`PIN digit ${index + 1}`}
           autoComplete={index === 0 ? 'one-time-code' : 'off'}
           disabled={disabled}
@@ -137,7 +142,8 @@ export default function ForgotPassword() {
         body: JSON.stringify({ email: email.trim(), ...captcha }),
       });
       const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(data.error || 'The PIN could not be sent. Please try again.');
+      if (!response.ok)
+        throw new Error(data.error || 'The PIN could not be sent. Please try again.');
       setPin('');
       setCaptcha({ captchaToken: '', captchaAnswer: '' });
       setCooldown(60);
@@ -207,31 +213,178 @@ export default function ForgotPassword() {
       <div className="auth-orb auth-orb--one" aria-hidden="true" />
       <div className="auth-orb auth-orb--two" aria-hidden="true" />
       <section className="auth-shell auth-recovery" aria-labelledby="recovery-title">
-        <div className="auth-logo"><img src={pharmateLogo} alt="PharMate" /></div>
-        <Link className="auth-back" to="/login"><ArrowLeft size={18} /> Back to login</Link>
+        <div className="auth-logo">
+          <img src={pharmateLogo} alt="PharMate" />
+        </div>
+        <Link className="auth-back" to="/login">
+          <ArrowLeft size={18} /> Back to login
+        </Link>
         <header className="auth-heading">
           <span className="auth-kicker">Secure account recovery</span>
-          <h1 id="recovery-title">{step === 1 ? 'Forgot your password?' : step === 2 ? 'Enter your 6-digit PIN' : 'Create a new password'}</h1>
-          <p>{step === 1 ? 'Enter the email connected to your PharMate account.' : step === 2 ? `Enter the one-time code sent to ${email}. It expires in 10 minutes.` : 'Use a strong, unique password that you have not used before.'}</p>
+          <h1 id="recovery-title">
+            {step === 1
+              ? 'Forgot your password?'
+              : step === 2
+                ? 'Enter your 6-digit PIN'
+                : 'Create a new password'}
+          </h1>
+          <p>
+            {step === 1
+              ? 'Enter the email connected to your PharMate account.'
+              : step === 2
+                ? `Enter the one-time code sent to ${email}. It expires in 10 minutes.`
+                : 'Use a strong, unique password that you have not used before.'}
+          </p>
         </header>
 
         <ol className="auth-steps" aria-label="Account recovery progress">
           {['Email', 'PIN', 'Password'].map((label, index) => {
             const number = index + 1;
-            return <li key={label} className={number === step ? 'active' : number < step ? 'done' : ''} aria-current={number === step ? 'step' : undefined}><span>{number < step ? <Check size={16} /> : number}</span><small>{label}</small></li>;
+            return (
+              <li
+                key={label}
+                className={number === step ? 'active' : number < step ? 'done' : ''}
+                aria-current={number === step ? 'step' : undefined}
+              >
+                <span>{number < step ? <Check size={16} /> : number}</span>
+                <small>{label}</small>
+              </li>
+            );
           })}
         </ol>
 
         <div className="auth-feedback" aria-live="polite">
-          {error && <div className="auth-alert error" role="alert">{error}</div>}
-          {message && <div className="auth-alert success" role="status">{message}</div>}
+          {error && (
+            <div className="auth-alert error" role="alert">
+              {error}
+            </div>
+          )}
+          {message && (
+            <div className="auth-alert success" role="status">
+              {message}
+            </div>
+          )}
         </div>
 
-        {step === 1 && <form className="auth-form" onSubmit={requestPin}><label><span>Email address</span><input autoFocus autoComplete="email" type="email" required placeholder="Enter your email address" value={email} onChange={(event) => setEmail(event.target.value)} /></label><CaptchaChallenge ref={captchaRef} action="forgot_password" onChange={setCaptcha} onError={setError} /><button className="auth-primary" disabled={loading || !captchaComplete}>{loading ? <span className="auth-spinner" aria-hidden="true" /> : <Mail size={19} />}{loading ? 'Sending PIN…' : 'Send 6-Digit PIN'}</button></form>}
+        {step === 1 && (
+          <form className="auth-form" onSubmit={requestPin}>
+            <label>
+              <span>Email address</span>
+              <input
+                autoFocus
+                autoComplete="email"
+                type="email"
+                required
+                placeholder="Enter your email address"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+              />
+            </label>
+            <CaptchaChallenge
+              ref={captchaRef}
+              action="forgot_password"
+              onChange={setCaptcha}
+              onError={setError}
+            />
+            <button className="auth-primary" disabled={loading || !captchaComplete}>
+              {loading ? <span className="auth-spinner" aria-hidden="true" /> : <Mail size={19} />}
+              {loading ? 'Sending PIN…' : 'Send 6-Digit PIN'}
+            </button>
+          </form>
+        )}
 
-        {step === 2 && <form className="auth-form" onSubmit={verifyPin}><fieldset className="auth-pin-fieldset"><legend>6-digit security PIN</legend><PinBoxes value={pin} onChange={setPin} disabled={loading} /></fieldset><button className="auth-primary" disabled={loading || pin.length !== 6}>{loading ? <span className="auth-spinner" aria-hidden="true" /> : <ShieldCheck size={19} />}{loading ? 'Verifying…' : 'Verify PIN'}</button><div className="auth-recovery-actions"><button className="auth-text-button" type="button" onClick={() => { clearFeedback(); setStep(1); }}>Change email</button><button className="auth-text-button" type="button" disabled={loading || cooldown > 0} onClick={() => { clearFeedback(); setMessage('Complete the security check to request a new PIN.'); setStep(1); }}>{cooldown > 0 ? `Resend in ${cooldown}s` : 'Resend PIN'}</button></div></form>}
+        {step === 2 && (
+          <form className="auth-form" onSubmit={verifyPin}>
+            <fieldset className="auth-pin-fieldset">
+              <legend>6-digit security PIN</legend>
+              <PinBoxes value={pin} onChange={setPin} disabled={loading} />
+            </fieldset>
+            <button className="auth-primary" disabled={loading || pin.length !== 6}>
+              {loading ? (
+                <span className="auth-spinner" aria-hidden="true" />
+              ) : (
+                <ShieldCheck size={19} />
+              )}
+              {loading ? 'Verifying…' : 'Verify PIN'}
+            </button>
+            <div className="auth-recovery-actions">
+              <button
+                className="auth-text-button"
+                type="button"
+                onClick={() => {
+                  clearFeedback();
+                  setStep(1);
+                }}
+              >
+                Change email
+              </button>
+              <button
+                className="auth-text-button"
+                type="button"
+                disabled={loading || cooldown > 0}
+                onClick={() => {
+                  clearFeedback();
+                  setMessage('Complete the security check to request a new PIN.');
+                  setStep(1);
+                }}
+              >
+                {cooldown > 0 ? `Resend in ${cooldown}s` : 'Resend PIN'}
+              </button>
+            </div>
+          </form>
+        )}
 
-        {step === 3 && <form className="auth-form" onSubmit={submitPassword}><PasswordField label="New password" value={newPassword} onChange={setNewPassword} visible={showNewPassword} onToggle={() => setShowNewPassword((current) => !current)} autoFocus /><div className={`auth-meter auth-meter--${passedRules}`} aria-label={`${passedRules} of 4 password requirements met`}><div>{PASSWORD_RULES.map((rule) => <span key={rule.label} className={rule.test(newPassword) ? 'filled' : ''} />)}</div><strong>{passedRules}/4 met</strong></div><ul className="auth-password-rules">{PASSWORD_RULES.map((rule) => <li key={rule.label} className={rule.test(newPassword) ? 'met' : ''}><span aria-hidden="true">{rule.test(newPassword) ? '✓' : '○'}</span>{rule.label}</li>)}</ul><PasswordField label="Confirm password" value={confirmPassword} onChange={setConfirmPassword} visible={showConfirmation} onToggle={() => setShowConfirmation((current) => !current)} />{confirmPassword && newPassword !== confirmPassword && <div className="auth-alert error" role="alert">The passwords do not match.</div>}<button className="auth-primary" disabled={loading || !passwordReady}>{loading ? <span className="auth-spinner" aria-hidden="true" /> : <KeyRound size={19} />}{loading ? 'Resetting password…' : 'Reset Password'}</button></form>}
+        {step === 3 && (
+          <form className="auth-form" onSubmit={submitPassword}>
+            <PasswordField
+              label="New password"
+              value={newPassword}
+              onChange={setNewPassword}
+              visible={showNewPassword}
+              onToggle={() => setShowNewPassword((current) => !current)}
+              autoFocus
+            />
+            <div
+              className={`auth-meter auth-meter--${passedRules}`}
+              aria-label={`${passedRules} of 4 password requirements met`}
+            >
+              <div>
+                {PASSWORD_RULES.map((rule) => (
+                  <span key={rule.label} className={rule.test(newPassword) ? 'filled' : ''} />
+                ))}
+              </div>
+              <strong>{passedRules}/4 met</strong>
+            </div>
+            <ul className="auth-password-rules">
+              {PASSWORD_RULES.map((rule) => (
+                <li key={rule.label} className={rule.test(newPassword) ? 'met' : ''}>
+                  <span aria-hidden="true">{rule.test(newPassword) ? '✓' : '○'}</span>
+                  {rule.label}
+                </li>
+              ))}
+            </ul>
+            <PasswordField
+              label="Confirm password"
+              value={confirmPassword}
+              onChange={setConfirmPassword}
+              visible={showConfirmation}
+              onToggle={() => setShowConfirmation((current) => !current)}
+            />
+            {confirmPassword && newPassword !== confirmPassword && (
+              <div className="auth-alert error" role="alert">
+                The passwords do not match.
+              </div>
+            )}
+            <button className="auth-primary" disabled={loading || !passwordReady}>
+              {loading ? (
+                <span className="auth-spinner" aria-hidden="true" />
+              ) : (
+                <KeyRound size={19} />
+              )}
+              {loading ? 'Resetting password…' : 'Reset Password'}
+            </button>
+          </form>
+        )}
       </section>
     </main>
   );

@@ -21,7 +21,10 @@ describe('deterministic medication schedule safety classification', () => {
 
   test('does not add duplicate medicine rows to the schedule safety message', () => {
     const result = classifyScheduleSafety(
-      { medications: [med('m1', 'd1', 'Medicine A'), med('m2', 'd1', 'Medicine A')], interactions: [] },
+      {
+        medications: [med('m1', 'd1', 'Medicine A'), med('m2', 'd1', 'Medicine A')],
+        interactions: [],
+      },
       { slots: [], unresolved: [] }
     );
     expect(result.classification).toBe('SAFE_SCHEDULE');
@@ -32,7 +35,16 @@ describe('deterministic medication schedule safety classification', () => {
     const result = classifyScheduleSafety(
       {
         medications: [med('m1', 'd1', 'Medicine A'), med('m2', 'd2', 'Medicine B')],
-        interactions: [{ drugAId: 'd1', drugBId: 'd2', type: 'SPACING', minGapHours: 2, severity: 'moderate', isVerified: true }],
+        interactions: [
+          {
+            drugAId: 'd1',
+            drugBId: 'd2',
+            type: 'SPACING',
+            minGapHours: 2,
+            severity: 'moderate',
+            isVerified: true,
+          },
+        ],
       },
       { slots: [], unresolved: [] }
     );
@@ -44,7 +56,16 @@ describe('deterministic medication schedule safety classification', () => {
     const result = classifyScheduleSafety(
       {
         medications: [med('m1', 'd1', 'Medicine A'), med('m2', 'd2', 'Medicine B')],
-        interactions: [{ drugAId: 'd1', drugBId: 'd2', type: 'AVOID', minGapHours: null, severity: 'contraindicated', isVerified: true }],
+        interactions: [
+          {
+            drugAId: 'd1',
+            drugBId: 'd2',
+            type: 'AVOID',
+            minGapHours: null,
+            severity: 'contraindicated',
+            isVerified: true,
+          },
+        ],
       },
       { slots: [], unresolved: [] }
     );

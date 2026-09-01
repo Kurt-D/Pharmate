@@ -24,7 +24,9 @@ function baseTimes(rule) {
   const food = String(rule.food_rule || 'NONE').toUpperCase();
   const cap = (times) => times.slice(0, Number(rule.max_daily_doses) || times.length);
   const preferredMatch = String(rule.first_dose_time || '').match(/^(\d{2}):(\d{2})$/);
-  const preferred = preferredMatch ? Number(preferredMatch[1]) * 60 + Number(preferredMatch[2]) : null;
+  const preferred = preferredMatch
+    ? Number(preferredMatch[1]) * 60 + Number(preferredMatch[2])
+    : null;
   const anchored = (times) => {
     if (preferred === null || !times.length) return cap(times);
     const shift = preferred - times[0];
@@ -41,7 +43,9 @@ function baseTimes(rule) {
   const match = frequency.match(/^Q(\d{1,2})H$/);
   if (!match) return [];
   const interval = Number(match[1]) * 60;
-  return anchored(Array.from({ length: Math.floor(DAY / interval) }, (_, index) => 360 + index * interval));
+  return anchored(
+    Array.from({ length: Math.floor(DAY / interval) }, (_, index) => 360 + index * interval)
+  );
 }
 
 function foodOffset(rule) {
@@ -64,23 +68,30 @@ function domainsFor(item) {
   // Meal and bedtime rules must stay tied to their clinical anchors. For rules
   // without a food anchor, use an evenly spaced fallback when the preferred
   // daytime anchors are too close together (for example, BID with a 12-hour gap).
-  if (!keepsMinimumGap(base, minimum)
-      && (item.food_rule === 'NONE' || item.standard_frequency === 'BID')
-      && minimum > 0 && base.length * minimum <= DAY) {
+  if (
+    !keepsMinimumGap(base, minimum) &&
+    (item.food_rule === 'NONE' || item.standard_frequency === 'BID') &&
+    minimum > 0 &&
+    base.length * minimum <= DAY
+  ) {
     patterns.push(base.map((_, index) => base[0] + index * minimum));
   }
 
   const seen = new Set();
-  return patterns.flatMap((times, patternIndex) => SHIFTS.map((shift) => ({
-    shift,
-    times: times.map((time) => time + shift),
-    deviation: Math.abs(shift) * times.length + patternIndex,
-  }))).filter((candidate) => {
-    const key = candidate.times.map(clock).join(',');
-    if (seen.has(key) || !keepsMinimumGap(candidate.times, minimum)) return false;
-    seen.add(key);
-    return true;
-  });
+  return patterns
+    .flatMap((times, patternIndex) =>
+      SHIFTS.map((shift) => ({
+        shift,
+        times: times.map((time) => time + shift),
+        deviation: Math.abs(shift) * times.length + patternIndex,
+      }))
+    )
+    .filter((candidate) => {
+      const key = candidate.times.map(clock).join(',');
+      if (seen.has(key) || !keepsMinimumGap(candidate.times, minimum)) return false;
+      seen.add(key);
+      return true;
+    });
 }
 
 function pairKey(a, b) {
@@ -104,7 +115,9 @@ function deduplicate(items) {
     const name = String(item.generic_name).trim().toLowerCase();
     if (names.has(name)) {
       warnings.push({
-        code: 'DUPLICATE_ACTIVE_INGREDIENT', severity: 'warning', drug_id: item.drug_id,
+        code: 'DUPLICATE_ACTIVE_INGREDIENT',
+        severity: 'warning',
+        drug_id: item.drug_id,
         message: `${item.generic_name} was selected more than once. Only one entry is scheduled.`,
       });
     } else {
@@ -116,9 +129,10 @@ function deduplicate(items) {
 }
 
 function explanation(item, time, shift) {
-  let anchor = item.schedule_basis === 'PATIENT_LABEL'
-    ? 'how often you confirmed from the medicine label'
-    : 'the checked schedule information for this medicine';
+  let anchor =
+    item.schedule_basis === 'PATIENT_LABEL'
+      ? 'how often you confirmed from the medicine label'
+      : 'the checked schedule information for this medicine';
   if (item.food_rule === 'WITH_MEAL') anchor = 'a main meal';
   if (item.food_rule === 'BEFORE_MEAL') anchor = '30 minutes before a meal anchor';
   if (item.food_rule === 'AFTER_MEAL') anchor = '30 minutes after a meal anchor';
@@ -138,19 +152,33 @@ export function generateClinicalSchedule(items = [], interactions = []) {
   );
   if (!unique.length || unavailable.length) {
     return {
-      schedule: [], rationale: [], can_save: false,
-      warnings: [...warnings, ...unavailable.map((item) => ({
-        code: 'VERIFIED_RULE_UNAVAILABLE', severity: 'blocking', drug_id: item.drug_id,
-        message: `A complete verified frequency and daily reminder limit is unavailable for ${item.generic_name}.`,
-      }))],
-      algorithm: 'DETERMINISTIC_CSP_ANCHOR_V1', nodes_evaluated: 0,
+      schedule: [],
+      rationale: [],
+      can_save: false,
+      warnings: [
+        ...warnings,
+        ...unavailable.map((item) => ({
+          code: 'VERIFIED_RULE_UNAVAILABLE',
+          severity: 'blocking',
+          drug_id: item.drug_id,
+          message: `A complete verified frequency and daily reminder limit is unavailable for ${item.generic_name}.`,
+        })),
+      ],
+      algorithm: 'DETERMINISTIC_CSP_ANCHOR_V1',
+      nodes_evaluated: 0,
     };
   }
 
-  const interactionMap = new Map(interactions.map((rule) => [pairKey(rule.drug_a_id, rule.drug_b_id), rule]));
+  const interactionMap = new Map(
+    interactions.map((rule) => [pairKey(rule.drug_a_id, rule.drug_b_id), rule])
+  );
   const domains = unique
     .map((item) => ({ item, candidates: domainsFor(item) }))
-    .sort((a, b) => a.candidates.length - b.candidates.length || String(a.item.drug_id).localeCompare(String(b.item.drug_id)));
+    .sort(
+      (a, b) =>
+        a.candidates.length - b.candidates.length ||
+        String(a.item.drug_id).localeCompare(String(b.item.drug_id))
+    );
   let best = null;
   let nodes = 0;
   function search(index, placed, choices, deviation) {
@@ -163,35 +191,56 @@ export function generateClinicalSchedule(items = [], interactions = []) {
     const domain = domains[index];
     for (const candidate of domain.candidates) {
       if (!compatible(domain.item, candidate, placed, interactionMap)) continue;
-      search(index + 1,
+      search(
+        index + 1,
         [...placed, ...candidate.times.map((time) => ({ time, drug_id: domain.item.drug_id }))],
-        [...choices, { item: domain.item, candidate }], deviation + candidate.deviation);
+        [...choices, { item: domain.item, candidate }],
+        deviation + candidate.deviation
+      );
     }
   }
   search(0, [], [], 0);
   if (!best) {
     return {
-      schedule: [], rationale: [], can_save: false, algorithm: 'DETERMINISTIC_CSP_ANCHOR_V1', nodes_evaluated: nodes,
-      warnings: [...warnings, {
-        code: 'NO_CONFLICT_FREE_SOLUTION', severity: 'blocking',
-        message: 'PharMate could not create reminder times that follow all the available instructions. Check how often your label or prescription says to take the medicine. If you are unsure, ask your pharmacist.',
-      }],
+      schedule: [],
+      rationale: [],
+      can_save: false,
+      algorithm: 'DETERMINISTIC_CSP_ANCHOR_V1',
+      nodes_evaluated: nodes,
+      warnings: [
+        ...warnings,
+        {
+          code: 'NO_CONFLICT_FREE_SOLUTION',
+          severity: 'blocking',
+          message:
+            'PharMate could not create reminder times that follow all the available instructions. Check how often your label or prescription says to take the medicine. If you are unsure, ask your pharmacist.',
+        },
+      ],
     };
   }
 
-  const doses = best.choices.flatMap(({ item, candidate }) => candidate.times.map((time) => ({
-    time: clock(time), minute: ((time % DAY) + DAY) % DAY,
-    medicine: {
-      drug_id: item.drug_id, name: item.generic_name,
-      strength: item.strength || item.default_strength, form: item.dosage_form,
-      frequency: item.standard_frequency, food_instruction: item.food_instruction,
-      dosage_instruction: item.dosage_instruction, start_date: item.start_date,
-      quantity_on_hand: item.quantity_on_hand, quantity_unit: item.quantity_unit,
-      label_direction: item.label_direction,
-      guidance_do: item.guidance_do, guidance_dont: item.guidance_dont,
-    },
-    rationale: explanation(item, time, candidate.shift),
-  })));
+  const doses = best.choices.flatMap(({ item, candidate }) =>
+    candidate.times.map((time) => ({
+      time: clock(time),
+      minute: ((time % DAY) + DAY) % DAY,
+      medicine: {
+        drug_id: item.drug_id,
+        name: item.generic_name,
+        strength: item.strength || item.default_strength,
+        form: item.dosage_form,
+        frequency: item.standard_frequency,
+        food_instruction: item.food_instruction,
+        dosage_instruction: item.dosage_instruction,
+        start_date: item.start_date,
+        quantity_on_hand: item.quantity_on_hand,
+        quantity_unit: item.quantity_unit,
+        label_direction: item.label_direction,
+        guidance_do: item.guidance_do,
+        guidance_dont: item.guidance_dont,
+      },
+      rationale: explanation(item, time, candidate.shift),
+    }))
+  );
   doses.sort((a, b) => a.minute - b.minute || a.medicine.name.localeCompare(b.medicine.name));
   const schedule = [];
   for (const dose of doses) {
@@ -201,8 +250,16 @@ export function generateClinicalSchedule(items = [], interactions = []) {
     else schedule.push({ time: dose.time, minute: dose.minute, medicines: [medicine] });
   }
   return {
-    schedule, warnings, can_save: true, algorithm: 'DETERMINISTIC_CSP_ANCHOR_V1',
-    nodes_evaluated: nodes, objective_deviation_minutes: best.deviation,
-    rationale: doses.map((dose) => ({ drug_id: dose.medicine.drug_id, time: dose.time, explanation: dose.rationale })),
+    schedule,
+    warnings,
+    can_save: true,
+    algorithm: 'DETERMINISTIC_CSP_ANCHOR_V1',
+    nodes_evaluated: nodes,
+    objective_deviation_minutes: best.deviation,
+    rationale: doses.map((dose) => ({
+      drug_id: dose.medicine.drug_id,
+      time: dose.time,
+      explanation: dose.rationale,
+    })),
   };
 }

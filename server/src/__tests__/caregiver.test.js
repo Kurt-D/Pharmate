@@ -57,7 +57,9 @@ beforeAll(async () => {
     .set(auth(caregiverToken))
     .send({ code: invite.body.code });
   expect(link.status).toBe(202);
-  const requests = await request(app).get('/api/patient/caregiver-requests').set(auth(patientToken));
+  const requests = await request(app)
+    .get('/api/patient/caregiver-requests')
+    .set(auth(patientToken));
   expect(requests.body).toHaveLength(1);
   const approved = await request(app)
     .post(`/api/patient/caregiver-requests/${requests.body[0].id}/decision`)

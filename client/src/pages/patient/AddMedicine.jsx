@@ -674,7 +674,10 @@ export function LegacyAddMedicine() {
             </select>
             <small>
               {selectedDrug?.dosage_form
-                ? tr('Form matched to the selected medicine record.', 'Ang uri ay batay sa napiling tala ng gamot.')
+                ? tr(
+                    'Form matched to the selected medicine record.',
+                    'Ang uri ay batay sa napiling tala ng gamot.'
+                  )
                 : 'Tablet, Capsule, Syrup, Injection'}
             </small>
           </div>
@@ -862,7 +865,11 @@ export function LegacyAddMedicine() {
                 <div className="pm-medication-time-entry">
                   {times.map((selectedTime, index) => (
                     <div key={index}>
-                      <FriendlyTimePicker onChange={(value) => updateTime(index, value)} tr={tr} value={selectedTime} />
+                      <FriendlyTimePicker
+                        onChange={(value) => updateTime(index, value)}
+                        tr={tr}
+                        value={selectedTime}
+                      />
                       {times.length > 1 && (
                         <button
                           aria-label={tr('Remove time', 'Alisin ang oras')}

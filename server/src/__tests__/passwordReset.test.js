@@ -88,7 +88,9 @@ describe('PIN password recovery', () => {
   test('resets once, revokes sessions, and clears account lockout state', async () => {
     const email = `reset.sessions.${Date.now()}@test.pharmate`;
     const user = await register(email);
-    const login = await request(app).post('/api/auth/login').send({ email, password: OLD_PASSWORD });
+    const login = await request(app)
+      .post('/api/auth/login')
+      .send({ email, password: OLD_PASSWORD });
     const { pin } = await requestPin(email);
     const verified = await verifyPin(email, pin);
     expect(verified.status).toBe(200);

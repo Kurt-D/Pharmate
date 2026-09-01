@@ -315,11 +315,14 @@ export default function CaregiverPortal() {
     .filter(Boolean)
     .join(' ');
 
-  const changePage = useCallback((page) => {
-    setActivePage(page);
-    navigate(`/caregiver/${page}`);
-    window.scrollTo({ top: 0, behavior: accessibility.reduceMotion ? 'auto' : 'smooth' });
-  }, [accessibility.reduceMotion, navigate]);
+  const changePage = useCallback(
+    (page) => {
+      setActivePage(page);
+      navigate(`/caregiver/${page}`);
+      window.scrollTo({ top: 0, behavior: accessibility.reduceMotion ? 'auto' : 'smooth' });
+    },
+    [accessibility.reduceMotion, navigate]
+  );
 
   const handleTourStepChange = useCallback(
     (step) => {
@@ -359,7 +362,9 @@ export default function CaregiverPortal() {
                   timeline={timeline}
                   previewMode={previewMode}
                   patientLabel={selectedPatient?.displayLabel}
-                  notificationCount={caregiverNotifications.filter((item) => item.status === 'unseen').length}
+                  notificationCount={
+                    caregiverNotifications.filter((item) => item.status === 'unseen').length
+                  }
                   onOpenNotifications={readCaregiverNotifications}
                   realtimeStatus={realtimeStatus}
                   onVoiceReminder={(dose) =>

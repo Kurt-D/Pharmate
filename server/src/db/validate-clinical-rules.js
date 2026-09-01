@@ -23,20 +23,43 @@ const [duplicateVariants] = await pool.execute(
 
 const variantsByDrug = new Map(variantRows.map((row) => [row.drug_id, Number(row.count)]));
 const checked = medicines.map((medicine) => ({ medicine, result: checkClinicalRule(medicine) }));
-const hasAnchor = (medicine) => ['WITH_MEAL','EMPTY_STOMACH','BEFORE_MEAL','AFTER_MEAL','BEDTIME']
-  .includes(String(medicine.food_rule || ''));
+const hasAnchor = (medicine) =>
+  ['WITH_MEAL', 'EMPTY_STOMACH', 'BEFORE_MEAL', 'AFTER_MEAL', 'BEDTIME'].includes(
+    String(medicine.food_rule || '')
+  );
 const incompleteCatalog = checked.filter(({ medicine }) => medicine.catalog_status !== 'VERIFIED');
-const verified = checked.filter(({ medicine, result }) => medicine.clinical_rule_status === 'VERIFIED' && result.valid);
-const invalidVerified = checked.filter(({ medicine, result }) => medicine.clinical_rule_status === 'VERIFIED' && !result.valid);
-const missingEvidence = checked.filter(({ result }) => result.missing_fields.some((field) =>
-  ['evidence_source_url','clinical_source_name','source_revision_date','evidence_reviewed_at'].includes(field)));
-const missingIntervals = checked.filter(({ medicine }) => !hasAnchor(medicine)
-  && !(Number(medicine.min_interval_hours) > 0));
-const contradictory = checked.filter(({ result }) => result.conflicts.some((code) =>
-  ['daily_limit_does_not_match_frequency','minimum_interval_exceeds_frequency_interval',
-    'frequency_not_in_supported_codes'].includes(code)));
-const invalidLinks = checked.filter(({ medicine }) => medicine.evidence_source_url
-  && !/^https:\/\//i.test(String(medicine.evidence_source_url)));
+const verified = checked.filter(
+  ({ medicine, result }) => medicine.clinical_rule_status === 'VERIFIED' && result.valid
+);
+const invalidVerified = checked.filter(
+  ({ medicine, result }) => medicine.clinical_rule_status === 'VERIFIED' && !result.valid
+);
+const missingEvidence = checked.filter(({ result }) =>
+  result.missing_fields.some((field) =>
+    [
+      'evidence_source_url',
+      'clinical_source_name',
+      'source_revision_date',
+      'evidence_reviewed_at',
+    ].includes(field)
+  )
+);
+const missingIntervals = checked.filter(
+  ({ medicine }) => !hasAnchor(medicine) && !(Number(medicine.min_interval_hours) > 0)
+);
+const contradictory = checked.filter(({ result }) =>
+  result.conflicts.some((code) =>
+    [
+      'daily_limit_does_not_match_frequency',
+      'minimum_interval_exceeds_frequency_interval',
+      'frequency_not_in_supported_codes',
+    ].includes(code)
+  )
+);
+const invalidLinks = checked.filter(
+  ({ medicine }) =>
+    medicine.evidence_source_url && !/^https:\/\//i.test(String(medicine.evidence_source_url))
+);
 const missingRuleRecords = checked.filter(({ medicine }) => !variantsByDrug.has(medicine.id));
 
 const report = {
@@ -61,13 +84,17 @@ const report = {
     eligible_for_rule_based_scheduling: verified.length,
     limited_to_label_or_manual_scheduling: medicines.length - verified.length,
   },
-  ...(!summaryOnly && { attention: checked.filter(({ result }) => !result.valid).map(({ medicine, result }) => ({
-    id: medicine.id,
-    medicine: medicine.generic_name,
-    status: medicine.clinical_rule_status,
-    missing_fields: result.missing_fields,
-    conflicts: result.conflicts,
-  })) }),
+  ...(!summaryOnly && {
+    attention: checked
+      .filter(({ result }) => !result.valid)
+      .map(({ medicine, result }) => ({
+        id: medicine.id,
+        medicine: medicine.generic_name,
+        status: medicine.clinical_rule_status,
+        missing_fields: result.missing_fields,
+        conflicts: result.conflicts,
+      })),
+  }),
   ...(!summaryOnly && { duplicate_variants: duplicateVariants }),
 };
 

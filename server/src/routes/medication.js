@@ -13,8 +13,10 @@ const router = Router();
 router.use(requireAuth, requireRole('patient'));
 
 const FOOD_LABELS = {
-  WITH_MEAL: 'Take with a meal', EMPTY_STOMACH: 'Take on an empty stomach',
-  BEFORE_MEAL: 'Take 30 minutes before a meal', AFTER_MEAL: 'Take 30 minutes after a meal',
+  WITH_MEAL: 'Take with a meal',
+  EMPTY_STOMACH: 'Take on an empty stomach',
+  BEFORE_MEAL: 'Take 30 minutes before a meal',
+  AFTER_MEAL: 'Take 30 minutes after a meal',
   BEDTIME: 'Take at bedtime',
   NONE: 'No food instruction is stored in PharMate. Follow your medicine label or prescription.',
 };
@@ -32,10 +34,14 @@ function treatmentDateKeys(startDate, endDate, maximumDays = 366) {
   return dates;
 }
 const LABEL_FREQUENCIES = Object.freeze({
-  QD: { daily: 1, interval: 0 }, BID: { daily: 2, interval: 12 },
-  TID: { daily: 3, interval: 0 }, QID: { daily: 4, interval: 0 },
-  Q4H: { daily: 6, interval: 4 }, Q6H: { daily: 4, interval: 6 },
-  Q8H: { daily: 3, interval: 8 }, Q12H: { daily: 2, interval: 12 },
+  QD: { daily: 1, interval: 0 },
+  BID: { daily: 2, interval: 12 },
+  TID: { daily: 3, interval: 0 },
+  QID: { daily: 4, interval: 0 },
+  Q4H: { daily: 6, interval: 4 },
+  Q6H: { daily: 4, interval: 6 },
+  Q8H: { daily: 3, interval: 8 },
+  Q12H: { daily: 2, interval: 12 },
   BEDTIME: { daily: 1, interval: 0 },
 });
 
@@ -55,8 +61,12 @@ function idsFrom(body) {
       entry_method: String(record?.entry_method || 'MANUAL').toUpperCase(),
       ocr_confidence: record?.ocr_confidence,
       patient_confirmed: record?.patient_confirmed === true,
-      label_frequency: String(record?.label_frequency || '').trim().toUpperCase(),
-      label_food_instruction: String(record?.label_food_instruction || 'NONE').trim().toUpperCase(),
+      label_frequency: String(record?.label_frequency || '')
+        .trim()
+        .toUpperCase(),
+      label_food_instruction: String(record?.label_food_instruction || 'NONE')
+        .trim()
+        .toUpperCase(),
       purpose: String(record?.purpose || '').trim(),
       release_type_snapshot: String(record?.release_type_snapshot || '').trim(),
       refill_reminders_enabled: record?.refill_reminders_enabled === true,
@@ -94,7 +104,8 @@ async function loadRules(records, executor = pool) {
       strength: custom || row.default_strength,
       intake_error: validated.error || null,
       ...(validated.value || {}),
-      food_instruction: row.administration_instruction || row.meal_instruction || FOOD_LABELS[row.food_rule],
+      food_instruction:
+        row.administration_instruction || row.meal_instruction || FOOD_LABELS[row.food_rule],
       label_frequency: request?.label_frequency,
       label_food_instruction: request?.label_food_instruction,
       first_dose_time: request?.first_dose_time,
@@ -121,10 +132,17 @@ async function generateFromRequest(body, executor = pool) {
   const requested = idsFrom(body);
   if (!requested.length) return { error: 'Select at least one medication.', status: 400 };
   if (new Set(requested.map((item) => item.drug_id)).size !== requested.length) {
-    return { error: 'The same active ingredient was added more than once. Remove the duplicate medicine before continuing.', status: 409 };
+    return {
+      error:
+        'The same active ingredient was added more than once. Remove the duplicate medicine before continuing.',
+      status: 409,
+    };
   }
   const rules = await loadRules(requested, executor);
-  if (new Set(requested.map((item) => item.drug_id)).size !== new Set(rules.map((item) => item.drug_id)).size) {
+  if (
+    new Set(requested.map((item) => item.drug_id)).size !==
+    new Set(rules.map((item) => item.drug_id)).size
+  ) {
     return { error: 'One or more selected medications are unavailable.', status: 400 };
   }
   for (const rule of rules) {
@@ -165,7 +183,11 @@ async function intakeFromRequest(body, executor = pool) {
   const requested = idsFrom(body);
   if (!requested.length) return { error: 'Select at least one medication.', status: 400 };
   if (new Set(requested.map((item) => item.drug_id)).size !== requested.length) {
-    return { error: 'The same active ingredient was added more than once. Remove the duplicate medicine before continuing.', status: 409 };
+    return {
+      error:
+        'The same active ingredient was added more than once. Remove the duplicate medicine before continuing.',
+      status: 409,
+    };
   }
   const rules = await loadRules(requested, executor);
   if (rules.length !== requested.length) {
@@ -254,7 +276,10 @@ async function upsertMedicationIntakes(executor, patientId, rules) {
 }
 
 router.get('/search', async (req, res) => {
-  const query = String(req.query.q || '').trim().toLowerCase().slice(0, 100);
+  const query = String(req.query.q || '')
+    .trim()
+    .toLowerCase()
+    .slice(0, 100);
   if (query.length < 2) return res.json([]);
   const like = `%${query}%`;
   const [rows] = await pool.execute(
@@ -290,15 +315,20 @@ router.get('/search', async (req, res) => {
      LIMIT 20`,
     [like, like, query, query, query, `${query}%`]
   );
-  res.json(rows.map((row) => ({
-    ...row,
-    food_instruction: row.administration_instruction || row.meal_instruction || FOOD_LABELS[row.food_rule],
-    automation_ready: row.clinical_rule_status === 'VERIFIED' && checkClinicalRule({
+  res.json(
+    rows.map((row) => ({
       ...row,
-      common_strength: row.default_strength,
-      frequency_default: row.standard_frequency,
-    }).valid,
-  })));
+      food_instruction:
+        row.administration_instruction || row.meal_instruction || FOOD_LABELS[row.food_rule],
+      automation_ready:
+        row.clinical_rule_status === 'VERIFIED' &&
+        checkClinicalRule({
+          ...row,
+          common_strength: row.default_strength,
+          frequency_default: row.standard_frequency,
+        }).valid,
+    }))
+  );
 });
 
 router.post('/generate-schedule', async (req, res) => {
@@ -322,8 +352,11 @@ router.post('/save-intake', async (req, res) => {
     persisted = await upsertMedicationIntakes(conn, req.user.sub, rules);
     await recordAudit({
       actor: { id: req.user.sub, role: 'patient' },
-      action: 'MEDICATION_INTAKE_CONFIRMED', entityType: 'medication_intake',
-      patientId: req.user.sub, metadata: { medication_count: rules.length }, executor: conn,
+      action: 'MEDICATION_INTAKE_CONFIRMED',
+      entityType: 'medication_intake',
+      patientId: req.user.sub,
+      metadata: { medication_count: rules.length },
+      executor: conn,
     });
     await conn.commit();
   } catch (error) {
@@ -337,7 +370,9 @@ router.post('/save-intake', async (req, res) => {
     const medicationId = persisted.medicationIds.get(rule.drug_id);
     await medicationChanged(
       req.user.sub,
-      persisted.createdMedicationIds.has(medicationId) ? 'MEDICATION_CREATED' : 'MEDICATION_UPDATED',
+      persisted.createdMedicationIds.has(medicationId)
+        ? 'MEDICATION_CREATED'
+        : 'MEDICATION_UPDATED',
       medicationId,
       rule.generic_name
     );
@@ -364,7 +399,13 @@ router.post('/save-reminders', async (req, res) => {
     }
     if (!generated.result.can_save) {
       await conn.rollback();
-      return res.status(409).json({ error: 'PharMate could not create reminder times that follow all the available instructions. Check your medicine label or prescription.', ...generated.result });
+      return res
+        .status(409)
+        .json({
+          error:
+            'PharMate could not create reminder times that follow all the available instructions. Check your medicine label or prescription.',
+          ...generated.result,
+        });
     }
     const { medicationIds, createdMedicationIds } = await upsertMedicationIntakes(
       conn,
@@ -385,8 +426,15 @@ router.post('/save-reminders', async (req, res) => {
             `INSERT INTO medication_schedules
               (id,medication_id,patient_id,scheduled_time,generated_reason,schedule_source,is_confirmed,schedule_version,status)
              VALUES (?,?,?,CONCAT(?, ' ', ?, ':00'),?,'SUGGESTED',1,?,'scheduled')`,
-            [uuidv4(), medicationIds.get(medicine.drug_id), req.user.sub,
-              treatmentDate, group.time, medicine.rationale, Number(versionRow.version)]
+            [
+              uuidv4(),
+              medicationIds.get(medicine.drug_id),
+              req.user.sub,
+              treatmentDate,
+              group.time,
+              medicine.rationale,
+              Number(versionRow.version),
+            ]
           );
           count += 1;
         }
@@ -413,7 +461,14 @@ router.post('/save-reminders', async (req, res) => {
       );
     }
     await scheduleChanged(req.user.sub, Number(versionRow.version));
-    res.status(201).json({ message: 'Schedule created successfully', count, version: Number(versionRow.version), schedule: generated.result.schedule });
+    res
+      .status(201)
+      .json({
+        message: 'Schedule created successfully',
+        count,
+        version: Number(versionRow.version),
+        schedule: generated.result.schedule,
+      });
   } catch (error) {
     await conn.rollback();
     if (error.status) return res.status(error.status).json({ error: error.message });

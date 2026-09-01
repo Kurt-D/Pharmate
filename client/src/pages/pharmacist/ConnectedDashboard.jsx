@@ -79,12 +79,18 @@ export default function ConnectedPharmacistDashboard() {
         </button>
       </header>
 
-      {error ? <div className="ph-connected-error" role="alert">{error}</div> : null}
+      {error ? (
+        <div className="ph-connected-error" role="alert">
+          {error}
+        </div>
+      ) : null}
 
       <div className="ph-connected-grid" aria-busy={loading}>
         {CARDS.map(([key, label, Icon, path]) => (
           <button key={key} onClick={() => navigate(path)} type="button">
-            <span><Icon size={24} /></span>
+            <span>
+              <Icon size={24} />
+            </span>
             <strong>{loading ? '—' : Number(summary[key] || 0)}</strong>
             <small>{label}</small>
           </button>

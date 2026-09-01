@@ -87,7 +87,10 @@ export async function sendPush(token, { title, body, data = {}, highPriority = f
     const strData = Object.fromEntries(Object.entries(data).map(([k, v]) => [k, String(v)]));
     const message = { token, notification: { title, body }, data: strData };
     if (highPriority) {
-      message.android = { priority: 'high', notification: { priority: 'high', defaultSound: true } };
+      message.android = {
+        priority: 'high',
+        notification: { priority: 'high', defaultSound: true },
+      };
       message.apns = { headers: { 'apns-priority': '10' }, payload: { aps: { sound: 'default' } } };
     }
     await messaging.send(message);

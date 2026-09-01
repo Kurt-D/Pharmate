@@ -2,7 +2,15 @@ import { v4 as uuidv4 } from 'uuid';
 import { pool } from '../db/connection.js';
 import { publishUser } from './realtimeEvents.js';
 
-export async function createPortalNotification({ userId, type, title, body, actionPath = null, eventKey = null, executor = pool }) {
+export async function createPortalNotification({
+  userId,
+  type,
+  title,
+  body,
+  actionPath = null,
+  eventKey = null,
+  executor = pool,
+}) {
   const id = uuidv4();
   const [result] = await executor.execute(
     `INSERT IGNORE INTO portal_notifications
@@ -19,8 +27,11 @@ export async function createPortalNotification({ userId, type, title, body, acti
 }
 
 export async function notifyRole(role, notification, executor = pool) {
-  const [users] = await executor.execute('SELECT id FROM users WHERE role=? AND is_active=1', [role]);
-  for (const user of users) await createPortalNotification({ ...notification, userId: user.id, executor });
+  const [users] = await executor.execute('SELECT id FROM users WHERE role=? AND is_active=1', [
+    role,
+  ]);
+  for (const user of users)
+    await createPortalNotification({ ...notification, userId: user.id, executor });
   return users.length;
 }
 
@@ -30,6 +41,7 @@ export async function notifyLinkedCaregivers(patientId, notification, executor =
      WHERE patient_id=? AND status='active'`,
     [patientId]
   );
-  for (const link of links) await createPortalNotification({ ...notification, userId: link.caregiver_id, executor });
+  for (const link of links)
+    await createPortalNotification({ ...notification, userId: link.caregiver_id, executor });
   return links.length;
 }

@@ -32,13 +32,16 @@ router.get('/audit-events', async (req, res) => {
      ORDER BY ae.created_at DESC LIMIT ?`,
     [limit]
   );
-  res.json(rows.map((row) => ({
-    ...row,
-    metadata: typeof row.metadata_json === 'string'
-      ? JSON.parse(row.metadata_json || '{}')
-      : row.metadata_json || {},
-    metadata_json: undefined,
-  })));
+  res.json(
+    rows.map((row) => ({
+      ...row,
+      metadata:
+        typeof row.metadata_json === 'string'
+          ? JSON.parse(row.metadata_json || '{}')
+          : row.metadata_json || {},
+      metadata_json: undefined,
+    }))
+  );
 });
 
 function countByStatus(rows) {
@@ -132,7 +135,9 @@ router.post('/medicines', async (req, res) => {
   );
   await recordAudit({
     actor: { id: req.user.sub, role: 'admin' },
-    action: 'FORMULARY_MEDICINE_CREATED', entityType: 'drug_reference', entityId: id,
+    action: 'FORMULARY_MEDICINE_CREATED',
+    entityType: 'drug_reference',
+    entityId: id,
     metadata: { generic_name: genericName },
   });
   publishRole('pharmacist', 'FORMULARY_UPDATED', { action: 'created', drug_id: id });
@@ -168,7 +173,9 @@ router.put('/medicines/:id', async (req, res) => {
   );
   await recordAudit({
     actor: { id: req.user.sub, role: 'admin' },
-    action: 'FORMULARY_MEDICINE_UPDATED', entityType: 'drug_reference', entityId: req.params.id,
+    action: 'FORMULARY_MEDICINE_UPDATED',
+    entityType: 'drug_reference',
+    entityId: req.params.id,
   });
   publishRole('pharmacist', 'FORMULARY_UPDATED', { action: 'updated', drug_id: req.params.id });
   res.json({ id: req.params.id });
@@ -189,7 +196,9 @@ router.delete('/medicines/:id', async (req, res) => {
   if (!result.affectedRows) return res.status(404).json({ error: 'Medicine not found' });
   await recordAudit({
     actor: { id: req.user.sub, role: 'admin' },
-    action: 'FORMULARY_MEDICINE_DELETED', entityType: 'drug_reference', entityId: req.params.id,
+    action: 'FORMULARY_MEDICINE_DELETED',
+    entityType: 'drug_reference',
+    entityId: req.params.id,
   });
   publishRole('pharmacist', 'FORMULARY_UPDATED', { action: 'deleted', drug_id: req.params.id });
   res.status(204).end();
@@ -205,17 +214,23 @@ router.put('/medicines/:id/availability', async (req, res) => {
   if (r.affectedRows === 0) return res.status(404).json({ error: 'Medicine not found' });
   await recordAudit({
     actor: { id: req.user.sub, role: 'admin' },
-    action: 'FORMULARY_AVAILABILITY_UPDATED', entityType: 'drug_reference', entityId: req.params.id,
+    action: 'FORMULARY_AVAILABILITY_UPDATED',
+    entityType: 'drug_reference',
+    entityId: req.params.id,
     metadata: { availability: Boolean(available) },
   });
   publishRole('pharmacist', 'FORMULARY_UPDATED', {
-    action: 'availability', drug_id: req.params.id, availability: Boolean(available),
+    action: 'availability',
+    drug_id: req.params.id,
+    availability: Boolean(available),
   });
   publishRole('admin', 'INVENTORY_UPDATED', {
-    drug_id: req.params.id, availability: Boolean(available),
+    drug_id: req.params.id,
+    availability: Boolean(available),
   });
   publishRole('pharmacist', 'INVENTORY_UPDATED', {
-    drug_id: req.params.id, availability: Boolean(available),
+    drug_id: req.params.id,
+    availability: Boolean(available),
   });
   res.json({ id: req.params.id, availability: available });
 });
@@ -312,7 +327,9 @@ router.put('/users/:id/active', async (req, res) => {
   if (r.affectedRows === 0) return res.status(404).json({ error: 'User not found' });
   await recordAudit({
     actor: { id: req.user.sub, role: 'admin' },
-    action: 'USER_ACTIVE_STATUS_UPDATED', entityType: 'user', entityId: req.params.id,
+    action: 'USER_ACTIVE_STATUS_UPDATED',
+    entityType: 'user',
+    entityId: req.params.id,
     metadata: { is_active: Boolean(active) },
   });
   publishUser(req.params.id, 'ACCOUNT_STATUS_CHANGED', { is_active: Boolean(active) });
@@ -372,7 +389,9 @@ router.post('/orders/:kind/:id/status', async (req, res) => {
   }
 
   const table = kind === 'delivery' ? 'delivery_requests' : 'refill_requests';
-  const [[order]] = await pool.execute(`SELECT status, patient_id FROM ${table} WHERE id = ?`, [id]);
+  const [[order]] = await pool.execute(`SELECT status, patient_id FROM ${table} WHERE id = ?`, [
+    id,
+  ]);
   if (!order) return res.status(404).json({ error: 'Order not found' });
 
   const requestedStatus = String(req.body?.status || '');
@@ -398,8 +417,11 @@ router.post('/orders/:kind/:id/status', async (req, res) => {
   if (result.error === 'not_found') return res.status(404).json({ error: 'Order not found' });
   await recordAudit({
     actor: { id: req.user.sub, role: 'admin' },
-    action: 'ORDER_STATUS_UPDATED', entityType: `${kind}_order`, entityId: id,
-    patientId: order.patient_id, metadata: { from: order.status, to: requestedStatus },
+    action: 'ORDER_STATUS_UPDATED',
+    entityType: `${kind}_order`,
+    entityId: id,
+    patientId: order.patient_id,
+    metadata: { from: order.status, to: requestedStatus },
   });
   await orderChanged({ patientId: order.patient_id, kind, orderId: id, status: requestedStatus });
   res.json(result);

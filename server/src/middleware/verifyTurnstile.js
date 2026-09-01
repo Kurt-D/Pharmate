@@ -17,14 +17,14 @@ function developmentBypassEnabled() {
 }
 
 function provider() {
-  return String(process.env.CAPTCHA_PROVIDER || 'turnstile').trim().toLowerCase();
+  return String(process.env.CAPTCHA_PROVIDER || 'turnstile')
+    .trim()
+    .toLowerCase();
 }
 
 function signingSecret() {
   return (
-    process.env.CAPTCHA_SIGNING_SECRET ||
-    process.env.RESET_TOKEN_SECRET ||
-    process.env.JWT_SECRET
+    process.env.CAPTCHA_SIGNING_SECRET || process.env.RESET_TOKEN_SECRET || process.env.JWT_SECRET
   );
 }
 
@@ -135,9 +135,7 @@ function verifySelfHosted(req, res, next) {
 }
 
 async function verifyTurnstile(req, res, next) {
-  const token = String(
-    req.body?.['cf-turnstile-response'] || req.body?.captchaToken || ''
-  ).trim();
+  const token = String(req.body?.['cf-turnstile-response'] || req.body?.captchaToken || '').trim();
   const secret = process.env.TURNSTILE_SECRET_KEY?.trim();
   if (!secret || !token || token.length > 2048) return res.status(400).json(FAILURE);
 

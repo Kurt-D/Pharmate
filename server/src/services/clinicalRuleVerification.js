@@ -1,5 +1,10 @@
 const ALLOWED_FOOD_RULES = new Set([
-  'WITH_MEAL', 'EMPTY_STOMACH', 'BEFORE_MEAL', 'AFTER_MEAL', 'BEDTIME', 'NONE',
+  'WITH_MEAL',
+  'EMPTY_STOMACH',
+  'BEFORE_MEAL',
+  'AFTER_MEAL',
+  'BEDTIME',
+  'NONE',
 ]);
 
 function supportedFrequency(value) {
@@ -7,7 +12,9 @@ function supportedFrequency(value) {
 }
 
 function frequencyIntervalHours(value) {
-  const code = String(value || '').trim().toUpperCase();
+  const code = String(value || '')
+    .trim()
+    .toUpperCase();
   const named = { QD: 24, BID: 12, TID: 8, QID: 6, BEDTIME: 24 };
   if (named[code]) return named[code];
   const match = code.match(/^Q(\d{1,2})H$/);
@@ -15,7 +22,9 @@ function frequencyIntervalHours(value) {
 }
 
 function expectedDailyDoses(value) {
-  const code = String(value || '').trim().toUpperCase();
+  const code = String(value || '')
+    .trim()
+    .toUpperCase();
   const named = { QD: 1, BID: 2, TID: 3, QID: 4, BEDTIME: 1 };
   if (named[code]) return named[code];
   const match = code.match(/^Q(\d{1,2})H$/);
@@ -72,17 +81,30 @@ export function checkClinicalRule(rule = {}) {
     conflicts.push('daily_limit_does_not_match_frequency');
   }
   const rawMinimum = rule.min_interval_hours ?? rule.default_interval_hours;
-  const minimum = rawMinimum === null || rawMinimum === '' || rawMinimum === undefined
-    ? null
-    : Number(rawMinimum);
-  const hasVerifiedAnchor = ['WITH_MEAL', 'EMPTY_STOMACH', 'BEFORE_MEAL', 'AFTER_MEAL', 'BEDTIME']
-    .includes(String(rule.food_rule || ''));
-  if ((!hasVerifiedAnchor && minimum === null)
-      || (minimum !== null && (!Number.isFinite(minimum) || minimum <= 0 || minimum > 24))) {
+  const minimum =
+    rawMinimum === null || rawMinimum === '' || rawMinimum === undefined
+      ? null
+      : Number(rawMinimum);
+  const hasVerifiedAnchor = [
+    'WITH_MEAL',
+    'EMPTY_STOMACH',
+    'BEFORE_MEAL',
+    'AFTER_MEAL',
+    'BEDTIME',
+  ].includes(String(rule.food_rule || ''));
+  if (
+    (!hasVerifiedAnchor && minimum === null) ||
+    (minimum !== null && (!Number.isFinite(minimum) || minimum <= 0 || minimum > 24))
+  ) {
     conflicts.push('invalid_minimum_interval');
   }
   const frequencyInterval = frequencyIntervalHours(rule.frequency_default);
-  if (frequencyInterval && minimum !== null && Number.isFinite(minimum) && minimum > frequencyInterval) {
+  if (
+    frequencyInterval &&
+    minimum !== null &&
+    Number.isFinite(minimum) &&
+    minimum > frequencyInterval
+  ) {
     conflicts.push('minimum_interval_exceeds_frequency_interval');
   }
   if (!ALLOWED_FOOD_RULES.has(String(rule.food_rule || ''))) conflicts.push('invalid_food_rule');
@@ -102,9 +124,16 @@ export function checkClinicalRule(rule = {}) {
 
 export function verificationSummary(rows = []) {
   const result = {
-    total: rows.length, catalog_verified: 0, schedule_verified: 0,
-    in_review: 0, unverified: 0, rejected: 0, retired: 0, schedule_retired: 0,
-    missing_evidence: 0, incomplete_rules: 0,
+    total: rows.length,
+    catalog_verified: 0,
+    schedule_verified: 0,
+    in_review: 0,
+    unverified: 0,
+    rejected: 0,
+    retired: 0,
+    schedule_retired: 0,
+    missing_evidence: 0,
+    incomplete_rules: 0,
   };
   for (const row of rows) {
     if (row.catalog_status === 'VERIFIED') result.catalog_verified += 1;
@@ -115,7 +144,11 @@ export function verificationSummary(rows = []) {
     if (row.clinical_rule_status === 'REJECTED') result.rejected += 1;
     if (row.clinical_rule_status === 'RETIRED') result.schedule_retired += 1;
     const check = checkClinicalRule(row);
-    if (check.missing_fields.some((field) => field.includes('source') || field === 'evidence_reviewed_at')) {
+    if (
+      check.missing_fields.some(
+        (field) => field.includes('source') || field === 'evidence_reviewed_at'
+      )
+    ) {
       result.missing_evidence += 1;
     }
     if (!check.valid) result.incomplete_rules += 1;

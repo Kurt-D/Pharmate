@@ -5,13 +5,9 @@ import { apiUrl } from '../config.js';
 
 const PROVIDER = (import.meta.env.VITE_CAPTCHA_PROVIDER || 'turnstile').trim().toLowerCase();
 const TURNSTILE_SITE_KEY = (import.meta.env.VITE_TURNSTILE_SITE_KEY || '').trim();
-const DEVELOPMENT_BYPASS =
-  import.meta.env.DEV && import.meta.env.VITE_DISABLE_CAPTCHA === 'true';
+const DEVELOPMENT_BYPASS = import.meta.env.DEV && import.meta.env.VITE_DISABLE_CAPTCHA === 'true';
 
-const CaptchaChallenge = forwardRef(function CaptchaChallenge(
-  { action, onChange, onError },
-  ref
-) {
+const CaptchaChallenge = forwardRef(function CaptchaChallenge({ action, onChange, onError }, ref) {
   const turnstileRef = useRef(null);
   const onChangeRef = useRef(onChange);
   const onErrorRef = useRef(onError);
@@ -53,17 +49,21 @@ const CaptchaChallenge = forwardRef(function CaptchaChallenge(
     }
   }, [loadSelfHosted]);
 
-  useImperativeHandle(ref, () => ({
-    reset() {
-      if (DEVELOPMENT_BYPASS) {
-        onChangeRef.current({ captchaToken: 'DEV_MODE_ACTIVE', captchaAnswer: '' });
-      } else {
-        onChangeRef.current({ captchaToken: '', captchaAnswer: '' });
-      }
-      if (!DEVELOPMENT_BYPASS && PROVIDER === 'self-hosted') loadSelfHosted();
-      else turnstileRef.current?.reset();
-    },
-  }), [loadSelfHosted]);
+  useImperativeHandle(
+    ref,
+    () => ({
+      reset() {
+        if (DEVELOPMENT_BYPASS) {
+          onChangeRef.current({ captchaToken: 'DEV_MODE_ACTIVE', captchaAnswer: '' });
+        } else {
+          onChangeRef.current({ captchaToken: '', captchaAnswer: '' });
+        }
+        if (!DEVELOPMENT_BYPASS && PROVIDER === 'self-hosted') loadSelfHosted();
+        else turnstileRef.current?.reset();
+      },
+    }),
+    [loadSelfHosted]
+  );
 
   if (DEVELOPMENT_BYPASS) return null;
 
@@ -72,8 +72,19 @@ const CaptchaChallenge = forwardRef(function CaptchaChallenge(
     return (
       <div className="auth-self-captcha" aria-label="Security verification">
         <div className="auth-self-captcha__image">
-          {imageSource ? <img src={imageSource} alt="Security verification characters" /> : <span>{loading ? 'Loading security check…' : 'Security check unavailable'}</span>}
-          <button type="button" onClick={loadSelfHosted} disabled={loading} aria-label="Get a new security challenge"><RefreshCw aria-hidden="true" /></button>
+          {imageSource ? (
+            <img src={imageSource} alt="Security verification characters" />
+          ) : (
+            <span>{loading ? 'Loading security check…' : 'Security check unavailable'}</span>
+          )}
+          <button
+            type="button"
+            onClick={loadSelfHosted}
+            disabled={loading}
+            aria-label="Get a new security challenge"
+          >
+            <RefreshCw aria-hidden="true" />
+          </button>
         </div>
         <label>
           <span>Enter the characters shown above</span>
@@ -95,7 +106,11 @@ const CaptchaChallenge = forwardRef(function CaptchaChallenge(
   }
 
   if (PROVIDER !== 'turnstile' || !TURNSTILE_SITE_KEY) {
-    return <div className="auth-security-notice" role="alert">Security verification is not configured. Contact the PharMate administrator.</div>;
+    return (
+      <div className="auth-security-notice" role="alert">
+        Security verification is not configured. Contact the PharMate administrator.
+      </div>
+    );
   }
 
   return (
@@ -111,7 +126,9 @@ const CaptchaChallenge = forwardRef(function CaptchaChallenge(
         }}
         options={{ action, appearance: 'always', refreshExpired: 'auto', theme: 'light' }}
       />
-      <span className="auth-turnstile-label"><ShieldCheck aria-hidden="true" /> Privacy-friendly security check</span>
+      <span className="auth-turnstile-label">
+        <ShieldCheck aria-hidden="true" /> Privacy-friendly security check
+      </span>
     </div>
   );
 });

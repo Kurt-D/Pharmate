@@ -19,7 +19,10 @@ async function login(email) {
 beforeAll(async () => {
   const patientEmail = `portal.patient.${suffix}@test.pharmate`;
   await request(app).post('/api/auth/register').send({
-    email: patientEmail, password: PASSWORD, role: 'patient', full_name: 'Portal Patient',
+    email: patientEmail,
+    password: PASSWORD,
+    role: 'patient',
+    full_name: 'Portal Patient',
   });
   patient = await login(patientEmail);
 
@@ -36,7 +39,11 @@ test('caregiver socket rooms are derived from active database links only', async
   expect(await authorizedRooms({ id: caregiver.id, role: 'caregiver' })).toEqual(
     expect.arrayContaining([`user:${caregiver.id}`, `caregiver:${caregiver.id}`])
   );
-  expect((await authorizedRooms({ id: caregiver.id, role: 'caregiver' })).some((room) => room.startsWith('caregiver_patient:'))).toBe(false);
+  expect(
+    (await authorizedRooms({ id: caregiver.id, role: 'caregiver' })).some((room) =>
+      room.startsWith('caregiver_patient:')
+    )
+  ).toBe(false);
 
   await pool.execute(
     `INSERT INTO caregiver_patients (id,caregiver_id,patient_id,relationship,status)
@@ -53,7 +60,14 @@ test('notification ownership prevents cross-account reads and mutations', async 
   await pool.execute(
     `INSERT INTO portal_notifications (id,user_id,type,title,body,event_key)
      VALUES (?,?,?,?,?,?)`,
-    [notificationId, caregiver.id, 'TEST', 'Caregiver notice', 'Private body', `test:${notificationId}`]
+    [
+      notificationId,
+      caregiver.id,
+      'TEST',
+      'Caregiver notice',
+      'Private body',
+      `test:${notificationId}`,
+    ]
   );
 
   const patientList = await request(app).get('/api/notifications').set(auth(patient.token));

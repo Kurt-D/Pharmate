@@ -31,10 +31,7 @@ function rewardForDay(days) {
 }
 
 async function ensureStreak(patientId, executor = pool) {
-  await executor.execute(
-    'INSERT IGNORE INTO patient_streaks (patient_id) VALUES (?)',
-    [patientId]
-  );
+  await executor.execute('INSERT IGNORE INTO patient_streaks (patient_id) VALUES (?)', [patientId]);
 }
 
 async function daySummary(patientId, dayKey, executor = pool) {
@@ -153,10 +150,10 @@ export async function getStreakStatus(patientId, now = new Date()) {
   const [summary, [[streak]], [[yesterdayResult]], [[reward]]] = await Promise.all([
     daySummary(patientId, today),
     pool.execute('SELECT * FROM patient_streaks WHERE patient_id = ?', [patientId]),
-    pool.execute(
-      'SELECT result FROM patient_streak_days WHERE patient_id = ? AND dose_date = ?',
-      [patientId, yesterday]
-    ),
+    pool.execute('SELECT result FROM patient_streak_days WHERE patient_id = ? AND dose_date = ?', [
+      patientId,
+      yesterday,
+    ]),
     pool.execute(
       `SELECT COUNT(*) AS count FROM patient_notifications
        WHERE patient_id = ? AND type = 'reward_earned' AND read_at IS NULL`,

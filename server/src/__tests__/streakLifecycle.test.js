@@ -2,10 +2,7 @@ import request from 'supertest';
 import { v4 as uuidv4 } from 'uuid';
 import app from '../index.js';
 import { pool } from '../db/connection.js';
-import {
-  evaluateStreakDay,
-  manilaDayKey,
-} from '../services/streakLifecycle.js';
+import { evaluateStreakDay, manilaDayKey } from '../services/streakLifecycle.js';
 
 const PASSWORD = 'TestPass@123';
 const stamp = Date.now();

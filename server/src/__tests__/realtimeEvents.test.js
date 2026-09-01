@@ -15,10 +15,7 @@ afterAll(async () => pool.end());
 
 test('a subscriber receives its private user events and role broadcasts', () => {
   const response = responseRecorder();
-  const unsubscribe = subscribeRealtime(
-    { sub: 'realtime-patient-1', role: 'patient' },
-    response
-  );
+  const unsubscribe = subscribeRealtime({ sub: 'realtime-patient-1', role: 'patient' }, response);
 
   publishUser('realtime-patient-1', 'streak-updated', { current_days: 3 });
   publishRole('patient', 'notification-updated', { unread_count: 2 });
