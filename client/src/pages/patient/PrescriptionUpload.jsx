@@ -2,6 +2,12 @@ import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { api, apiUpload } from '../../api.js';
 import { useLanguage } from '../../context/LanguageContext.jsx';
+import {
+  captureOcrImage,
+  OCR_CONFIDENCE_THRESHOLD,
+  recognizeMedicineImage,
+} from '../../lib/mlKitOcr.js';
+import { recordOcrEvaluation } from '../../lib/ocrTelemetry.js';
 
 // Upload a prescription photo for an RX medication (UC-03, D-K).
 // The patient paints black boxes over sensitive details; redaction is baked into
@@ -16,21 +22,19 @@ export default function PrescriptionUpload() {
   const navigate = useNavigate();
   const canvasRef = useRef(null);
   const imgRef = useRef(null);
-  const videoRef = useRef(null);
-  const streamRef = useRef(null);
   const boxesRef = useRef([]); // committed redaction boxes
   const drawStart = useRef(null);
 
   const [hasImage, setHasImage] = useState(false);
-  const [cameraOpen, setCameraOpen] = useState(false);
   const [cameraError, setCameraError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState(null); // { kind, message }
   const [ocrText, setOcrText] = useState('');
   const [ocrConfidence, setOcrConfidence] = useState(null);
   const [ocrBusy, setOcrBusy] = useState(false);
-  const [ocrProgress, setOcrProgress] = useState(0);
   const [ocrError, setOcrError] = useState('');
+  const [ocrScan, setOcrScan] = useState(null);
+  const [ocrReviewed, setOcrReviewed] = useState(false);
   const ocrFirst = !id;
   const [medicineName, setMedicineName] = useState('');
   const [strength, setStrength] = useState('');
@@ -64,41 +68,20 @@ export default function PrescriptionUpload() {
     return () => clearTimeout(timer);
   }, [medicineName, ocrFirst, selectedDrug]);
 
-  function suggestFields(text) {
-    const clean = String(text || '').trim();
-    if (!clean) return;
-    const lines = clean
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .filter(Boolean);
-    const dose = clean.match(/\b\d+(?:\.\d+)?\s*(?:mg|mcg|g|ml)\b/i)?.[0];
-    const formMatch = clean.match(/\b(tablet|capsule|syrup|injection)\b/i)?.[1];
+  function suggestFields(scan) {
+    const clean = String(scan?.text || '').trim();
+    const dose = scan?.fields?.strength;
+    const formMatch = scan?.fields?.formulation;
     let detectedFrequency = '';
     if (/three times|3\s*(?:x|times)|tid/i.test(clean)) detectedFrequency = 'three times daily';
     else if (/twice|two times|2\s*(?:x|times)|bid/i.test(clean)) detectedFrequency = 'twice daily';
     else if (/once|one time|1\s*(?:x|time)|daily|qd/i.test(clean)) detectedFrequency = 'once daily';
-    const candidate = lines
-      .find((line) => /[a-z]{4}/i.test(line))
-      ?.replace(/\b\d+(?:\.\d+)?\s*(?:mg|mcg|g|ml).*$/i, '')
-      .trim();
+    const candidate = scan?.fields?.name;
     if (candidate && !medicineName) setMedicineName(candidate);
     if (dose && !strength) setStrength(dose);
-    if (formMatch) setMedicineForm(formMatch[0].toUpperCase() + formMatch.slice(1).toLowerCase());
+    if (formMatch) setMedicineForm(formMatch);
     if (detectedFrequency) setFrequency(detectedFrequency);
   }
-
-  useEffect(() => {
-    if (cameraOpen && videoRef.current && streamRef.current) {
-      videoRef.current.srcObject = streamRef.current;
-      videoRef.current.play().catch(() => {});
-    }
-  }, [cameraOpen]);
-
-  useEffect(() => {
-    return () => {
-      streamRef.current?.getTracks().forEach((track) => track.stop());
-    };
-  }, []);
 
   function redraw(preview) {
     const canvas = canvasRef.current;
@@ -109,36 +92,28 @@ export default function PrescriptionUpload() {
     if (preview) ctx.fillRect(preview.x, preview.y, preview.w, preview.h);
   }
 
-  async function runOcr(imageSource) {
+  async function runOcr(media) {
     setOcrBusy(true);
     setOcrError('');
-    setOcrProgress(0);
     try {
-      const { createWorker } = await import('tesseract.js');
-      const worker = await createWorker('eng', 1, {
-        logger: (message) => {
-          if (message.status === 'recognizing text')
-            setOcrProgress(Math.round(message.progress * 100));
-        },
-      });
-      const recognized = await worker.recognize(imageSource, { rotateAuto: true });
-      await worker.terminate();
-      setOcrText(recognized.data.text.trim());
-      setOcrConfidence(Number(recognized.data.confidence || 0));
-      suggestFields(recognized.data.text);
-    } catch {
+      const scan = await recognizeMedicineImage(media);
+      scan.purpose = 'PRESCRIPTION';
+      setOcrScan(scan);
+      setOcrText(scan.text);
+      setOcrConfidence(scan.field_confidence);
+      suggestFields(scan);
+      if (scan.outcome !== 'ACCEPTED') setOcrError(scan.message);
+    } catch (error) {
       setOcrError(
-        'Automatic reading could not finish. You can type or correct the extracted text below.'
+        error?.message ||
+          'Google ML Kit could not read this image. Retake it or enter the details manually.'
       );
     } finally {
       setOcrBusy(false);
     }
   }
 
-  function onFile(e) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    runOcr(file);
+  function loadPreview(source) {
     const img = new Image();
     img.onload = () => {
       const scale = Math.min(1, MAX_W / img.naturalWidth);
@@ -151,58 +126,25 @@ export default function PrescriptionUpload() {
       setResult(null);
       redraw();
     };
-    img.src = URL.createObjectURL(file);
+    img.src = source;
   }
 
-  async function openCamera() {
+  async function chooseImage(source) {
     setCameraError('');
     setResult(null);
-    if (!navigator.mediaDevices?.getUserMedia) {
-      setCameraError(
-        'Camera access is not supported in this browser. Choose an image from your gallery instead.'
-      );
-      return;
-    }
+    setOcrReviewed(false);
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: 'environment' } },
-        audio: false,
-      });
-      streamRef.current = stream;
-      setCameraOpen(true);
-    } catch {
+      const media = await captureOcrImage(source);
+      if (!media) return;
+      const preview = media.webPath || (media.thumbnail ? `data:image/jpeg;base64,${media.thumbnail}` : '');
+      if (!preview) throw new Error('The selected image could not be opened.');
+      loadPreview(preview);
+      await runOcr(media);
+    } catch (error) {
       setCameraError(
-        'Camera access was denied or unavailable. Check your browser permission, then try again.'
+        error?.message || 'Camera access was denied or unavailable. Check permission and try again.'
       );
     }
-  }
-
-  function closeCamera() {
-    streamRef.current?.getTracks().forEach((track) => track.stop());
-    streamRef.current = null;
-    setCameraOpen(false);
-  }
-
-  function capturePhoto() {
-    const video = videoRef.current;
-    const canvas = canvasRef.current;
-    if (!video?.videoWidth || !video?.videoHeight) return;
-
-    const scale = Math.min(1, MAX_W / video.videoWidth);
-    canvas.width = Math.round(video.videoWidth * scale);
-    canvas.height = Math.round(video.videoHeight * scale);
-    canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
-
-    const image = new Image();
-    image.onload = () => {
-      imgRef.current = image;
-      boxesRef.current = [];
-      setHasImage(true);
-      closeCamera();
-      redraw();
-      runOcr(canvas);
-    };
-    image.src = canvas.toDataURL('image/jpeg', 0.9);
   }
 
   function pos(e) {
@@ -286,6 +228,13 @@ export default function PrescriptionUpload() {
         medicationId = created.data.id;
       }
       await apiUpload(`/api/patient/medications/${medicationId}/prescription`, fd);
+      if (ocrScan) {
+        await recordOcrEvaluation(ocrScan, {
+          name: medicineName,
+          strength,
+          formulation: medicineForm,
+        });
+      }
       setResult({
         kind: 'success',
         message: 'Prescription uploaded. This medicine is waiting for pharmacist approval.',
@@ -327,46 +276,22 @@ export default function PrescriptionUpload() {
       )}
 
       <div className="pm-card p-3">
-        {!hasImage && !cameraOpen && (
+        {!hasImage && (
           <div className="d-grid gap-2">
-            <button type="button" className="pm-btn-primary" onClick={openCamera}>
+            <button type="button" className="pm-btn-primary" onClick={() => chooseImage('camera')}>
               📷 Take Photo
             </button>
-            <label
+            <button
+              type="button"
               className="btn btn-outline-secondary d-block text-center"
-              style={{ cursor: 'pointer' }}
+              onClick={() => chooseImage('gallery')}
             >
               🖼️ Choose from Gallery
-              <input type="file" accept="image/*" hidden onChange={onFile} />
-            </label>
+            </button>
           </div>
         )}
 
         {cameraError && <div className="pm-banner pm-banner--warn mb-3">{cameraError}</div>}
-
-        {cameraOpen && (
-          <div>
-            <video
-              ref={videoRef}
-              autoPlay
-              playsInline
-              muted
-              className="w-100 rounded"
-              style={{ background: '#111', maxHeight: 420, objectFit: 'cover' }}
-            />
-            <p className="text-muted small mt-2 mb-2">
-              Position the full prescription inside the frame, then capture it.
-            </p>
-            <div className="d-flex gap-2">
-              <button type="button" className="pm-btn-primary" onClick={capturePhoto}>
-                📸 Capture Photo
-              </button>
-              <button type="button" className="btn btn-outline-secondary" onClick={closeCamera}>
-                Cancel
-              </button>
-            </div>
-          </div>
-        )}
 
         <canvas
           ref={canvasRef}
@@ -392,38 +317,42 @@ export default function PrescriptionUpload() {
               <button className="btn btn-sm btn-outline-secondary" onClick={undo}>
                 Undo box
               </button>
-              <label
+              <button
+                type="button"
                 className="btn btn-sm btn-outline-secondary mb-0"
-                style={{ cursor: 'pointer' }}
+                onClick={() => chooseImage('gallery')}
               >
                 Take or replace photo
-                <input
-                  type="file"
-                  accept="image/*"
-                  capture="environment"
-                  hidden
-                  onChange={onFile}
-                />
-              </label>
+              </button>
             </div>
             <div className="pm-ocr-review mt-3">
               <div className="d-flex justify-content-between align-items-center mb-1">
                 <strong>
                   {tr('Prescription text detected by OCR', 'Teksto ng reseta na nakita ng OCR')}
                 </strong>
-                {ocrConfidence !== null && <span>{Math.round(ocrConfidence)}% confidence</span>}
+                {ocrConfidence !== null && (
+                  <span>{Math.round(ocrConfidence * 100)}% field confidence</span>
+                )}
               </div>
               {ocrBusy && (
-                <div className="pm-banner pm-banner--info mb-2">
-                  Reading prescription… {ocrProgress}%
-                </div>
+                <div className="pm-banner pm-banner--info mb-2">Reading locally with Google ML Kit…</div>
               )}
               {ocrError && <div className="pm-banner pm-banner--warn mb-2">{ocrError}</div>}
+              {ocrScan?.available && (
+                <div className="form-text mb-2">
+                  Image check: {ocrScan.image_quality.replaceAll('_', ' ').toLowerCase()} ·
+                  threshold {Math.round(OCR_CONFIDENCE_THRESHOLD * 100)}%. The OCR model runs on
+                  this device, including without internet.
+                </div>
+              )}
               <textarea
                 className="form-control"
                 rows={6}
                 value={ocrText}
-                onChange={(event) => setOcrText(event.target.value)}
+                onChange={(event) => {
+                  setOcrText(event.target.value);
+                  setOcrReviewed(false);
+                }}
                 placeholder="Detected medicine names and directions will appear here. Correct any OCR mistakes before submitting."
                 aria-label="OCR-detected prescription text"
               />
@@ -446,10 +375,11 @@ export default function PrescriptionUpload() {
                 <div className="position-relative mb-2">
                   <input
                     className="form-control"
-                    value={medicineName}
-                    onChange={(event) => {
-                      setMedicineName(event.target.value);
-                      setSelectedDrug(null);
+                  value={medicineName}
+                  onChange={(event) => {
+                    setMedicineName(event.target.value);
+                    setSelectedDrug(null);
+                    setOcrReviewed(false);
                     }}
                     placeholder="Search the verified medicine list"
                     autoComplete="off"
@@ -493,18 +423,30 @@ export default function PrescriptionUpload() {
                 <input
                   className="form-control mb-2"
                   value={strength}
-                  onChange={(event) => setStrength(event.target.value)}
+                  onChange={(event) => {
+                    setStrength(event.target.value);
+                    setOcrReviewed(false);
+                  }}
                   placeholder="e.g., 500 mg"
                 />
                 <label className="form-label">{tr('Form', 'Uri')}</label>
                 <select
                   className="form-select mb-2"
                   value={medicineForm}
-                  onChange={(event) => setMedicineForm(event.target.value)}
+                  onChange={(event) => {
+                    setMedicineForm(event.target.value);
+                    setOcrReviewed(false);
+                  }}
                 >
                   <option>Tablet</option>
                   <option>Capsule</option>
                   <option>Syrup</option>
+                  <option>Oral Suspension</option>
+                  <option>Oral Solution</option>
+                  <option>Drops</option>
+                  <option>Cream</option>
+                  <option>Ointment</option>
+                  <option>Inhaler</option>
                   <option>Injection</option>
                 </select>
                 <label className="form-label">
@@ -520,9 +462,30 @@ export default function PrescriptionUpload() {
                   OCR suggestions must be checked against the prescription. The pharmacist will
                   validate them again.
                 </div>
+                <label className="form-check mt-3">
+                  <input
+                    className="form-check-input"
+                    type="checkbox"
+                    checked={ocrReviewed}
+                    disabled={ocrScan?.outcome === 'RECAPTURE_REQUIRED'}
+                    onChange={(event) => setOcrReviewed(event.target.checked)}
+                  />
+                  <span className="form-check-label">
+                    I checked the medicine name, strength, formulation, and directions against the
+                    paper prescription.
+                  </span>
+                </label>
               </div>
             )}
-            <button className="pm-btn-primary" disabled={submitting} onClick={submit}>
+            <button
+              className="pm-btn-primary"
+              disabled={
+                submitting ||
+                (ocrFirst && !ocrReviewed) ||
+                ocrScan?.outcome === 'RECAPTURE_REQUIRED'
+              }
+              onClick={submit}
+            >
               {submitting
                 ? tr('Submitting…', 'Ipinapadala…')
                 : ocrFirst

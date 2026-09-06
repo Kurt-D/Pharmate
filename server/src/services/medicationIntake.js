@@ -18,6 +18,7 @@ const LABEL_FOOD_INSTRUCTIONS = new Set([
   'BEFORE_MEAL',
   'AFTER_MEAL',
   'EMPTY_STOMACH',
+  'BEDTIME',
 ]);
 const FORM_ALIASES = new Map([
   ['tablet', 'tablet'],
@@ -142,9 +143,12 @@ export function validateIntakeRecord(record, verifiedDrug, { allowExistingStart 
       error: `Choose how often the label or prescription says to take ${verifiedDrug.generic_name}.`,
     };
   }
-  if (labelFrequency === 'OTHER' && !labelDirection) {
+  if (['OTHER', 'PRN'].includes(labelFrequency) && !labelDirection) {
     return {
-      error: `Enter the other label or prescription instructions for ${verifiedDrug.generic_name}.`,
+      error:
+        labelFrequency === 'PRN'
+          ? `Enter the exact as-needed directions from the label or prescription for ${verifiedDrug.generic_name}.`
+          : `Enter the other label or prescription instructions for ${verifiedDrug.generic_name}.`,
     };
   }
   if (!LABEL_FOOD_INSTRUCTIONS.has(labelFoodInstruction)) {
@@ -209,6 +213,7 @@ export function validateIntakeRecord(record, verifiedDrug, { allowExistingStart 
           .trim()
           .slice(0, 80) || null,
       label_frequency: labelFrequency,
+      is_prn: labelFrequency === 'PRN',
       label_food_instruction: labelFoodInstruction,
       entry_method: entryMethod,
       ocr_confidence: confidence,

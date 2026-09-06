@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '../../api.js';
 import { useLanguage } from '../../context/LanguageContext.jsx';
+import { useAuth } from '../../context/AuthContext.jsx';
+import { useInquiryConsent } from '../../lib/useInquiryConsent.js';
+import InquiryConsent from '../../components/InquiryConsent.jsx';
 
 function loadPriorityTokens() {
   try {
@@ -11,9 +14,10 @@ function loadPriorityTokens() {
   }
 }
 
-function loadConversationLabels() {
+function loadConversationLabels(userId) {
   try {
-    return JSON.parse(localStorage.getItem('pm_conversation_labels') || '{}');
+    const value = JSON.parse(localStorage.getItem(`pm_conversation_labels:${userId}`) || '{}');
+    return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
   } catch {
     return {};
   }
@@ -113,6 +117,8 @@ function ChatIcon({ name }) {
 
 export default function AskRedesign() {
   const { language } = useLanguage();
+  const { user } = useAuth();
+  const consent = useInquiryConsent();
   const tr = (english, filipino) => (language === 'fil' ? filipino : english);
   const [branches, setBranches] = useState([]);
   const [branchId, setBranchId] = useState('');
@@ -127,7 +133,7 @@ export default function AskRedesign() {
   const [historyLoading, setHistoryLoading] = useState(false);
   const [priorityTokens, setPriorityTokens] = useState(loadPriorityTokens);
   const [usePriority, setUsePriority] = useState(false);
-  const [conversationLabels, setConversationLabels] = useState(loadConversationLabels);
+  const [conversationLabels, setConversationLabels] = useState(() => loadConversationLabels(user.id));
   const [editingLabelId, setEditingLabelId] = useState(null);
   const [labelDraft, setLabelDraft] = useState('');
   const [showAllHistory, setShowAllHistory] = useState(true);
@@ -268,6 +274,10 @@ export default function AskRedesign() {
   }, [conversationLabels, historyQuery, threads]);
 
   async function start() {
+    if (!consent.consented) {
+      setError(tr('Enable inquiry consent above before sending a question.', 'Paganahin muna ang pahintulot sa inquiry sa itaas.'));
+      return;
+    }
     if (!branchId || !pharmacist || !question.trim()) {
       setError('Choose a branch and pharmacist, then enter your question.');
       return;
@@ -302,14 +312,14 @@ export default function AskRedesign() {
   }
 
   async function send() {
-    if (!draft.trim()) return;
+    if (!consent.consented || !draft.trim()) return;
     const message = draft.trim();
-    setDraft('');
     try {
       await api(`/api/patient/inquiries/${thread.id}/messages`, {
         method: 'POST',
         body: { message },
       });
+      setDraft('');
       await refresh(thread.id);
     } catch (requestError) {
       setError(requestError.message);
@@ -323,6 +333,10 @@ export default function AskRedesign() {
   }
 
   async function reconnect(conversation = thread) {
+    if (!consent.consented) {
+      setError(tr('Enable inquiry consent above before requesting a follow-up.', 'Paganahin muna ang pahintulot sa inquiry sa itaas.'));
+      return;
+    }
     setError('');
     try {
       const subject = `Follow-up: ${conversation.subject || 'Medication consultation'}`;
@@ -408,7 +422,7 @@ export default function AskRedesign() {
       const updated = { ...current };
       if (label) updated[id] = label;
       else delete updated[id];
-      localStorage.setItem('pm_conversation_labels', JSON.stringify(updated));
+      localStorage.setItem(`pm_conversation_labels:${user.id}`, JSON.stringify(updated));
       return updated;
     });
     setEditingLabelId(null);
@@ -439,6 +453,7 @@ export default function AskRedesign() {
           )}
         </p>
       </header>
+      <InquiryConsent consent={consent} />
       {!thread && requestStep > 0 && (
         <div
           aria-label={tr('Ask a pharmacist progress', 'Progreso sa pagtatanong sa parmasyutiko')}
@@ -811,7 +826,7 @@ export default function AskRedesign() {
               </fieldset>
               <button
                 className="pm-ask-primary"
-                disabled={!question.trim()}
+                disabled={!question.trim() || !consent.consented}
                 onClick={start}
                 type="button"
               >
@@ -820,11 +835,11 @@ export default function AskRedesign() {
               <div className="pm-ask-security">
                 <ChatIcon name="shield" />
                 <span>
-                  <strong>{tr('Private and secure', 'Pribado at ligtas')}</strong>
+                  <strong>{tr('Saved consultation history', 'Naka-save na kasaysayan ng konsultasyon')}</strong>
                   <small>
                     {tr(
-                      'Only the pharmacist can view this conversation.',
-                      'Ang parmasyutiko lamang ang makakakita sa usapang ito.'
+                      'Stored on PharMate’s server for you and the assigned pharmacist. Read the inquiry privacy policy above.',
+                      'Nakaimbak sa server ng PharMate para sa iyo at sa nakatalagang parmasyutiko. Basahin ang inquiry privacy policy sa itaas.'
                     )}
                   </small>
                 </span>
@@ -897,8 +912,8 @@ export default function AskRedesign() {
           <div className="pm-chat-secure">
             ♢{' '}
             {tr(
-              'This conversation is secure and confidential.',
-              'Ligtas at kumpidensyal ang usapang ito.'
+              'Conversation and history are stored on PharMate’s server.',
+              'Nakaimbak sa server ng PharMate ang usapan at kasaysayan nito.'
             )}
           </div>
           {thread.status === 'open' && thread.validation_status !== 'accepted' && (
@@ -1004,9 +1019,10 @@ export default function AskRedesign() {
                 value={draft}
                 onChange={(event) => setDraft(event.target.value)}
                 onKeyDown={(event) => event.key === 'Enter' && send()}
+                disabled={!consent.consented}
                 placeholder="Type your message…"
               />
-              <button type="button" onClick={send}>
+              <button type="button" disabled={!consent.consented} onClick={send}>
                 ➤
               </button>
             </div>
@@ -1192,8 +1208,8 @@ export default function AskRedesign() {
               <ChatIcon name="shield" />
               <span>
                 {tr(
-                  'This conversation is secure and confidential.',
-                  'Ligtas at kumpidensyal ang usapang ito.'
+                  'Conversation and history are stored on PharMate’s server.',
+                  'Nakaimbak sa server ng PharMate ang usapan at kasaysayan nito.'
                 )}
               </span>
             </div>

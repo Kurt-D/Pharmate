@@ -89,14 +89,17 @@ const money = (value) => `₱${Number(value).toFixed(2)}`;
 
 export default function PrescriptionShop() {
   const navigate = useNavigate();
-  const inputRef = useRef(null);
+  const cameraInputRef = useRef(null);
+  const fileInputRef = useRef(null);
   const [prescription, setPrescription] = useState(null);
   const [preview, setPreview] = useState('');
   const [quantities, setQuantities] = useState({});
   const [message, setMessage] = useState('');
   useEffect(() => {
     try {
-      setPrescription(JSON.parse(localStorage.getItem('pm_rx_prescription') || 'null'));
+      const savedPrescription = JSON.parse(localStorage.getItem('pm_rx_prescription') || 'null');
+      setPrescription(savedPrescription);
+      setPreview(savedPrescription?.preview || '');
     } catch {
       setPrescription(null);
     }
@@ -110,20 +113,30 @@ export default function PrescriptionShop() {
     const file = event.target.files?.[0];
     event.target.value = '';
     if (!file) return;
-    if (preview) URL.revokeObjectURL(preview);
-    const previewUrl = URL.createObjectURL(file);
-    const next = {
-      id: `RX-${Date.now().toString().slice(-7)}`,
-      name: file.name,
-      type: file.type,
-      uploaded_at: new Date().toISOString(),
-      status: 'pending_verification',
-      preview: previewUrl,
+    const savePrescription = (previewUrl = '') => {
+      const next = {
+        id: `RX-${Date.now().toString().slice(-7)}`,
+        name: file.name,
+        type: file.type,
+        uploaded_at: new Date().toISOString(),
+        status: 'pending_verification',
+        preview: previewUrl,
+      };
+      setPreview(previewUrl);
+      setPrescription(next);
+      localStorage.setItem('pm_rx_prescription', JSON.stringify(next));
+      setMessage('Prescription uploaded. Check the preview below before continuing.');
     };
-    setPreview(previewUrl);
-    setPrescription(next);
-    localStorage.setItem('pm_rx_prescription', JSON.stringify(next));
-    setMessage('Prescription uploaded and ready to attach to this order.');
+
+    if (file.type.startsWith('image/')) {
+      const reader = new FileReader();
+      reader.onload = () => savePrescription(String(reader.result || ''));
+      reader.onerror = () => setMessage('We could not read that photo. Please take or choose another one.');
+      reader.readAsDataURL(file);
+      return;
+    }
+
+    savePrescription();
   }
   function changeQuantity(product, delta) {
     const remaining = product.total - product.purchased;
@@ -206,29 +219,43 @@ export default function PrescriptionShop() {
           </div>
         </div>
         {prescription ? (
-          <div className="pm-rx-file-preview">
-            {preview && prescription.type?.startsWith('image/') ? (
-              <img src={preview} alt="Prescription preview" />
-            ) : (
-              <span>
-                <Icon name="file" size={32} />
-              </span>
+          <>
+            {preview && prescription.type?.startsWith('image/') && (
+              <figure className="pm-rx-photo-review">
+                <figcaption>
+                  <strong>Check Your Prescription Photo</strong>
+                  <span>Make sure the name, medicine, dosage, and doctor details are clear.</span>
+                </figcaption>
+                <a href={preview} target="_blank" rel="noreferrer" aria-label="Open full-size prescription photo">
+                  <img src={preview} alt="Full preview of the selected prescription" />
+                  <span>Tap photo to view full size</span>
+                </a>
+              </figure>
             )}
-            <div>
-              <strong>{prescription.name}</strong>
-              <small>Uploaded {new Date(prescription.uploaded_at).toLocaleString()}</small>
-              <em className={prescription.status}>
-                {prescription.status === 'verified'
-                  ? 'Verified'
-                  : prescription.status === 'needs_resubmission'
-                    ? 'Needs Resubmission'
-                    : 'Pending Verification'}
-              </em>
+            <div className="pm-rx-file-preview">
+              {preview && prescription.type?.startsWith('image/') ? (
+                <img src={preview} alt="Prescription thumbnail" />
+              ) : (
+                <span>
+                  <Icon name="file" size={32} />
+                </span>
+              )}
+              <div>
+                <strong>{prescription.name}</strong>
+                <small>Uploaded {new Date(prescription.uploaded_at).toLocaleString()}</small>
+                <em className={prescription.status}>
+                  {prescription.status === 'verified'
+                    ? 'Verified'
+                    : prescription.status === 'needs_resubmission'
+                      ? 'Needs Resubmission'
+                      : 'Pending Verification'}
+                </em>
+              </div>
+              <button onClick={() => fileInputRef.current?.click()} type="button">
+                Replace
+              </button>
             </div>
-            <button onClick={() => inputRef.current?.click()} type="button">
-              Replace
-            </button>
-          </div>
+          </>
         ) : (
           <ul>
             <li>Prescription details and license information are readable</li>
@@ -237,22 +264,39 @@ export default function PrescriptionShop() {
           </ul>
         )}
         <input
-          ref={inputRef}
+          ref={cameraInputRef}
           hidden
           type="file"
-          accept="image/jpeg,image/png,image/webp,application/pdf"
+          accept="image/*"
           capture="environment"
           onChange={uploadPrescription}
         />
-        <button
-          className="pm-rx-upload-button"
-          onClick={() => inputRef.current?.click()}
-          type="button"
-        >
-          <Icon name={prescription ? 'camera' : 'upload'} />
-          {prescription ? 'Upload a Clearer File' : 'Upload Prescription'}
-        </button>
-        <small>Supports camera photos, gallery images, and PDF files.</small>
+        <input
+          ref={fileInputRef}
+          hidden
+          type="file"
+          accept="image/jpeg,image/png,image/webp,application/pdf"
+          onChange={uploadPrescription}
+        />
+        <div className="pm-rx-upload-actions">
+          <button
+            className="pm-rx-upload-button"
+            onClick={() => cameraInputRef.current?.click()}
+            type="button"
+          >
+            <Icon name="camera" />
+            Take a Photo
+          </button>
+          <button
+            className="pm-rx-upload-button secondary"
+            onClick={() => fileInputRef.current?.click()}
+            type="button"
+          >
+            <Icon name="upload" />
+            Upload from Gallery or File
+          </button>
+        </div>
+        <small>Take a new photo, choose a gallery image, or upload a PDF file.</small>
       </section>
       {prescription && (
         <>

@@ -27,10 +27,107 @@ import { recordAudit } from '../services/audit.js';
 import { inquiryChanged, orderChanged, prescriptionChanged } from '../services/domainEvents.js';
 import { publishRole } from '../services/realtimeEvents.js';
 import { checkClinicalRule, verificationSummary } from '../services/clinicalRuleVerification.js';
+import { checkSafetyRule } from '../services/medicationSafety.js';
+import {
+  pharmacistCredential,
+  publicCredential,
+} from '../services/pharmacistCredential.js';
+import {
+  completeAppointment,
+  decideAppointment,
+  pharmacistAppointments,
+  publishCounselingSummary,
+  updateCounselingSummary,
+  validateAppointmentDecision,
+} from '../services/counseling.js';
 
 const router = Router();
 
 router.use(requireAuth, requireRole('pharmacist'));
+
+function rejectUnlicensedReview(res, credential) {
+  return res.status(403).json({
+    error:
+      'A currently verified pharmacist credential is required for clinical review decisions.',
+    credential: publicCredential(credential),
+  });
+}
+
+router.get('/credential', async (req, res) => {
+  res.json(publicCredential(await pharmacistCredential(req.user.sub)));
+});
+
+router.get('/appointments', async (req, res) => {
+  const status = req.query.status ? String(req.query.status).toUpperCase() : null;
+  if (status && !['REQUESTED', 'CONFIRMED', 'COMPLETED', 'DECLINED', 'CANCELLED'].includes(status)) {
+    return res.status(400).json({ error: 'Unsupported appointment status.' });
+  }
+  res.json(await pharmacistAppointments(req.user.sub, status));
+});
+
+router.post('/appointments/:id/decision', async (req, res) => {
+  const credential = await pharmacistCredential(req.user.sub);
+  if (!credential.credential_valid) return rejectUnlicensedReview(res, credential);
+  const parsed = validateAppointmentDecision(req.body);
+  if (parsed.error) return res.status(400).json({ error: parsed.error });
+  const result = await decideAppointment(req.user.sub, req.params.id, parsed.value, req.user);
+  if (result.error) return res.status(result.error.status).json({ error: result.error.message });
+  await createPatientNotification({
+    patientId: result.patient_id,
+    type: 'appointment_update',
+    eventKey: `counseling-appointment:${result.id}:${result.status}`,
+    title: 'Counseling appointment updated',
+    message:
+      result.status === 'CONFIRMED'
+        ? 'Your virtual medication follow-up was confirmed. Open Appointments for the session details.'
+        : 'Your appointment request could not be confirmed. Open Appointments for details.',
+  });
+  publishRole('pharmacist', 'COUNSELING_APPOINTMENT_UPDATED', result);
+  res.json(result);
+});
+
+router.post('/appointments/:id/complete', async (req, res) => {
+  const credential = await pharmacistCredential(req.user.sub);
+  if (!credential.credential_valid) return rejectUnlicensedReview(res, credential);
+  const result = await completeAppointment(req.user.sub, req.params.id, req.user);
+  if (result.error) return res.status(result.error.status).json({ error: result.error.message });
+  publishRole('pharmacist', 'COUNSELING_APPOINTMENT_UPDATED', result);
+  res.json(result);
+});
+
+router.put('/counseling-summaries/:id', async (req, res) => {
+  const credential = await pharmacistCredential(req.user.sub);
+  if (!credential.credential_valid) return rejectUnlicensedReview(res, credential);
+  const result = await updateCounselingSummary(
+    req.user.sub,
+    req.params.id,
+    req.body?.summary_text,
+    req.user
+  );
+  if (result.error) return res.status(result.error.status).json({ error: result.error.message });
+  res.json(result);
+});
+
+router.post('/counseling-summaries/:id/publish', async (req, res) => {
+  const credential = await pharmacistCredential(req.user.sub);
+  if (!credential.credential_valid) return rejectUnlicensedReview(res, credential);
+  const result = await publishCounselingSummary(
+    req.user.sub,
+    req.params.id,
+    credential,
+    req.user
+  );
+  if (result.error) return res.status(result.error.status).json({ error: result.error.message });
+  await createPatientNotification({
+    patientId: result.patient_id,
+    type: 'counseling_summary_ready',
+    eventKey: `counseling-summary:${result.id}:${result.version}`,
+    title: 'Counseling summary ready',
+    message: 'Your pharmacist-reviewed counseling summary is ready in Appointments.',
+  });
+  publishRole('pharmacist', 'COUNSELING_SUMMARY_PUBLISHED', result);
+  res.json(result);
+});
 
 async function inquiryPatientId(threadId) {
   const [[row]] = await pool.execute('SELECT patient_id FROM inquiry_threads WHERE id = ?', [
@@ -235,7 +332,11 @@ router.get('/adherence', async (_req, res) => {
 });
 
 // ── Ask Your Pharmacist — pharmacist side (D-I) ───────────────────────────────
-// Queue and threads show patient_code only; never a name.
+// Queue identifies patients by code; free text may contain identifying details.
+router.use('/inquiries', (_req, res, next) => {
+  res.set('Cache-Control', 'no-store');
+  next();
+});
 router.get('/inquiries', async (req, res) => {
   res.json(await pharmacistQueue(req.user.sub));
 });
@@ -277,6 +378,7 @@ router.post('/inquiries/:id/reply', async (req, res) => {
   const message = String(req.body?.message ?? '').trim();
   if (!message) return res.status(400).json({ error: 'message is required' });
   const result = await postMessage(req.params.id, 'pharmacist', req.user.sub, message);
+  if (result.error === 'inquiry_consent_required') return res.status(403).json(result);
   if (result.error === 'not_found') return res.status(404).json({ error: 'Thread not found' });
   if (result.error === 'not_accepted')
     return res.status(409).json({ error: 'Accept this inquiry before replying' });
@@ -374,6 +476,8 @@ router.get('/validations/:id/history', async (req, res) => {
 });
 
 router.post('/validations/:id/approve-prescription', async (req, res) => {
+  const credential = await pharmacistCredential(req.user.sub);
+  if (!credential.credential_valid) return rejectUnlicensedReview(res, credential);
   const result = await approvePrescriptionForSchedule(req.user.sub, req.params.id);
   if (result.error === 'not_found') return res.status(404).json({ error: 'Validation not found' });
   if (result.error === 'already_decided') {
@@ -404,8 +508,11 @@ router.post('/validate', async (req, res) => {
   const { photo_id, action, reason } = req.body;
   if (!photo_id) return res.status(400).json({ error: 'photo_id is required' });
 
+  const credential = await pharmacistCredential(req.user.sub);
+  if (!credential.credential_valid) return rejectUnlicensedReview(res, credential);
+
   const patientId = await prescriptionPatientId(photo_id);
-  const result = await decideValidation(req.user.sub, photo_id, action, reason);
+  const result = await decideValidation(req.user.sub, photo_id, action, reason, { credential });
   if (result.error === 'bad_action') {
     return res
       .status(400)
@@ -432,7 +539,7 @@ router.post('/validate', async (req, res) => {
       .json({ error: 'Approve the prescription before approving its schedule' });
   }
   if (result.error === 'no_schedule') {
-    return res.status(409).json({ error: 'No safe schedule is available to approve' });
+    return res.status(409).json({ error: 'No reminder schedule passed the recorded rule checks' });
   }
   await recordAudit({
     actor: { id: req.user.sub, role: 'pharmacist' },
@@ -440,7 +547,12 @@ router.post('/validate', async (req, res) => {
     entityType: 'prescription',
     entityId: photo_id,
     patientId,
-    metadata: { action },
+    metadata: {
+      action,
+      reviewer_license_number: credential.license_number,
+      reviewer_license_jurisdiction: credential.license_jurisdiction,
+      reviewer_license_expires_on: credential.license_expires_on,
+    },
   });
   if (patientId) {
     await prescriptionChanged({
@@ -465,7 +577,7 @@ router.get('/drugs', async (req, res) => {
 const CLINICAL_RULE_SELECT = `
   SELECT id,generic_name,common_strength,dosage_form,administration_route,release_type,
          supported_frequency_codes,rx_class,availability,
-         catalog_status,clinical_rule_status,frequency_default,max_daily_doses,
+         catalog_status,clinical_rule_status,frequency_default,max_daily_doses,default_units_per_dose,
          COALESCE(min_interval_hours,default_interval_hours) AS min_interval_hours,
          food_rule,administration_instruction,clinical_rationale,guidance_do,guidance_dont,
          evidence_source_url,clinical_source_name,source_revision_date,
@@ -497,6 +609,36 @@ router.get('/clinical-rules', async (req, res) => {
     params
   );
   res.json(rows.map((row) => ({ ...row, consistency: checkClinicalRule(row) })));
+});
+
+router.get('/clinical-rules/:id/review-context', async (req, res) => {
+  const [[safety]] = await pool.execute(
+    `SELECT * FROM medication_safety_rules
+     WHERE drug_id=? AND population_key='ADULT' LIMIT 1`,
+    [req.params.id]
+  );
+  const [interactions] = await pool.execute(
+    `SELECT interaction_rule.id,interaction_rule.interaction_type,interaction_rule.severity,
+            interaction_rule.min_gap_hours,interaction_rule.notes,
+            interaction_rule.is_provisional,interaction_rule.verified_at,
+            other_drug.generic_name AS other_medicine
+     FROM drug_interactions interaction_rule
+     JOIN drug_reference other_drug
+       ON other_drug.id=CASE
+         WHEN interaction_rule.drug_a_id=? THEN interaction_rule.drug_b_id
+         ELSE interaction_rule.drug_a_id END
+     WHERE interaction_rule.drug_a_id=? OR interaction_rule.drug_b_id=?
+     ORDER BY other_drug.generic_name`,
+    [req.params.id, req.params.id, req.params.id]
+  );
+  const credential = await pharmacistCredential(req.user.sub);
+  res.json({
+    safety: safety
+      ? { ...safety, consistency: checkSafetyRule(safety) }
+      : { safety_status: 'MISSING', consistency: checkSafetyRule({}) },
+    interactions,
+    credential: publicCredential(credential),
+  });
 });
 
 router.get('/clinical-rules/report', async (_req, res) => {
@@ -534,7 +676,9 @@ router.get('/clinical-rules/report', async (_req, res) => {
 router.get('/clinical-rules/:id/revisions', async (req, res) => {
   const [rows] = await pool.execute(
     `SELECT revision.id,revision.rule_version,revision.action,revision.consistency_result,
-            revision.reason,revision.created_at,pharmacist.full_name AS reviewed_by_name
+            revision.reason,revision.created_at,pharmacist.full_name AS reviewed_by_name,
+            revision.reviewer_license_number,revision.reviewer_license_jurisdiction,
+            revision.reviewer_license_expires_on
      FROM clinical_rule_revisions revision
      JOIN pharmacists pharmacist ON pharmacist.id=revision.reviewed_by
      WHERE revision.drug_id=? ORDER BY revision.rule_version DESC,revision.created_at DESC`,
@@ -567,6 +711,7 @@ router.post('/clinical-rules/:id/decision', async (req, res) => {
     supported_frequency_codes: supportedCodes,
     frequency_default: req.body?.frequency_default,
     max_daily_doses: req.body?.max_daily_doses,
+    default_units_per_dose: req.body?.default_units_per_dose ?? req.body?.units_per_dose,
     min_interval_hours: req.body?.min_interval_hours,
     food_rule: req.body?.food_rule,
     administration_instruction: req.body?.administration_instruction,
@@ -581,6 +726,11 @@ router.post('/clinical-rules/:id/decision', async (req, res) => {
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
+    const credential = await pharmacistCredential(req.user.sub, conn, { forUpdate: true });
+    if (!credential.credential_valid) {
+      await conn.rollback();
+      return rejectUnlicensedReview(res, credential);
+    }
     const [[current]] = await conn.execute(`${CLINICAL_RULE_SELECT} WHERE id=? FOR UPDATE`, [
       req.params.id,
     ]);
@@ -590,12 +740,62 @@ router.post('/clinical-rules/:id/decision', async (req, res) => {
     }
     const candidate = { ...current, ...fields };
     const consistency = checkClinicalRule(candidate);
+    const [[safetyRule]] = await conn.execute(
+      `SELECT * FROM medication_safety_rules
+       WHERE drug_id=? AND population_key='ADULT' LIMIT 1 FOR UPDATE`,
+      [current.id]
+    );
+    const safetyConsistency = checkSafetyRule(safetyRule || {});
     if (action === 'VERIFY' && !consistency.valid) {
       await conn.rollback();
       return res.status(422).json({
         error:
           'This rule cannot be verified until every evidence and consistency issue is resolved.',
         consistency,
+      });
+    }
+    if (action === 'VERIFY' && safetyRule?.safety_status !== 'IN_REVIEW') {
+      await conn.rollback();
+      return res.status(422).json({
+        error: 'A submitted patient-safety rule is required before clinical verification.',
+        safety_consistency: safetyConsistency,
+      });
+    }
+    if (action === 'VERIFY' && !safetyConsistency.valid) {
+      await conn.rollback();
+      return res.status(422).json({
+        error: 'The submitted patient-safety rule is incomplete and cannot be verified.',
+        safety_consistency: safetyConsistency,
+      });
+    }
+    const [interactionRows] = await conn.execute(
+      `SELECT id,interaction_type,min_gap_hours,severity,notes
+       FROM drug_interactions
+       WHERE drug_a_id=? OR drug_b_id=? FOR UPDATE`,
+      [current.id, current.id]
+    );
+    const interactionConflicts = interactionRows.flatMap((interaction) => {
+      const type = String(interaction.interaction_type || '').toUpperCase();
+      const issues = [];
+      if (!['SPACING', 'AVOID', 'MONITOR', 'NONE'].includes(type)) {
+        issues.push(`${interaction.id}:invalid_type`);
+      }
+      if (
+        type === 'SPACING' &&
+        (!Number.isFinite(Number(interaction.min_gap_hours)) || Number(interaction.min_gap_hours) <= 0)
+      ) {
+        issues.push(`${interaction.id}:invalid_spacing_gap`);
+      }
+      if (type !== 'NONE' && !String(interaction.notes || '').trim()) {
+        issues.push(`${interaction.id}:missing_review_note`);
+      }
+      return issues;
+    });
+    if (action === 'VERIFY' && interactionConflicts.length) {
+      await conn.rollback();
+      return res.status(422).json({
+        error: 'Known interaction records are incomplete and cannot be signed.',
+        interaction_conflicts: interactionConflicts,
       });
     }
     const status =
@@ -610,7 +810,7 @@ router.post('/clinical-rules/:id/decision', async (req, res) => {
     await conn.execute(
       `UPDATE drug_reference SET common_strength=?,dosage_form=?,administration_route=?,release_type=?,
        supported_frequency_codes=?,frequency_default=?,
-       max_daily_doses=?,min_interval_hours=?,food_rule=?,administration_instruction=?,
+       max_daily_doses=?,default_units_per_dose=?,min_interval_hours=?,food_rule=?,administration_instruction=?,
        clinical_rationale=?,guidance_do=?,guidance_dont=?,evidence_source_url=?,clinical_source_name=?,source_revision_date=?,
        evidence_reviewed_at=?,clinical_rule_status=?,clinical_rejection_reason=?,
        verified_by=?,verified_at=CASE WHEN ?='VERIFIED' THEN NOW(3) ELSE NULL END,
@@ -623,6 +823,7 @@ router.post('/clinical-rules/:id/decision', async (req, res) => {
         JSON.stringify(fields.supported_frequency_codes),
         fields.frequency_default,
         fields.max_daily_doses || null,
+        fields.default_units_per_dose || null,
         fields.min_interval_hours || null,
         fields.food_rule,
         fields.administration_instruction,
@@ -642,6 +843,33 @@ router.post('/clinical-rules/:id/decision', async (req, res) => {
         req.params.id,
       ]
     );
+    if (safetyRule?.safety_status === 'IN_REVIEW') {
+      await conn.execute(
+        `UPDATE medication_safety_rules
+         SET safety_status=?,verified_by=?,verified_at=CASE WHEN ?='VERIFIED' THEN NOW(3) ELSE NULL END
+         WHERE id=?`,
+        [
+          action === 'VERIFY' ? 'VERIFIED' : action === 'REJECT' ? 'REJECTED' : action === 'RETIRE' ? 'RETIRED' : 'IN_REVIEW',
+          action === 'VERIFY' ? req.user.sub : null,
+          status,
+          safetyRule.id,
+        ]
+      );
+      if (action === 'VERIFY') {
+        await conn.execute(
+          `UPDATE otc_label_evidence
+           SET evidence_status='READY',reviewed_at=NOW(3)
+           WHERE drug_id=? AND population_key='ADULT' AND evidence_status='REVIEWED'`,
+          [current.id]
+        );
+        await conn.execute(
+          `UPDATE drug_interactions
+           SET verified_by=?,verified_at=NOW(3),is_provisional=0
+           WHERE drug_a_id=? OR drug_b_id=?`,
+          [req.user.sub, current.id, current.id]
+        );
+      }
+    }
     await conn.execute(
       `INSERT INTO medication_rule_variants
        (id,drug_id,strength,dosage_form,administration_route,release_type,
@@ -693,9 +921,38 @@ router.post('/clinical-rules/:id/decision', async (req, res) => {
       ]
     );
     await conn.execute(
+      `UPDATE medication_rule_variants variant
+       JOIN drug_reference drug ON drug.id=variant.drug_id
+       SET variant.rule_kind=CASE
+             WHEN drug.frequency_default='PRN' OR drug.is_prn_default=1 THEN 'PRN'
+             WHEN drug.frequency_default='BEDTIME' OR drug.food_rule='BEDTIME' THEN 'BEDTIME'
+             WHEN drug.food_rule IN ('WITH_MEAL','BEFORE_MEAL','AFTER_MEAL') THEN 'MEAL_ANCHORED'
+             WHEN drug.frequency_default REGEXP '^Q[0-9]+H$' THEN 'FIXED_INTERVAL'
+             WHEN drug.frequency_default IN ('QD','BID','TID','QID') THEN 'FIXED_DAILY'
+             WHEN drug.rx_class='RX' THEN 'PATIENT_SPECIFIC'
+             ELSE 'UNKNOWN'
+           END,
+           variant.automation_status=CASE
+             WHEN drug.rx_class='RX' THEN 'NEEDS_DIRECTIONS'
+             WHEN ?='VERIFIED' THEN 'READY_VERIFIED'
+             WHEN ?='RETIRED' THEN 'MANUAL_ONLY'
+             ELSE 'NEEDS_EVIDENCE'
+           END,
+           variant.automation_block_reason=CASE
+             WHEN drug.rx_class='RX' THEN 'An approved patient prescription is required.'
+             WHEN ?='VERIFIED' THEN NULL
+             WHEN ?='RETIRED' THEN 'The rule was retired by a pharmacist.'
+             ELSE 'Awaiting pharmacist verification.'
+           END,
+           variant.assessed_at=NOW(3)
+       WHERE variant.drug_id=?`,
+      [status, status, status, status, current.id]
+    );
+    await conn.execute(
       `INSERT INTO clinical_rule_revisions
-       (id,drug_id,rule_version,action,before_data,after_data,consistency_result,reason,reviewed_by)
-       VALUES (?,?,?,?,?,?,?,?,?)`,
+       (id,drug_id,rule_version,action,before_data,after_data,consistency_result,reason,reviewed_by,
+        reviewer_license_number,reviewer_license_jurisdiction,reviewer_license_expires_on)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
       [
         uuidv4(),
         current.id,
@@ -709,9 +966,16 @@ router.post('/clinical-rules/:id/decision', async (req, res) => {
               : 'SUBMITTED',
         JSON.stringify(current),
         JSON.stringify(candidate),
-        JSON.stringify(consistency),
+        JSON.stringify({
+          clinical: consistency,
+          safety: safetyConsistency,
+          reviewed_interaction_ids: interactionRows.map((interaction) => interaction.id),
+        }),
         reason || null,
         req.user.sub,
+        credential.license_number,
+        credential.license_jurisdiction,
+        credential.license_expires_on,
       ]
     );
     await recordAudit({
@@ -719,7 +983,15 @@ router.post('/clinical-rules/:id/decision', async (req, res) => {
       action: `CLINICAL_RULE_${status}`,
       entityType: 'drug_reference',
       entityId: current.id,
-      metadata: { rule_version: nextVersion, consistency },
+      metadata: {
+        rule_version: nextVersion,
+        consistency,
+        safety_consistency: safetyConsistency,
+        reviewed_interaction_ids: interactionRows.map((interaction) => interaction.id),
+        reviewer_license_number: credential.license_number,
+        reviewer_license_jurisdiction: credential.license_jurisdiction,
+        reviewer_license_expires_on: credential.license_expires_on,
+      },
       executor: conn,
     });
     await conn.commit();
@@ -727,7 +999,14 @@ router.post('/clinical-rules/:id/decision', async (req, res) => {
       action: status.toLowerCase(),
       drug_id: current.id,
     });
-    res.json({ id: current.id, status, rule_version: nextVersion, consistency });
+    res.json({
+      id: current.id,
+      status,
+      rule_version: nextVersion,
+      consistency,
+      safety_consistency: safetyConsistency,
+      credential: publicCredential(credential),
+    });
   } catch (error) {
     await conn.rollback();
     throw error;

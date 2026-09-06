@@ -19,6 +19,23 @@ function gap(a, b) {
   return Math.min(direct, DAY - direct);
 }
 
+function anchor(value, fallback) {
+  const match = String(value || '').match(/^(\d{2}):(\d{2})/);
+  if (!match) return fallback;
+  return Number(match[1]) * 60 + Number(match[2]);
+}
+
+function patientAnchors(rule) {
+  const wake = anchor(rule.wake_anchor, CLINICAL_ANCHORS.EMPTY_STOMACH - 30);
+  return {
+    wake,
+    breakfast: anchor(rule.breakfast_anchor, CLINICAL_ANCHORS.BREAKFAST),
+    lunch: anchor(rule.lunch_anchor, CLINICAL_ANCHORS.LUNCH),
+    dinner: anchor(rule.dinner_anchor, CLINICAL_ANCHORS.DINNER),
+    bedtime: anchor(rule.sleep_anchor, CLINICAL_ANCHORS.BEDTIME),
+  };
+}
+
 function baseTimes(rule) {
   const frequency = String(rule.standard_frequency || '').toUpperCase();
   const food = String(rule.food_rule || 'NONE').toUpperCase();
@@ -27,18 +44,24 @@ function baseTimes(rule) {
   const preferred = preferredMatch
     ? Number(preferredMatch[1]) * 60 + Number(preferredMatch[2])
     : null;
+  const routine = patientAnchors(rule);
   const anchored = (times) => {
     if (preferred === null || !times.length) return cap(times);
     const shift = preferred - times[0];
     return cap(times.map((time) => time + shift));
   };
   if (frequency === 'Q8H') return anchored([360, 840, 1320]);
-  if (frequency === 'QID') return anchored([480, 750, 1020, 1290]);
-  if (frequency === 'TID') return anchored([480, 750, 1140]);
-  if (frequency === 'BID') return anchored([480, 1140]);
-  if (frequency === 'BEDTIME' || food === 'BEDTIME') return anchored([1290]);
+  if (frequency === 'QID')
+    return anchored([routine.breakfast, routine.lunch, routine.dinner, routine.bedtime]);
+  if (frequency === 'TID') return anchored([routine.breakfast, routine.lunch, routine.dinner]);
+  if (frequency === 'BID') return anchored([routine.breakfast, routine.dinner]);
+  if (frequency === 'BEDTIME' || food === 'BEDTIME') return anchored([routine.bedtime]);
   if (frequency === 'QD') {
-    return anchored(food === 'EMPTY_STOMACH' || food === 'BEFORE_MEAL' ? [420] : [480]);
+    return anchored(
+      food === 'EMPTY_STOMACH' || food === 'BEFORE_MEAL'
+        ? [routine.wake + 30]
+        : [routine.breakfast]
+    );
   }
   const match = frequency.match(/^Q(\d{1,2})H$/);
   if (!match) return [];
@@ -102,7 +125,14 @@ function compatible(item, candidate, placed, interactionMap) {
   return candidate.times.every((time) =>
     placed.every((other) => {
       const interaction = interactionMap.get(pairKey(item.drug_id, other.drug_id));
-      return !interaction || gap(time, other.time) >= Number(interaction.min_gap_hours) * 60;
+      if (!interaction) return true;
+      const type = String(interaction.interaction_type || 'SPACING').toUpperCase();
+      if (type === 'NONE') return true;
+      if (type === 'AVOID' || type === 'MONITOR') return false;
+      const requiredGap = Number(interaction.min_gap_hours);
+      return Number.isFinite(requiredGap) && requiredGap > 0
+        ? gap(time, other.time) >= requiredGap * 60
+        : false;
     })
   );
 }
@@ -130,7 +160,9 @@ function deduplicate(items) {
 
 function explanation(item, time, shift) {
   let anchor =
-    item.schedule_basis === 'PATIENT_LABEL'
+    item.schedule_basis === 'PRESCRIPTION_DIRECTIONS'
+      ? 'the exact directions from your approved prescription'
+      : item.schedule_basis === 'PATIENT_LABEL'
       ? 'how often you confirmed from the medicine label'
       : 'the checked schedule information for this medicine';
   if (item.food_rule === 'WITH_MEAL') anchor = 'a main meal';
@@ -138,21 +170,63 @@ function explanation(item, time, shift) {
   if (item.food_rule === 'AFTER_MEAL') anchor = '30 minutes after a meal anchor';
   if (item.food_rule === 'EMPTY_STOMACH') anchor = 'the empty-stomach morning anchor';
   if (item.food_rule === 'BEDTIME') anchor = 'the bedtime anchor';
-  return `${item.generic_name} is set for ${clock(time)} using ${anchor}${shift ? `, moved by ${Math.abs(shift)} minutes to leave enough time between medicines` : ''}.`;
+  const personalized = item.routine_source === 'PATIENT_PROFILE' ? ' from your saved routine' : '';
+  return `${item.generic_name} is set for ${clock(time)} using ${anchor}${personalized}${shift ? `, moved by ${Math.abs(shift)} minutes to leave enough time between medicines` : ''}.`;
+}
+
+function isPrn(item) {
+  return String(item.rule_kind || '').toUpperCase() === 'PRN' ||
+    String(item.standard_frequency || '').toUpperCase() === 'PRN';
+}
+
+function prnTracker(item) {
+  return {
+    drug_id: item.drug_id,
+    name: item.generic_name,
+    strength: item.strength || item.default_strength,
+    form: item.dosage_form,
+    frequency: 'PRN',
+    dosage_instruction: item.dosage_instruction,
+    directions: item.label_direction || item.prescription_directions || null,
+    indication: item.purpose || null,
+    min_interval_hours: Number(item.min_interval_hours || 0) || null,
+    max_daily_doses: Number(item.max_daily_doses || 0) || null,
+    start_date: item.start_date,
+    end_date: item.end_date,
+    basis: item.schedule_basis,
+    recurring_reminders: false,
+  };
 }
 
 export function generateClinicalSchedule(items = [], interactions = []) {
   const { unique, warnings } = deduplicate(items);
-  const unavailable = unique.filter(
+  const prnItems = unique.filter(isPrn);
+  const fixedItems = unique.filter((item) => !isPrn(item));
+  const incompletePrn = prnItems.filter(
     (item) =>
-      !['VERIFIED', 'PATIENT_LABEL'].includes(item.clinical_rule_status) ||
+      !['VERIFIED', 'REFERENCE', 'PRESCRIPTION'].includes(
+        item.clinical_rule_status
+      ) ||
+      !String(item.dosage_instruction || '').trim() ||
+      !String(item.label_direction || item.prescription_directions || '').trim() ||
+      !Number.isInteger(Number(item.max_daily_doses)) ||
+      Number(item.max_daily_doses) <= 0 ||
+      !Number.isFinite(Number(item.min_interval_hours)) ||
+      Number(item.min_interval_hours) <= 0
+  );
+  const unavailable = fixedItems.filter(
+    (item) =>
+      !['VERIFIED', 'REFERENCE', 'PATIENT_LABEL', 'PRESCRIPTION'].includes(
+        item.clinical_rule_status
+      ) ||
       !baseTimes(item).length ||
       !Number.isInteger(Number(item.max_daily_doses)) ||
       Number(item.max_daily_doses) <= 0
   );
-  if (!unique.length || unavailable.length) {
+  if (!unique.length || unavailable.length || incompletePrn.length) {
     return {
       schedule: [],
+      prn_trackers: [],
       rationale: [],
       can_save: false,
       warnings: [
@@ -161,10 +235,35 @@ export function generateClinicalSchedule(items = [], interactions = []) {
           code: 'VERIFIED_RULE_UNAVAILABLE',
           severity: 'blocking',
           drug_id: item.drug_id,
-          message: `A complete verified frequency and daily reminder limit is unavailable for ${item.generic_name}.`,
+            message: `A complete verified frequency and daily reminder limit is unavailable for ${item.generic_name}.`,
+          })),
+        ...incompletePrn.map((item) => ({
+          code: 'PRN_DIRECTIONS_REQUIRED',
+          severity: 'blocking',
+          drug_id: item.drug_id,
+          message: `Exact as-needed directions, a reviewed minimum interval, and a 24-hour dose limit are required for ${item.generic_name}. PharMate will not guess when another dose can be taken.`,
         })),
       ],
-      algorithm: 'DETERMINISTIC_CSP_ANCHOR_V1',
+      algorithm: 'EXPLAINABLE_CSP_SAFETY_CONTEXT_V3',
+      nodes_evaluated: 0,
+    };
+  }
+
+  const prnTrackers = prnItems.map(prnTracker);
+  const prnWarnings = prnItems.map((item) => ({
+    code: 'PRN_TRACKER_ONLY',
+    severity: 'information',
+    drug_id: item.drug_id,
+    message: `${item.generic_name} is saved as an as-needed medicine. No recurring reminder times were created. Follow the exact label or prescription directions each time.`,
+  }));
+  if (!fixedItems.length) {
+    return {
+      schedule: [],
+      prn_trackers: prnTrackers,
+      rationale: [],
+      can_save: true,
+      warnings: [...warnings, ...prnWarnings],
+      algorithm: 'EXPLAINABLE_CSP_SAFETY_CONTEXT_V3',
       nodes_evaluated: 0,
     };
   }
@@ -172,7 +271,7 @@ export function generateClinicalSchedule(items = [], interactions = []) {
   const interactionMap = new Map(
     interactions.map((rule) => [pairKey(rule.drug_a_id, rule.drug_b_id), rule])
   );
-  const domains = unique
+  const domains = fixedItems
     .map((item) => ({ item, candidates: domainsFor(item) }))
     .sort(
       (a, b) =>
@@ -203,9 +302,10 @@ export function generateClinicalSchedule(items = [], interactions = []) {
   if (!best) {
     return {
       schedule: [],
+      prn_trackers: prnTrackers,
       rationale: [],
       can_save: false,
-      algorithm: 'DETERMINISTIC_CSP_ANCHOR_V1',
+      algorithm: 'EXPLAINABLE_CSP_SAFETY_CONTEXT_V3',
       nodes_evaluated: nodes,
       warnings: [
         ...warnings,
@@ -251,9 +351,10 @@ export function generateClinicalSchedule(items = [], interactions = []) {
   }
   return {
     schedule,
-    warnings,
+    prn_trackers: prnTrackers,
+    warnings: [...warnings, ...prnWarnings],
     can_save: true,
-    algorithm: 'DETERMINISTIC_CSP_ANCHOR_V1',
+    algorithm: 'EXPLAINABLE_CSP_SAFETY_CONTEXT_V3',
     nodes_evaluated: nodes,
     objective_deviation_minutes: best.deviation,
     rationale: doses.map((dose) => ({

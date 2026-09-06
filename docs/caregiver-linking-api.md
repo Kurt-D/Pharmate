@@ -72,3 +72,11 @@ can succeed.
 Revoked links are retained for audit history but disappear from ordinary
 caregiver APIs. Revocation immediately blocks patient listing, medicines,
 orders, refills, deliveries, inquiries, existing alerts, and future alerts.
+
+An active caregiver link alone does not authorize optional inquiry storage.
+`POST /api/caregiver/patients/:code/inquiries` additionally requires the patient's
+existing consent to the current inquiry policy. A caregiver cannot accept or
+withdraw that consent on the patient's behalf. Submitted inquiry subjects are
+stored centrally under the patient record; the caregiver route does not provide
+transcript-reading access. See the
+[inquiry privacy contract](INQUIRY_PRIVACY_POLICY.md).

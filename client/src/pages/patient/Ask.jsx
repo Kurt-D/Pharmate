@@ -1,14 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '../../api.js';
+import { useInquiryConsent } from '../../lib/useInquiryConsent.js';
+import InquiryConsent from '../../components/InquiryConsent.jsx';
 
-// Ask Your Pharmacist (D-I). Anonymous — the pharmacist sees only your patient
-// code. Pharmacy-level medication questions only; the server keeps the thread
-// only while it's open and deletes it when you close it. Transport is polling.
+// Pseudonymous pharmacist inquiries. The server retains completed conversations.
+// Optional, versioned patient consent is enforced by the API before writes.
 const SCOPE_NOTICE =
   'Pharmacy-level medication questions only (dosing, timing, interactions, ' +
   'availability). PharMate pharmacists provide medication guidance and do not diagnose medical conditions.';
 
 export default function Ask() {
+  const consent = useInquiryConsent();
   const [branches, setBranches] = useState([]);
   const [thread, setThread] = useState(null); // { id }
   const [messages, setMessages] = useState([]);
@@ -42,6 +44,7 @@ export default function Ask() {
   }, [thread, loadMessages]);
 
   async function start() {
+    if (!consent.consented) return;
     setError('');
     setBanner('');
     try {
@@ -60,6 +63,7 @@ export default function Ask() {
   }
 
   async function send() {
+    if (!consent.consented) return;
     const message = draft.trim();
     if (!message) return;
     setDraft('');
@@ -80,7 +84,7 @@ export default function Ask() {
     setThread(null);
     setMessages([]);
     setSubject('');
-    setBanner('Inquiry closed. Your conversation stays on this device only.');
+    setBanner('Inquiry completed. Your conversation remains in consultation history on PharMate’s server.');
   }
 
   return (
@@ -88,7 +92,8 @@ export default function Ask() {
       <h1 className="pm-title" style={{ fontSize: '1.4rem' }}>
         Ask a Pharmacist
       </h1>
-      <p className="pm-subtitle">Anonymous — the pharmacist only sees your patient code.</p>
+      <p className="pm-subtitle">Your patient code replaces your profile name; messages may still identify you.</p>
+      <InquiryConsent consent={consent} />
 
       {/* Scope boundary — always visible, before any message is sent. */}
       <div className="pm-banner pm-banner--info mb-3">{SCOPE_NOTICE}</div>
@@ -118,7 +123,7 @@ export default function Ask() {
               </option>
             ))}
           </select>
-          <button className="pm-btn-primary" onClick={start}>
+          <button className="pm-btn-primary" onClick={start} disabled={!consent.consented}>
             Start conversation
           </button>
         </div>
@@ -127,7 +132,7 @@ export default function Ask() {
           <div className="d-flex justify-content-between align-items-center mb-2">
             <strong>Conversation</strong>
             <button className="pm-link" onClick={close}>
-              Close & delete
+              Complete conversation
             </button>
           </div>
 
@@ -161,7 +166,7 @@ export default function Ask() {
               onChange={(e) => setDraft(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && send()}
             />
-            <button className="pm-btn-primary" style={{ width: 'auto' }} onClick={send}>
+            <button className="pm-btn-primary" style={{ width: 'auto' }} onClick={send} disabled={!consent.consented}>
               Send
             </button>
           </div>

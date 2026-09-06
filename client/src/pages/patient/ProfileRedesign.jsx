@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../../api.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { useLanguage } from '../../context/LanguageContext.jsx';
@@ -581,6 +581,23 @@ export default function ProfileRedesign() {
         )}
       </section>
       <section className="pm-profile-menu">
+        <button onClick={() => navigate('/patient/onboarding')}>
+          <i>
+            <Icon name="shield" />
+          </i>
+          <span>
+            <strong>{tr('Health & Scheduling Profile', 'Profile sa Kalusugan at Iskedyul')}</strong>
+            <small>
+              {tr(
+                'Update safety answers, medicines, and daily routine',
+                'I-update ang safety answers, mga gamot, at araw-araw na routine'
+              )}
+            </small>
+          </span>
+          <b>
+            <Icon name="chevron" size={20} />
+          </b>
+        </button>
         <button onClick={() => setPanel(panel === 'edit' ? '' : 'edit')}>
           <i>
             <Icon name="edit" />
@@ -718,6 +735,9 @@ export default function ProfileRedesign() {
         {panel === 'privacy' && (
           <div className="pm-profile-panel">
             <p>{t('profile.privacyText')}</p>
+            <Link to="/privacy#inquiries">{tr('Inquiry privacy policy', 'Inquiry privacy policy')}</Link>
+            {' · '}
+            <Link to="/patient/ask">{tr('Manage inquiry consent', 'Pamahalaan ang pahintulot sa inquiry')}</Link>
           </div>
         )}
         <button onClick={() => navigate('/patient/accessibility')}>

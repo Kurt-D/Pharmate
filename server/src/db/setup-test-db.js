@@ -48,6 +48,9 @@ async function main() {
 
   run('migrate.js');
   run('seed-formulary.js', ['--allow-unverified']);
+  run('apply-otc-reference-rules.js');
+  run('sync-rule-coverage.js');
+  run('sync-otc-evidence.js');
 
   console.log(`\nTest database \`${DB}\` is ready. \`npm test\` uses it automatically.`);
 }

@@ -8,6 +8,7 @@ const MENU = [
   { to: '/pharmacist/dashboard', label: 'Dashboard' },
   { to: '/pharmacist/patients', label: 'Patients' },
   { to: '/pharmacist/inquiries', label: 'Inquiries' },
+  { to: '/pharmacist/appointments', label: 'Appointments' },
   { to: '/pharmacist/validation', label: 'Prescription Verification' },
   { to: '/pharmacist/alerts', label: 'Alerts' },
 ];
@@ -15,6 +16,7 @@ const TITLES = {
   dashboard: ['Dashboard', 'Manage medicine operations efficiently'],
   patients: ['Patients', 'Manage linked patient records'],
   inquiries: ['Counseling', 'Manage and communicate with patients'],
+  appointments: ['Appointments & Counseling', 'Schedule follow-ups and review post-dispensing summaries'],
   validation: [
     'Prescription Verification',
     'Review and verify prescriptions before dispensing medications.',

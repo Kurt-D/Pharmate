@@ -229,8 +229,8 @@ export default function Validation() {
                     ))
                   ) : (
                     <div className="alert alert-warning py-2 mb-0">
-                      No safe schedule was generated. Do not approve until the medicine details are
-                      corrected.
+                      No reminder schedule passed the recorded rule checks. Do not approve until
+                      the medicine details are corrected.
                     </div>
                   )}
                   {draft.unresolved?.length > 0 && (

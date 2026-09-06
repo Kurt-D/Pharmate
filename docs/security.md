@@ -10,6 +10,13 @@ Fields encrypted at rest with AES-256-GCM (app layer):
 - `patients.medical_condition_enc`
 - `delivery_requests.delivery_address_enc`
 
+This list is field-specific, not a claim that every sensitive database value is
+encrypted. In particular, `inquiry_threads.subject` and
+`inquiry_messages.message` are stored as plaintext at the application database
+layer. Inquiry messaging is not end-to-end encrypted. Infrastructure operators
+with database or backup access may be able to read those records; deployment
+transport, disk, and backup encryption require separate verification.
+
 **Encoding format:** `base64(12-byte IV):base64(16-byte auth tag):base64(ciphertext)`  
 **Key:** 32-byte key, stored in the `AES_KEY` environment variable — never in the repo.
 
@@ -120,4 +127,18 @@ The server refuses to start unless `DB_HOST`, `DB_NAME`, `DB_USER`, `JWT_SECRET`
 
 ## Staff-facing views
 
-All API responses destined for pharmacist, admin, or caregiver roles are serialized through a role-aware serializer that **omits PII columns**. A CI test (`test:grep-pii`) verifies that no seeded plaintext name appears in any staff-role response body.
+The patient-profile serializer omits encrypted profile columns and does not
+decrypt the patient's name, contact number, address, or medical condition for
+staff viewers. This does not make every staff-facing response anonymous. Inquiry
+subjects and messages are user-entered text and may contain identifying or health
+information. A seeded-profile-name check does not prove that arbitrary free text
+contains no personal information.
+
+Eligible pharmacists receive inquiry queue metadata including a subject and
+pseudonymous patient code; the patient and assigned pharmacist can retrieve
+transcripts through authorized inquiry APIs. The administrator portal has no
+inquiry transcript API, but database/backup operators have a separate access
+boundary. The optional inquiry feature requires explicit patient consent to the
+current policy. Withdrawal stops new content and does not erase centrally
+retained inquiry or consent history. See the
+[inquiry privacy policy and implementation contract](INQUIRY_PRIVACY_POLICY.md).

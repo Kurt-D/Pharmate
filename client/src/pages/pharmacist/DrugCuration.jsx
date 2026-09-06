@@ -360,7 +360,8 @@ const RULE_FIELDS = [
   ['administration_route', 'Administration route', 'text'],
   ['supported_frequency_codes', 'Supported frequency codes (comma separated)', 'text'],
   ['frequency_default', 'Frequency code', 'text'],
-  ['max_daily_doses', 'Maximum reminders per day', 'number'],
+  ['default_units_per_dose', 'Units per dose', 'number'],
+  ['max_daily_doses', 'Maximum doses in 24 hours', 'number'],
   ['min_interval_hours', 'Minimum interval (hours)', 'number'],
   ['administration_instruction', 'Administration instruction', 'text'],
   ['clinical_rationale', 'Patient-friendly timing explanation', 'text'],
@@ -386,6 +387,16 @@ function frequencyCodesValue(value) {
   }
 }
 
+function jsonArrayValue(value) {
+  if (Array.isArray(value)) return value;
+  try {
+    const parsed = JSON.parse(String(value || '[]'));
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
 function ClinicalRuleVerification() {
   const [rules, setRules] = useState(null);
   const [report, setReport] = useState(null);
@@ -397,14 +408,18 @@ function ClinicalRuleVerification() {
   const [working, setWorking] = useState(false);
   const [message, setMessage] = useState('');
   const [revisions, setRevisions] = useState([]);
+  const [reviewContext, setReviewContext] = useState(null);
+  const [credential, setCredential] = useState(null);
 
   const loadRules = useCallback(async () => {
-    const [rulesResponse, reportResponse] = await Promise.all([
+    const [rulesResponse, reportResponse, credentialResponse] = await Promise.all([
       api(`/api/pharmacist/clinical-rules?status=${status}&q=${encodeURIComponent(query)}`),
       api('/api/pharmacist/clinical-rules/report'),
+      api('/api/pharmacist/credential'),
     ]);
     setRules(rulesResponse.data);
     setReport(reportResponse.data.summary);
+    setCredential(credentialResponse.data);
   }, [query, status]);
 
   useEffect(() => {
@@ -425,8 +440,15 @@ function ClinicalRuleVerification() {
     });
     setReason('');
     setMessage('');
-    api(`/api/pharmacist/clinical-rules/${rule.id}/revisions`)
-      .then((response) => setRevisions(response.data))
+    setReviewContext(null);
+    Promise.all([
+      api(`/api/pharmacist/clinical-rules/${rule.id}/revisions`),
+      api(`/api/pharmacist/clinical-rules/${rule.id}/review-context`),
+    ])
+      .then(([revisionResponse, contextResponse]) => {
+        setRevisions(revisionResponse.data);
+        setReviewContext(contextResponse.data);
+      })
       .catch((error) => setMessage(error.message));
   }
 
@@ -449,13 +471,17 @@ function ClinicalRuleVerification() {
       );
       setSelectedRule(null);
       setRuleForm(null);
+      setReviewContext(null);
       await loadRules();
       return response;
     } catch (error) {
       const consistency = error.body?.consistency;
+      const safetyConsistency = error.body?.safety_consistency;
       setMessage(
         consistency
           ? `Cannot verify. Missing: ${consistency.missing_fields.join(', ') || 'none'}. Conflicts: ${consistency.conflicts.join(', ') || 'none'}.`
+          : safetyConsistency
+            ? `Cannot verify the safety rule. Missing: ${safetyConsistency.missing_fields.join(', ') || 'none'}. Conflicts: ${safetyConsistency.conflicts.join(', ') || 'none'}.`
           : error.message
       );
     } finally {
@@ -494,6 +520,12 @@ function ClinicalRuleVerification() {
       {message && (
         <div className="alert alert-info py-2" role="status">
           {message}
+        </div>
+      )}
+      {credential && !credential.credential_valid && (
+        <div className="alert alert-danger py-2" role="alert">
+          Clinical signing is disabled. Ask an administrator to independently verify your current
+          license record. Missing or blocked checks: {credential.credential_issues.join(', ')}.
         </div>
       )}
       <div className="row g-3">
@@ -620,6 +652,112 @@ function ClinicalRuleVerification() {
                   </a>
                 </div>
               )}
+              {reviewContext?.safety && (
+                <div className="col-12 mt-2">
+                  <section className="border rounded p-3 bg-light">
+                    <div className="d-flex flex-wrap justify-content-between gap-2">
+                      <strong>Patient-safety rule</strong>
+                      <span className="badge bg-secondary">
+                        {reviewContext.safety.safety_status || 'MISSING'} · version{' '}
+                        {reviewContext.safety.rule_version || 0}
+                      </span>
+                    </div>
+                    <p className="small text-muted mt-2 mb-2">
+                      Review the submitted age, weight, allergy, condition, interaction,
+                      pregnancy, breastfeeding, kidney, and liver coverage before signing.
+                    </p>
+                    <div className="row g-2 small">
+                      <div className="col-md-6">
+                        Age: {reviewContext.safety.minimum_age_years ?? 'no minimum'} to{' '}
+                        {reviewContext.safety.maximum_age_years ?? 'no maximum'}
+                      </div>
+                      <div className="col-md-6">
+                        Weight: {reviewContext.safety.minimum_weight_kg ?? 'no minimum'} to{' '}
+                        {reviewContext.safety.maximum_weight_kg ?? 'no maximum'} kg
+                      </div>
+                      <div className="col-md-6">Pregnancy: {reviewContext.safety.pregnancy_action || 'missing'}</div>
+                      <div className="col-md-6">Breastfeeding: {reviewContext.safety.breastfeeding_action || 'missing'}</div>
+                      <div className="col-md-6">Kidney: {reviewContext.safety.kidney_action || 'missing'}</div>
+                      <div className="col-md-6">Liver: {reviewContext.safety.liver_action || 'missing'}</div>
+                      <div className="col-12">
+                        Allergy terms:{' '}
+                        {jsonArrayValue(reviewContext.safety.allergy_terms_json).join(', ') ||
+                          'missing'}
+                      </div>
+                      <div className="col-12">
+                        Condition rules:{' '}
+                        {jsonArrayValue(reviewContext.safety.condition_rules_json).length
+                          ? jsonArrayValue(reviewContext.safety.condition_rules_json)
+                              .map(
+                                (condition) =>
+                                  `${condition.term} (${condition.action})${condition.message ? ` — ${condition.message}` : ''}`
+                              )
+                              .join('; ')
+                          : 'No condition-specific entries submitted'}
+                      </div>
+                    </div>
+                    <div className="d-flex flex-wrap gap-1 mt-2">
+                      {[
+                        ['age_reviewed', 'Age'],
+                        ['weight_reviewed', 'Weight'],
+                        ['allergies_reviewed', 'Allergies'],
+                        ['conditions_reviewed', 'Conditions'],
+                        ['interactions_reviewed', 'Interactions'],
+                      ].map(([field, label]) => (
+                        <span
+                          className={`badge ${Number(reviewContext.safety[field]) ? 'bg-success' : 'bg-danger'}`}
+                          key={field}
+                        >
+                          {label} {Number(reviewContext.safety[field]) ? 'reviewed' : 'not reviewed'}
+                        </span>
+                      ))}
+                    </div>
+                    {reviewContext.safety.source_url && (
+                      <a className="small d-inline-block mt-2" href={reviewContext.safety.source_url} rel="noreferrer" target="_blank">
+                        Open submitted safety source
+                      </a>
+                    )}
+                    {!reviewContext.safety.consistency?.valid && (
+                      <div className="alert alert-warning py-2 mt-2 mb-0 small">
+                        Incomplete safety checks:{' '}
+                        {[
+                          ...(reviewContext.safety.consistency?.missing_fields || []),
+                          ...(reviewContext.safety.consistency?.conflicts || []),
+                        ].join(', ')}
+                      </div>
+                    )}
+                  </section>
+                </div>
+              )}
+              <div className="col-12 mt-2">
+                <section className="border rounded p-3">
+                  <strong>Known interaction records</strong>
+                  <p className="small text-muted mb-2">
+                    Signing this rule also signs the listed interaction records after their fields
+                    pass server checks.
+                  </p>
+                  {reviewContext?.interactions?.length ? (
+                    <ul className="list-group">
+                      {reviewContext.interactions.map((interaction) => (
+                        <li className="list-group-item" key={interaction.id}>
+                          <strong>{interaction.other_medicine}</strong>
+                          <span className="d-block small">
+                            {interaction.interaction_type} · {interaction.severity}
+                            {interaction.min_gap_hours
+                              ? ` · ${Number(interaction.min_gap_hours)} hour gap`
+                              : ''}
+                          </span>
+                          <span className="d-block small text-muted">
+                            {interaction.notes || 'No review note recorded'}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="small text-muted mb-0">No known pair record is stored.</p>
+                  )}
+                </section>
+              </div>
               <div className="col-12">
                 <label className="form-label small fw-semibold">
                   Decision reason (required for rejection or retirement)
@@ -643,7 +781,7 @@ function ClinicalRuleVerification() {
                 </button>
                 <button
                   className="btn btn-success"
-                  disabled={working}
+                  disabled={working || !credential?.credential_valid || !reviewContext}
                   onClick={() => decide('VERIFY')}
                   type="button"
                 >
@@ -679,6 +817,13 @@ function ClinicalRuleVerification() {
                           {revision.reviewed_by_name} ·{' '}
                           {new Date(revision.created_at).toLocaleString()}
                         </span>
+                        {revision.reviewer_license_number && (
+                          <span className="d-block small text-muted">
+                            {revision.reviewer_license_jurisdiction} license{' '}
+                            {revision.reviewer_license_number} · valid through{' '}
+                            {dateValue(revision.reviewer_license_expires_on)}
+                          </span>
+                        )}
                         {revision.reason && (
                           <span className="d-block small">{revision.reason}</span>
                         )}

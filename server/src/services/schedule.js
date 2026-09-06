@@ -100,7 +100,10 @@ export async function loadEngineInput(patientId) {
     `SELECT m.id, m.drug_id, m.drug_name_raw, m.frequency, m.frequency_code,
             m.dosage_instruction, m.label_direction, m.food_instruction, m.timing_note, m.is_prn,
             m.start_date, m.end_date,
-            dr.min_interval_hours, dr.max_daily_doses, dr.meal_instruction,
+            COALESCE(m.min_interval_hours_snapshot,dr.min_interval_hours,dr.default_interval_hours)
+              AS min_interval_hours,
+            COALESCE(m.max_daily_doses_snapshot,dr.max_daily_doses) AS max_daily_doses,
+            dr.meal_instruction,
             dr.administration_instruction, dr.guidance_do, dr.guidance_dont,
             dr.evidence_source_url, dr.evidence_reviewed_at,
             dr.verified_by AS drug_verified_by, dr.is_provisional AS drug_is_provisional
@@ -222,7 +225,7 @@ export function classifyScheduleSafety(input, result, targetMedicationIds = []) 
           code: 'VERIFIED_RULE_VIOLATION',
           level: 'unavailable',
           title: 'Verified recommendation unavailable',
-          message: `A verified safety rule does not allow PharMate to recommend reminder times for ${names.join(' with ')}. Review the medicine information or ask a pharmacist.`,
+          message: `A reviewed interaction rule does not allow PharMate to recommend reminder times for ${names.join(' with ')}. Review the medicine information or ask a pharmacist.`,
           medicines: [a.id, b.id],
           rule: { type: rule.type, severity: rule.severity, note: rule.notes || null },
         })
@@ -286,20 +289,21 @@ export function classifyScheduleSafety(input, result, targetMedicationIds = []) 
       ? 'MANUAL_REVIEW_NEEDED'
       : findings.some((item) => item.level === 'adjusted')
         ? 'TIMING_ADJUSTED'
-        : 'SAFE_SCHEDULE';
+        : 'RULE_CHECKS_COMPLETED';
   if (!findings.length)
     findings.push(
       finding({
-        code: 'VERIFIED_SAFE_SCHEDULE',
-        level: 'safe',
-        title: 'Safe schedule',
-        message: 'No timing conflict was found using PharMate’s current medication rules.',
+        code: 'RULE_CHECKS_COMPLETED',
+        level: 'clear',
+        title: 'Rule checks completed',
+        message:
+          'No timing conflict was found in the medication rules currently recorded in PharMate. This is not a medical guarantee.',
       })
     );
 
   return {
     classification,
-    can_save: ['SAFE_SCHEDULE', 'TIMING_ADJUSTED'].includes(classification),
+    can_save: ['RULE_CHECKS_COMPLETED', 'TIMING_ADJUSTED'].includes(classification),
     findings,
     disclaimer:
       'Reminder-time recommendations only. PharMate does not diagnose, prescribe, change doses or frequency, or replace advice from a licensed pharmacist.',
@@ -462,6 +466,36 @@ async function loadLookup(patientId) {
   };
 }
 
+function validateDailyReminderLimits(slots, byId) {
+  const counts = new Map();
+  for (const slot of slots || []) {
+    const medicine = byId.get(slot.medication_id);
+    if (!medicine) return { error: 'unknown_medication' };
+    const maximum = Number(medicine.maxDailyDoses);
+    if (!Number.isInteger(maximum) || maximum <= 0) {
+      return {
+        error: 'dose_limit_unavailable',
+        medication_id: slot.medication_id,
+        medicine: medicine.drugName,
+      };
+    }
+    const day = dateKey(slot.scheduled_time);
+    const key = `${slot.medication_id}:${day}`;
+    const count = Number(counts.get(key) || 0) + 1;
+    counts.set(key, count);
+    if (count > maximum) {
+      return {
+        error: 'max_daily_doses_exceeded',
+        medication_id: slot.medication_id,
+        medicine: medicine.drugName,
+        max_daily_doses: maximum,
+        date: day,
+      };
+    }
+  }
+  return { ok: true };
+}
+
 /**
  * Live re-validation of a single dragged dose against the rest of the layout
  * (ENG §6 / D-E). The moved dose is identified by its array index (doses of the
@@ -573,9 +607,11 @@ export async function confirmForPatient(
   }
   let slots;
   let generationDate;
+  let lookup;
 
   if (Array.isArray(adjusted) && adjusted.length > 0) {
-    const { byId, interactionMap } = await loadLookup(patientId);
+    lookup = await loadLookup(patientId);
+    const { byId, interactionMap } = lookup;
     for (const dose of adjusted) {
       const m = byId.get(dose.medication_id);
       if (!m) return { error: 'unknown_medication' };
@@ -640,6 +676,10 @@ export async function confirmForPatient(
     generationDate = proposal.generation_date;
     slots = proposal.slots;
   }
+
+  lookup ||= await loadLookup(patientId);
+  const dailyLimit = validateDailyReminderLimits(slots, lookup.byId);
+  if (dailyLimit.error) return dailyLimit;
 
   const conn = await pool.getConnection();
   try {

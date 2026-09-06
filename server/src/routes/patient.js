@@ -21,6 +21,12 @@ import {
   closeThread,
   patientThreads,
 } from '../services/inquiry.js';
+import {
+  getInquiryConsent,
+  setInquiryConsent,
+  INQUIRY_CONSENT_REQUIRED,
+} from '../services/inquiryConsent.js';
+import { INQUIRY_PRIVACY_VERSION } from '../../../shared/inquiryPrivacy.mjs';
 import { createRefill, createDelivery, listOrders } from '../services/orders.js';
 import { verifyLabel } from '../services/labelScan.js';
 import { loyaltyFor } from '../services/adherence.js';
@@ -55,8 +61,13 @@ import {
   hashCaregiverCode,
 } from '../utils/caregiverInvite.js';
 import { recordAudit } from '../services/audit.js';
-import { createPortalNotification } from '../services/portalNotifications.js';
+import { createPortalNotification, notifyRole } from '../services/portalNotifications.js';
 import { publishUser } from '../services/realtimeEvents.js';
+import {
+  missingSafetyContext,
+  serializeSafetyProfile,
+  validateSafetyProfile,
+} from '../services/patientSafetyProfile.js';
 import {
   inquiryChanged,
   medicationChanged,
@@ -64,6 +75,14 @@ import {
   prescriptionChanged,
   scheduleChanged,
 } from '../services/domainEvents.js';
+import { saveOcrEvaluation, validateOcrEvaluation } from '../services/ocrEvaluation.js';
+import {
+  cancelPatientAppointment,
+  createAppointment,
+  patientAppointments,
+  publishedCounselingSummaries,
+  validateAppointmentRequest,
+} from '../services/counseling.js';
 
 const router = Router();
 
@@ -110,10 +129,62 @@ router.get('/streak/status', async (req, res) => {
   res.json(await getStreakStatus(req.user.sub));
 });
 
+// Native Google ML Kit runs fully on-device. This endpoint stores only field-
+// level validation measurements; it never receives or stores the package image.
+router.post('/ocr-evaluations', async (req, res) => {
+  const parsed = validateOcrEvaluation(req.body);
+  if (parsed.error) return res.status(400).json({ error: parsed.error });
+  const result = await saveOcrEvaluation(req.user.sub, parsed.value);
+  if (result.error) return res.status(400).json({ error: result.error });
+  res.status(result.recorded ? 201 : 200).json(result);
+});
+
+router.get('/appointments', async (req, res) => {
+  res.json(await patientAppointments(req.user.sub));
+});
+
+router.post('/appointments', async (req, res) => {
+  const parsed = validateAppointmentRequest(req.body);
+  if (parsed.error) return res.status(400).json({ error: parsed.error });
+  const result = await createAppointment(req.user.sub, parsed.value, req.user);
+  if (result.error) return res.status(result.error.status).json({ error: result.error.message });
+  await notifyRole('pharmacist', {
+    type: 'COUNSELING_APPOINTMENT_REQUESTED',
+    title: 'New counseling appointment request',
+    body: 'A patient requested a virtual medication follow-up.',
+    actionPath: '/pharmacist/appointments',
+    eventKey: `counseling-appointment-requested:${result.id}`,
+  });
+  publishUser(req.user.sub, 'COUNSELING_APPOINTMENT_UPDATED', result);
+  res.status(201).json(result);
+});
+
+router.post('/appointments/:id/cancel', async (req, res) => {
+  const result = await cancelPatientAppointment(req.user.sub, req.params.id, req.user);
+  if (result.error) return res.status(result.error.status).json({ error: result.error.message });
+  if (result.pharmacist_id) {
+    await createPortalNotification({
+      userId: result.pharmacist_id,
+      type: 'COUNSELING_APPOINTMENT_CANCELLED',
+      title: 'Counseling appointment cancelled',
+      body: 'A patient cancelled a scheduled follow-up.',
+      actionPath: '/pharmacist/appointments',
+      eventKey: `counseling-appointment-cancelled:${result.id}`,
+    });
+  }
+  publishUser(req.user.sub, 'COUNSELING_APPOINTMENT_UPDATED', result);
+  res.json(result);
+});
+
+router.get('/counseling-summaries', async (req, res) => {
+  res.json(await publishedCounselingSummaries(req.user.sub));
+});
+
 // ── GET /api/patient/anchors ──────────────────────────────────────────────────
 router.get('/anchors', async (req, res) => {
   const [rows] = await pool.execute(
-    `SELECT wake_anchor, sleep_anchor, breakfast_anchor, lunch_anchor, dinner_anchor, updated_at
+    `SELECT wake_anchor, sleep_anchor, breakfast_anchor, lunch_anchor, dinner_anchor,
+            profile_completed, updated_at
      FROM patient_anchors WHERE patient_id = ?`,
     [req.user.sub]
   );
@@ -137,7 +208,7 @@ router.put('/anchors', async (req, res) => {
   const updates = Object.entries(fields).filter(([, v]) => v !== undefined);
   if (updates.length === 0) return res.status(400).json({ error: 'No anchor fields provided' });
 
-  const setClauses = updates.map(([k]) => `${k} = ?`).join(', ');
+  const setClauses = [...updates.map(([k]) => `${k} = ?`), 'profile_completed = 1'].join(', ');
   const values = updates.map(([, v]) => v);
 
   await pool.execute(`UPDATE patient_anchors SET ${setClauses} WHERE patient_id = ?`, [
@@ -145,6 +216,32 @@ router.put('/anchors', async (req, res) => {
     req.user.sub,
   ]);
   res.json({ message: 'Anchors updated' });
+});
+
+router.get('/safety-profile', async (req, res) => {
+  await pool.execute('INSERT IGNORE INTO patient_safety_profiles (patient_id) VALUES (?)', [req.user.sub]);
+  const [[row]] = await pool.execute(
+    'SELECT * FROM patient_safety_profiles WHERE patient_id=?', [req.user.sub]
+  );
+  const profile = serializeSafetyProfile(row);
+  res.json({ ...profile, missing_for_safety_check: missingSafetyContext(profile) });
+});
+
+router.put('/safety-profile', async (req, res) => {
+  const parsed = validateSafetyProfile(req.body);
+  if (parsed.error) return res.status(400).json({ error: parsed.error });
+  const entries = Object.entries(parsed.value);
+  if (!entries.length) return res.status(400).json({ error: 'Nothing to update' });
+  await pool.execute('INSERT IGNORE INTO patient_safety_profiles (patient_id) VALUES (?)', [req.user.sub]);
+  const sets = entries.map(([field]) => `${field}=?`);
+  if (parsed.value.profile_completed) sets.push('completed_at=CURRENT_TIMESTAMP(3)', 'consented_at=COALESCE(consented_at,CURRENT_TIMESTAMP(3))');
+  await pool.execute(
+    `UPDATE patient_safety_profiles SET ${sets.join(',')} WHERE patient_id=?`,
+    [...entries.map(([, value]) => value), req.user.sub]
+  );
+  const [[row]] = await pool.execute('SELECT * FROM patient_safety_profiles WHERE patient_id=?', [req.user.sub]);
+  const profile = serializeSafetyProfile(row);
+  res.json({ ...profile, missing_for_safety_check: missingSafetyContext(profile) });
 });
 
 // ── GET /api/patient/profile ──────────────────────────────────────────────────
@@ -802,6 +899,20 @@ router.post('/schedule/confirm', async (req, res) => {
   if (result.error === 'unknown_medication') {
     return res.status(400).json({ error: 'Unknown medication in the adjusted layout' });
   }
+  if (result.error === 'dose_limit_unavailable') {
+    return res.status(409).json({
+      error: `A reviewed daily reminder limit is unavailable for ${result.medicine || 'this medicine'}.`,
+      medication_id: result.medication_id,
+    });
+  }
+  if (result.error === 'max_daily_doses_exceeded') {
+    return res.status(409).json({
+      error: `${result.medicine || 'This medicine'} is limited to ${result.max_daily_doses} reminder${result.max_daily_doses === 1 ? '' : 's'} per day.`,
+      medication_id: result.medication_id,
+      max_daily_doses: result.max_daily_doses,
+      date: result.date,
+    });
+  }
   await scheduleChanged(req.user.sub, result.version);
   res.status(201).json({ message: 'Schedule confirmed', ...result });
 });
@@ -857,6 +968,31 @@ router.post('/doses/:scheduleId/log', async (req, res) => {
     action,
   });
   if (result.error === 'not_found') return res.status(404).json({ error: 'Dose not found' });
+  if (result.error === 'invalid_logged_at' || result.error === 'invalid_action') {
+    return res.status(400).json({ error: 'Enter a valid dose action and time' });
+  }
+  if (result.error === 'already_logged') {
+    return res.status(409).json({ error: 'This reminder already has a recorded dose' });
+  }
+  if (result.error === 'dose_limit_unavailable') {
+    return res.status(409).json({
+      error:
+        'PharMate cannot record this dose because a reviewed daily limit is unavailable. Check the label or prescription and contact a pharmacist.',
+    });
+  }
+  if (result.error === 'max_daily_doses_exceeded') {
+    return res.status(409).json({
+      error: `Recording this dose would exceed the reviewed limit of ${result.max_daily_doses} dose${result.max_daily_doses === 1 ? '' : 's'} in 24 hours.`,
+      max_daily_doses: result.max_daily_doses,
+    });
+  }
+  if (result.error === 'minimum_dose_interval_not_met') {
+    return res.status(409).json({
+      error: `Wait at least ${result.min_interval_hours} hours between recorded doses of this medicine.`,
+      min_interval_hours: result.min_interval_hours,
+      nearest_logged_at: result.nearest_logged_at,
+    });
+  }
   res.status(201).json(result);
 });
 
@@ -869,7 +1005,26 @@ router.post('/doses/sync', async (req, res) => {
 });
 
 // ── Ask Your Pharmacist (UC obj 5, D-I) ───────────────────────────────────────
-// Anonymous inquiry: pharmacist sees patient_code only; completed chats are read-only history.
+// Pseudonymous inquiries and completed history are stored centrally with explicit consent.
+router.use(['/inquiries', '/inquiry-consent'], (_req, res, next) => {
+  res.set('Cache-Control', 'no-store');
+  next();
+});
+
+router.get('/inquiry-consent', async (req, res) => {
+  res.json(await getInquiryConsent(req.user.sub));
+});
+
+router.post('/inquiry-consent', async (req, res) => {
+  if (req.body?.accepted !== true || req.body?.policy_version !== INQUIRY_PRIVACY_VERSION) {
+    return res.status(403).json(INQUIRY_CONSENT_REQUIRED);
+  }
+  res.json(await setInquiryConsent(req.user.sub, true));
+});
+
+router.delete('/inquiry-consent', async (req, res) => {
+  res.json(await setInquiryConsent(req.user.sub, false));
+});
 
 // Open a thread. A restricted-substance subject is declined with a branch visit.
 router.post('/inquiries', async (req, res) => {
@@ -880,6 +1035,7 @@ router.post('/inquiries', async (req, res) => {
     pharmacistId: pharmacist_id ?? null,
     drugName: drug_name ?? null,
   });
+  if (result.error === 'inquiry_consent_required') return res.status(403).json(result);
   if (result.error === 'restricted') {
     return res.status(403).json({
       error: 'restricted_substance',
@@ -904,6 +1060,7 @@ router.post('/inquiries/:id/messages', async (req, res) => {
   const message = String(req.body?.message ?? '').trim();
   if (!message) return res.status(400).json({ error: 'message is required' });
   const result = await postMessage(req.params.id, 'patient', req.user.sub, message);
+  if (result.error === 'inquiry_consent_required') return res.status(403).json(result);
   if (result.error === 'not_found') return res.status(404).json({ error: 'Thread not found' });
   if (result.error === 'closed') return res.status(409).json({ error: 'This inquiry is closed' });
   await inquiryChanged({

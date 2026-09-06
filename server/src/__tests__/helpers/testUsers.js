@@ -25,13 +25,44 @@ export async function createPrivilegedTestUser({ email, password, role, fullName
     ]);
 
     if (role === 'pharmacist') {
-      await conn.execute('INSERT INTO pharmacists (id, full_name) VALUES (?, ?)', [id, fullName]);
+      await conn.execute(
+        `INSERT INTO pharmacists
+         (id,full_name,license_number,license_jurisdiction,license_status,
+          license_expires_on,license_evidence_url,license_verified_at)
+         VALUES (?,?,'TEST-LICENSE','TEST','VERIFIED','2099-12-31',
+                 'https://verification.example.test/license',NOW(3))`,
+        [id, fullName]
+      );
     } else if (role === 'caregiver') {
       await conn.execute('INSERT INTO caregivers (id, full_name) VALUES (?, ?)', [id, fullName]);
     } else {
       await conn.execute('INSERT INTO admins (id) VALUES (?)', [id]);
     }
 
+    await conn.commit();
+    return id;
+  } catch (error) {
+    await conn.rollback();
+    throw error;
+  } finally {
+    conn.release();
+  }
+}
+
+/** Provision a patient without consuming the public registration rate limit. */
+export async function createPatientTestUser({ email, password }) {
+  const id = uuidv4();
+  const passwordHash = await bcrypt.hash(password, BCRYPT_COST);
+  const patientCode = `PM-${id.replaceAll('-', '').slice(0, 6).toUpperCase()}`;
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    await conn.execute(
+      "INSERT INTO users (id,email,password_hash,role) VALUES (?,?,?,'patient')",
+      [id, email, passwordHash]
+    );
+    await conn.execute('INSERT INTO patients (id,patient_code) VALUES (?,?)', [id, patientCode]);
+    await conn.execute('INSERT INTO patient_anchors (patient_id) VALUES (?)', [id]);
     await conn.commit();
     return id;
   } catch (error) {

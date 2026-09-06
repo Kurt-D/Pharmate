@@ -8,7 +8,7 @@ const ALLOWED_FOOD_RULES = new Set([
 ]);
 
 function supportedFrequency(value) {
-  return /^(QD|BID|TID|QID|Q\d{1,2}H|BEDTIME)$/i.test(String(value || '').trim());
+  return /^(QD|BID|TID|QID|Q\d{1,2}H|BEDTIME|PRN)$/i.test(String(value || '').trim());
 }
 
 function frequencyIntervalHours(value) {
@@ -39,6 +39,15 @@ function supportedCodes(value) {
   } catch {
     return [];
   }
+}
+
+function validPastOrPresentDate(value, today = new Date()) {
+  if (!value) return false;
+  const date = value instanceof Date ? new Date(value.getTime()) : new Date(`${String(value).slice(0, 10)}T00:00:00Z`);
+  if (Number.isNaN(date.getTime())) return false;
+  const currentDate = new Date(today);
+  currentDate.setUTCHours(23, 59, 59, 999);
+  return date <= currentDate;
 }
 
 export function checkClinicalRule(rule = {}) {
@@ -80,6 +89,12 @@ export function checkClinicalRule(rule = {}) {
   if (expectedMaximum && (!Number.isInteger(expectedMaximum) || maximum !== expectedMaximum)) {
     conflicts.push('daily_limit_does_not_match_frequency');
   }
+  if (
+    String(rule.rx_class || '').toUpperCase() === 'OTC' &&
+    (!Number.isFinite(Number(rule.default_units_per_dose)) || Number(rule.default_units_per_dose) <= 0)
+  ) {
+    conflicts.push('invalid_units_per_dose');
+  }
   const rawMinimum = rule.min_interval_hours ?? rule.default_interval_hours;
   const minimum =
     rawMinimum === null || rawMinimum === '' || rawMinimum === undefined
@@ -110,6 +125,15 @@ export function checkClinicalRule(rule = {}) {
   if (!ALLOWED_FOOD_RULES.has(String(rule.food_rule || ''))) conflicts.push('invalid_food_rule');
   if (!/^https:\/\//i.test(String(rule.evidence_source_url || ''))) {
     conflicts.push('evidence_url_must_use_https');
+  }
+  if (rule.source_revision_date && !validPastOrPresentDate(rule.source_revision_date)) {
+    conflicts.push('invalid_source_revision_date');
+  }
+  if (rule.evidence_reviewed_at && !validPastOrPresentDate(rule.evidence_reviewed_at)) {
+    conflicts.push('invalid_evidence_reviewed_at');
+  }
+  if (rule.rule_version != null && (!Number.isInteger(Number(rule.rule_version)) || Number(rule.rule_version) <= 0)) {
+    conflicts.push('invalid_rule_version');
   }
   if (rule.catalog_status && rule.catalog_status !== 'VERIFIED') {
     conflicts.push('catalog_not_verified');

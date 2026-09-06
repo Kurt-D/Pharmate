@@ -15,9 +15,504 @@ import { updateOrderStatus } from '../services/orders.js';
 import { recordAudit } from '../services/audit.js';
 import { orderChanged } from '../services/domainEvents.js';
 import { publishRole, publishUser } from '../services/realtimeEvents.js';
+import { checkClinicalRule } from '../services/clinicalRuleVerification.js';
+import { checkSafetyRule } from '../services/medicationSafety.js';
 
 const router = Router();
 router.use(requireAuth, requireRole('admin'));
+
+// Aggregate-only validation results. Product names, patient IDs, recognized
+// text, and images are deliberately excluded from the administrator response.
+router.get('/ocr-validation', async (_req, res) => {
+  const [[summary]] = await pool.execute(
+    `SELECT COUNT(*) AS total_runs,
+            COUNT(field_accuracy_pct) AS measured_runs,
+            ROUND(AVG(field_accuracy_pct),2) AS field_accuracy_pct,
+            ROUND(AVG(name_accuracy_pct),2) AS name_accuracy_pct,
+            ROUND(AVG(strength_accuracy_pct),2) AS strength_accuracy_pct,
+            ROUND(AVG(formulation_accuracy_pct),2) AS formulation_accuracy_pct,
+            SUM(outcome='RECAPTURE_REQUIRED') AS recapture_runs,
+            SUM(outcome='MANUAL_REVIEW') AS manual_review_runs,
+            SUM(manual_correction_used=1) AS corrected_runs,
+            SUM(offline_mode=1) AS offline_runs,
+            ROUND(AVG(processing_ms),0) AS average_processing_ms,
+            COUNT(DISTINCT NULLIF(CONCAT(confirmed_name,'|',confirmed_strength,'|',confirmed_formulation),'||'))
+              AS distinct_packages
+     FROM ocr_scan_evaluations WHERE purpose='MEDICINE_LABEL' AND sample_country='PH'`
+  );
+  const [quality] = await pool.execute(
+    `SELECT image_quality,COUNT(*) AS runs,ROUND(AVG(field_accuracy_pct),2) AS accuracy_pct
+     FROM ocr_scan_evaluations
+     WHERE purpose='MEDICINE_LABEL' AND sample_country='PH'
+     GROUP BY image_quality ORDER BY runs DESC`
+  );
+  const [devices] = await pool.execute(
+    `SELECT device_platform,device_model,COUNT(*) AS runs,
+            SUM(offline_mode=1) AS offline_runs,ROUND(AVG(field_accuracy_pct),2) AS accuracy_pct,
+            ROUND(AVG(processing_ms),0) AS average_processing_ms
+     FROM ocr_scan_evaluations
+     WHERE purpose='MEDICINE_LABEL' AND sample_country='PH'
+     GROUP BY device_platform,device_model ORDER BY runs DESC LIMIT 100`
+  );
+  const numericSummary = Object.fromEntries(
+    Object.entries(summary).map(([key, value]) => [key, value == null ? null : Number(value)])
+  );
+  res.json({
+    measured: Number(summary.measured_runs) > 0,
+    methodology: 'Corrected medicine name, strength, and formulation compared with on-device ML Kit output.',
+    confidence_threshold: 0.75,
+    summary: numericSummary,
+    quality: quality.map((row) => ({
+      image_quality: row.image_quality,
+      runs: Number(row.runs),
+      accuracy_pct: row.accuracy_pct == null ? null : Number(row.accuracy_pct),
+    })),
+    devices: devices.map((row) => ({
+      ...row,
+      runs: Number(row.runs),
+      offline_runs: Number(row.offline_runs),
+      accuracy_pct: row.accuracy_pct == null ? null : Number(row.accuracy_pct),
+      average_processing_ms:
+        row.average_processing_ms == null ? null : Number(row.average_processing_ms),
+    })),
+  });
+});
+
+const GOVERNANCE_SELECT = `
+  SELECT drug.id,drug.generic_name,drug.common_strength,drug.dosage_form,
+         drug.administration_route,drug.release_type,drug.supported_frequency_codes,
+         drug.frequency_default,drug.max_daily_doses,drug.default_units_per_dose,
+         COALESCE(drug.min_interval_hours,drug.default_interval_hours) AS min_interval_hours,
+         drug.food_rule,drug.administration_instruction,drug.clinical_rationale,
+         drug.guidance_do,drug.guidance_dont,drug.evidence_source_url,
+         drug.clinical_source_name,drug.source_revision_date,drug.evidence_reviewed_at,
+         drug.rx_class,drug.catalog_status,drug.clinical_rule_status,drug.rule_version,
+         evidence.id AS evidence_id,evidence.directions_text,evidence.schedule_type,
+         evidence.units_per_dose,evidence.evidence_status,evidence.evidence_version,
+         evidence.registration_number,evidence.evidence_notes,
+         safety.id AS safety_rule_id,safety.allergy_terms_json,safety.condition_rules_json,
+         safety.minimum_age_years,safety.maximum_age_years,
+         safety.minimum_weight_kg,safety.maximum_weight_kg,
+         safety.age_reviewed,safety.weight_reviewed,safety.allergies_reviewed,
+         safety.conditions_reviewed,safety.interactions_reviewed,
+         safety.pregnancy_action,safety.breastfeeding_action,
+         safety.kidney_action,safety.liver_action,safety.source_name AS safety_source_name,
+         safety.source_url AS safety_source_url,
+         safety.source_revision_date AS safety_source_revision_date,
+         safety.evidence_notes AS safety_evidence_notes,safety.safety_status,
+         safety.rule_version AS safety_rule_version
+  FROM drug_reference drug
+  LEFT JOIN otc_label_evidence evidence
+    ON evidence.drug_id=drug.id AND evidence.population_key='ADULT'
+  LEFT JOIN medication_safety_rules safety
+    ON safety.drug_id=drug.id AND safety.population_key='ADULT'`;
+
+function parseJsonArray(value) {
+  if (Array.isArray(value)) return value;
+  try {
+    const parsed = JSON.parse(String(value || '[]'));
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function governancePayload(row) {
+  const clinical = checkClinicalRule(row);
+  const safety = checkSafetyRule(row);
+  const isPrescription = row.rx_class === 'RX';
+  const effectiveStatus = isPrescription
+    ? 'PATIENT_SPECIFIC_DIRECTIONS'
+    : row.clinical_rule_status === 'VERIFIED' && row.safety_status === 'VERIFIED' && clinical.valid && safety.valid
+      ? 'READY'
+      : row.clinical_rule_status === 'IN_REVIEW' || row.safety_status === 'IN_REVIEW'
+        ? 'IN_REVIEW'
+        : 'INCOMPLETE';
+  return {
+    ...row,
+    supported_frequency_codes: parseJsonArray(row.supported_frequency_codes),
+    allergy_terms: parseJsonArray(row.allergy_terms_json),
+    condition_rules: parseJsonArray(row.condition_rules_json),
+    clinical_consistency: clinical,
+    safety_consistency: safety,
+    effective_status: effectiveStatus,
+  };
+}
+
+// Administrator evidence preparation. Pharmacists remain the only role allowed
+// to verify a clinical rule; an admin submission enters their existing queue.
+router.get('/rule-governance', async (req, res) => {
+  const query = String(req.query.q || '').trim().toLowerCase().slice(0, 100);
+  const params = [];
+  let where = ' WHERE drug.availability=1';
+  if (query) {
+    where += ' AND LOWER(drug.generic_name) LIKE ?';
+    params.push(`%${query}%`);
+  }
+  const [rows] = await pool.execute(
+    `${GOVERNANCE_SELECT}${where} ORDER BY drug.rx_class='OTC' DESC,drug.generic_name LIMIT 500`,
+    params
+  );
+  const medicines = rows.map(governancePayload);
+  res.json({
+    summary: {
+      total: medicines.length,
+      ready: medicines.filter((item) => item.effective_status === 'READY').length,
+      in_review: medicines.filter((item) => item.effective_status === 'IN_REVIEW').length,
+      incomplete: medicines.filter((item) => item.effective_status === 'INCOMPLETE').length,
+      prescription_specific: medicines.filter(
+        (item) => item.effective_status === 'PATIENT_SPECIFIC_DIRECTIONS'
+      ).length,
+      prn: medicines.filter((item) => item.schedule_type === 'PRN_TRACKER').length,
+    },
+    medicines,
+  });
+});
+
+router.get('/rule-governance/:id/history', async (req, res) => {
+  const [adminRows] = await pool.execute(
+    `SELECT revision.id,revision.rule_version,revision.action,revision.validation_result,
+            revision.reason,revision.created_at,user.role AS actor_role,user.email AS actor
+     FROM rule_governance_revisions revision
+     JOIN users user ON user.id=revision.actor_user_id
+     WHERE revision.drug_id=?`,
+    [req.params.id]
+  );
+  const [clinicalRows] = await pool.execute(
+    `SELECT revision.id,revision.rule_version,revision.action,revision.consistency_result AS validation_result,
+            revision.reason,revision.created_at,'pharmacist' AS actor_role,
+            pharmacist.full_name AS actor,revision.reviewer_license_number,
+            revision.reviewer_license_jurisdiction,revision.reviewer_license_expires_on
+     FROM clinical_rule_revisions revision
+     JOIN pharmacists pharmacist ON pharmacist.id=revision.reviewed_by
+     WHERE revision.drug_id=?`,
+    [req.params.id]
+  );
+  res.json(
+    [...adminRows, ...clinicalRows].sort(
+      (left, right) => new Date(right.created_at) - new Date(left.created_at)
+    )
+  );
+});
+
+router.put('/rule-governance/:id', async (req, res) => {
+  const action = String(req.body?.action || 'SAVE_DRAFT').toUpperCase();
+  if (!['SAVE_DRAFT', 'SUBMIT'].includes(action)) {
+    return res.status(400).json({ error: 'action must be SAVE_DRAFT or SUBMIT' });
+  }
+  const codes = [
+    ...new Set(
+      (Array.isArray(req.body?.supported_frequency_codes)
+        ? req.body.supported_frequency_codes
+        : String(req.body?.supported_frequency_codes || '').split(',')
+      )
+        .map((code) => String(code).trim().toUpperCase())
+        .filter(Boolean)
+    ),
+  ];
+  const allergyTerms = [
+    ...new Set(
+      (Array.isArray(req.body?.allergy_terms)
+        ? req.body.allergy_terms
+        : String(req.body?.allergy_terms || '').split(',')
+      )
+        .map((term) => String(term).trim().toLowerCase())
+        .filter(Boolean)
+    ),
+  ];
+  const conditionRules = Array.isArray(req.body?.condition_rules)
+    ? req.body.condition_rules
+        .map((item) => ({
+          term: String(item?.term || '').trim().toLowerCase(),
+          action: ['ALLOW', 'REVIEW', 'BLOCK'].includes(String(item?.action || '').toUpperCase())
+            ? String(item.action).toUpperCase()
+            : 'REVIEW',
+          message: String(item?.message || '').trim().slice(0, 500),
+        }))
+        .filter((item) => item.term)
+    : [];
+  const clinicalFields = {
+    common_strength: String(req.body?.common_strength || '').trim(),
+    dosage_form: String(req.body?.dosage_form || '').trim(),
+    administration_route: String(req.body?.administration_route || '').trim().toUpperCase(),
+    release_type: String(req.body?.release_type || '').trim().toUpperCase(),
+    supported_frequency_codes: codes,
+    frequency_default: String(req.body?.frequency_default || '').trim().toUpperCase(),
+    max_daily_doses: req.body?.max_daily_doses === '' ? null : Number(req.body?.max_daily_doses),
+    default_units_per_dose:
+      req.body?.units_per_dose === '' ? null : Number(req.body?.units_per_dose),
+    min_interval_hours:
+      req.body?.min_interval_hours === '' ? null : Number(req.body?.min_interval_hours),
+    food_rule: String(req.body?.food_rule || 'NONE').trim().toUpperCase(),
+    administration_instruction: String(req.body?.administration_instruction || '').trim(),
+    clinical_rationale: String(req.body?.clinical_rationale || '').trim(),
+    guidance_do: String(req.body?.guidance_do || '').trim(),
+    guidance_dont: String(req.body?.guidance_dont || '').trim(),
+    evidence_source_url: String(req.body?.evidence_source_url || '').trim(),
+    clinical_source_name: String(req.body?.clinical_source_name || '').trim(),
+    source_revision_date: req.body?.source_revision_date || null,
+    evidence_reviewed_at: req.body?.evidence_reviewed_at || null,
+  };
+  const safetyFields = {
+    allergy_terms_json: allergyTerms,
+    condition_rules_json: conditionRules,
+    minimum_age_years:
+      req.body?.minimum_age_years === '' ? null : Number(req.body?.minimum_age_years),
+    maximum_age_years:
+      req.body?.maximum_age_years === '' ? null : Number(req.body?.maximum_age_years),
+    minimum_weight_kg:
+      req.body?.minimum_weight_kg === '' ? null : Number(req.body?.minimum_weight_kg),
+    maximum_weight_kg:
+      req.body?.maximum_weight_kg === '' ? null : Number(req.body?.maximum_weight_kg),
+    age_reviewed: req.body?.age_reviewed ? 1 : 0,
+    weight_reviewed: req.body?.weight_reviewed ? 1 : 0,
+    allergies_reviewed: req.body?.allergies_reviewed ? 1 : 0,
+    conditions_reviewed: req.body?.conditions_reviewed ? 1 : 0,
+    interactions_reviewed: req.body?.interactions_reviewed ? 1 : 0,
+    pregnancy_action: String(req.body?.pregnancy_action || '').toUpperCase() || null,
+    breastfeeding_action: String(req.body?.breastfeeding_action || '').toUpperCase() || null,
+    kidney_action: String(req.body?.kidney_action || '').toUpperCase() || null,
+    liver_action: String(req.body?.liver_action || '').toUpperCase() || null,
+    source_name: String(req.body?.safety_source_name || '').trim(),
+    source_url: String(req.body?.safety_source_url || '').trim(),
+    source_revision_date: req.body?.safety_source_revision_date || null,
+    evidence_notes: String(req.body?.safety_evidence_notes || '').trim(),
+  };
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const [[current]] = await conn.execute(`${GOVERNANCE_SELECT} WHERE drug.id=? FOR UPDATE`, [
+      req.params.id,
+    ]);
+    if (!current) {
+      await conn.rollback();
+      return res.status(404).json({ error: 'Medicine not found' });
+    }
+    if (action === 'SUBMIT' && current.rx_class !== 'OTC') {
+      await conn.rollback();
+      return res.status(422).json({
+        error: 'Prescription medicines use approved patient-specific directions, not a catalog schedule.',
+      });
+    }
+    const clinicalCandidate = {
+      ...current,
+      ...clinicalFields,
+      supported_frequency_codes: clinicalFields.supported_frequency_codes,
+    };
+    const safetyCandidate = { ...current, ...safetyFields };
+    const clinicalValidation = checkClinicalRule(clinicalCandidate);
+    const safetyValidation = checkSafetyRule(safetyCandidate);
+    if (action === 'SUBMIT' && (!clinicalValidation.valid || !safetyValidation.valid)) {
+      await conn.rollback();
+      return res.status(422).json({
+        error: 'Complete every clinical, evidence, and patient-safety field before submitting.',
+        clinical_consistency: clinicalValidation,
+        safety_consistency: safetyValidation,
+      });
+    }
+    const nextVersion = Math.max(
+      Number(current.rule_version || 1),
+      Number(current.safety_rule_version || 1)
+    ) + 1;
+    const clinicalStatus = action === 'SUBMIT' ? 'IN_REVIEW' : 'UNVERIFIED';
+    const safetyStatus = action === 'SUBMIT' ? 'IN_REVIEW' : 'DRAFT';
+    await conn.execute(
+      `UPDATE drug_reference SET common_strength=?,dosage_form=?,administration_route=?,release_type=?,
+       supported_frequency_codes=?,frequency_default=?,max_daily_doses=?,default_units_per_dose=?,min_interval_hours=?,
+       food_rule=?,administration_instruction=?,clinical_rationale=?,guidance_do=?,guidance_dont=?,
+       evidence_source_url=?,clinical_source_name=?,source_revision_date=?,evidence_reviewed_at=?,
+       clinical_rule_status=?,verified_by=NULL,verified_at=NULL,rule_version=? WHERE id=?`,
+      [
+        clinicalFields.common_strength,
+        clinicalFields.dosage_form,
+        clinicalFields.administration_route || null,
+        clinicalFields.release_type || null,
+        JSON.stringify(codes),
+        clinicalFields.frequency_default || null,
+        clinicalFields.max_daily_doses,
+        clinicalFields.default_units_per_dose,
+        clinicalFields.min_interval_hours,
+        clinicalFields.food_rule,
+        clinicalFields.administration_instruction || null,
+        clinicalFields.clinical_rationale || null,
+        clinicalFields.guidance_do || null,
+        clinicalFields.guidance_dont || null,
+        clinicalFields.evidence_source_url || null,
+        clinicalFields.clinical_source_name || null,
+        clinicalFields.source_revision_date,
+        clinicalFields.evidence_reviewed_at,
+        clinicalStatus,
+        nextVersion,
+        current.id,
+      ]
+    );
+    await conn.execute(
+      `INSERT INTO medication_safety_rules
+       (id,drug_id,population_key,allergy_terms_json,condition_rules_json,
+        minimum_age_years,maximum_age_years,minimum_weight_kg,maximum_weight_kg,
+        age_reviewed,weight_reviewed,allergies_reviewed,conditions_reviewed,interactions_reviewed,
+        pregnancy_action,breastfeeding_action,kidney_action,liver_action,
+        source_name,source_url,source_revision_date,evidence_notes,safety_status,rule_version,
+        prepared_by_user_id,submitted_at)
+       VALUES (?,?, 'ADULT',?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,
+               CASE WHEN ?='IN_REVIEW' THEN NOW(3) ELSE NULL END)
+       ON DUPLICATE KEY UPDATE allergy_terms_json=VALUES(allergy_terms_json),
+       condition_rules_json=VALUES(condition_rules_json),minimum_age_years=VALUES(minimum_age_years),
+       maximum_age_years=VALUES(maximum_age_years),minimum_weight_kg=VALUES(minimum_weight_kg),
+       maximum_weight_kg=VALUES(maximum_weight_kg),age_reviewed=VALUES(age_reviewed),
+       weight_reviewed=VALUES(weight_reviewed),allergies_reviewed=VALUES(allergies_reviewed),
+       conditions_reviewed=VALUES(conditions_reviewed),interactions_reviewed=VALUES(interactions_reviewed),
+       pregnancy_action=VALUES(pregnancy_action),breastfeeding_action=VALUES(breastfeeding_action),
+       kidney_action=VALUES(kidney_action),liver_action=VALUES(liver_action),source_name=VALUES(source_name),
+       source_url=VALUES(source_url),source_revision_date=VALUES(source_revision_date),
+       evidence_notes=VALUES(evidence_notes),safety_status=VALUES(safety_status),
+       rule_version=VALUES(rule_version),prepared_by_user_id=VALUES(prepared_by_user_id),
+       submitted_at=VALUES(submitted_at),verified_by=NULL,verified_at=NULL`,
+      [
+        uuidv4(),
+        current.id,
+        JSON.stringify(allergyTerms),
+        JSON.stringify(conditionRules),
+        safetyFields.minimum_age_years,
+        safetyFields.maximum_age_years,
+        safetyFields.minimum_weight_kg,
+        safetyFields.maximum_weight_kg,
+        safetyFields.age_reviewed,
+        safetyFields.weight_reviewed,
+        safetyFields.allergies_reviewed,
+        safetyFields.conditions_reviewed,
+        safetyFields.interactions_reviewed,
+        safetyFields.pregnancy_action,
+        safetyFields.breastfeeding_action,
+        safetyFields.kidney_action,
+        safetyFields.liver_action,
+        safetyFields.source_name || null,
+        safetyFields.source_url || null,
+        safetyFields.source_revision_date,
+        safetyFields.evidence_notes || null,
+        safetyStatus,
+        nextVersion,
+        req.user.sub,
+        safetyStatus,
+      ]
+    );
+    if (current.rx_class === 'OTC') {
+      const scheduleType = String(req.body?.schedule_type || '').toUpperCase() || null;
+      await conn.execute(
+        `INSERT INTO otc_label_evidence
+         (id,drug_id,population_key,registration_number,directions_text,schedule_type,
+          frequency_code,units_per_dose,min_interval_hours,max_daily_doses,food_rule,
+          source_authority,source_url,source_revision_date,evidence_status,evidence_version,
+          evidence_notes,prepared_by_user_id,submitted_at)
+         VALUES (?,?, 'ADULT',?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,
+                 CASE WHEN ?='IN_REVIEW' THEN NOW(3) ELSE NULL END)
+         ON DUPLICATE KEY UPDATE registration_number=VALUES(registration_number),
+         directions_text=VALUES(directions_text),schedule_type=VALUES(schedule_type),
+         frequency_code=VALUES(frequency_code),units_per_dose=VALUES(units_per_dose),
+         min_interval_hours=VALUES(min_interval_hours),max_daily_doses=VALUES(max_daily_doses),
+         food_rule=VALUES(food_rule),source_authority=VALUES(source_authority),
+         source_url=VALUES(source_url),source_revision_date=VALUES(source_revision_date),
+         evidence_status=VALUES(evidence_status),evidence_version=VALUES(evidence_version),
+         evidence_notes=VALUES(evidence_notes),prepared_by_user_id=VALUES(prepared_by_user_id),
+         submitted_at=VALUES(submitted_at)`,
+        [
+          current.evidence_id || uuidv4(),
+          current.id,
+          String(req.body?.registration_number || '').trim() || null,
+          String(req.body?.directions_text || '').trim() || null,
+          scheduleType,
+          clinicalFields.frequency_default || null,
+          req.body?.units_per_dose === '' ? null : Number(req.body?.units_per_dose),
+          clinicalFields.min_interval_hours,
+          clinicalFields.max_daily_doses,
+          clinicalFields.food_rule,
+          clinicalFields.clinical_source_name || null,
+          clinicalFields.evidence_source_url || null,
+          clinicalFields.source_revision_date,
+          action === 'SUBMIT' ? 'REVIEWED' : 'COLLECTED',
+          nextVersion,
+          String(req.body?.evidence_notes || '').trim() || null,
+          req.user.sub,
+          clinicalStatus,
+        ]
+      );
+    }
+    await conn.execute(
+      `UPDATE medication_rule_variants SET strength=?,dosage_form=?,administration_route=?,
+       release_type=?,supported_frequency_codes=?,frequency_code=?,daily_dose_count=?,
+       min_interval_hours=?,max_daily_doses=?,food_rule=?,administration_instruction=?,
+       clinical_rationale=?,guidance_do=?,guidance_dont=?,source_name=?,source_url=?,
+       source_revision_date=?,evidence_reviewed_at=?,schedule_rule_status=?,rule_version=?,
+       automation_status='NEEDS_EVIDENCE',
+       automation_block_reason='Awaiting pharmacist review of clinical and safety evidence',
+       assessed_at=NOW(3),reviewed_by=NULL,verified_at=NULL WHERE drug_id=?`,
+      [
+        clinicalFields.common_strength,
+        clinicalFields.dosage_form,
+        clinicalFields.administration_route || null,
+        clinicalFields.release_type || null,
+        JSON.stringify(codes),
+        clinicalFields.frequency_default || null,
+        clinicalFields.max_daily_doses,
+        clinicalFields.min_interval_hours,
+        clinicalFields.max_daily_doses,
+        clinicalFields.food_rule,
+        clinicalFields.administration_instruction || null,
+        clinicalFields.clinical_rationale || null,
+        clinicalFields.guidance_do || null,
+        clinicalFields.guidance_dont || null,
+        clinicalFields.clinical_source_name || null,
+        clinicalFields.evidence_source_url || null,
+        clinicalFields.source_revision_date,
+        clinicalFields.evidence_reviewed_at,
+        clinicalStatus,
+        nextVersion,
+        current.id,
+      ]
+    );
+    const after = { clinical: clinicalFields, safety: safetyFields };
+    await conn.execute(
+      `INSERT INTO rule_governance_revisions
+       (id,drug_id,rule_version,action,before_data,after_data,validation_result,actor_user_id)
+       VALUES (?,?,?,?,?,?,?,?)`,
+      [
+        uuidv4(),
+        current.id,
+        nextVersion,
+        action === 'SUBMIT' ? 'SUBMITTED' : 'DRAFT_SAVED',
+        JSON.stringify(governancePayload(current)),
+        JSON.stringify(after),
+        JSON.stringify({ clinical: clinicalValidation, safety: safetyValidation }),
+        req.user.sub,
+      ]
+    );
+    await recordAudit({
+      actor: { id: req.user.sub, role: 'admin' },
+      action: action === 'SUBMIT' ? 'RULE_EVIDENCE_SUBMITTED' : 'RULE_EVIDENCE_DRAFT_SAVED',
+      entityType: 'drug_reference',
+      entityId: current.id,
+      metadata: { rule_version: nextVersion },
+      executor: conn,
+    });
+    await conn.commit();
+    publishRole('pharmacist', 'FORMULARY_UPDATED', {
+      action: action === 'SUBMIT' ? 'rule_submitted' : 'rule_draft_saved',
+      drug_id: current.id,
+    });
+    res.json({
+      id: current.id,
+      status: clinicalStatus,
+      rule_version: nextVersion,
+      clinical_consistency: clinicalValidation,
+      safety_consistency: safetyValidation,
+    });
+  } catch (error) {
+    await conn.rollback();
+    throw error;
+  } finally {
+    conn.release();
+  }
+});
 
 // Privacy-safe immutable activity feed. Metadata must contain identifiers and
 // operational state only; patient names, diagnoses and prescription content are
@@ -133,6 +628,22 @@ router.post('/medicines', async (req, res) => {
      VALUES (?,?,?,?, 'UNVERIFIED',1)`,
     [uuidv4(), id, strength, form]
   );
+  await pool.execute(
+    `INSERT INTO medication_safety_rules
+       (id,drug_id,population_key,allergy_terms_json,evidence_notes)
+     VALUES (?,?, 'ADULT',JSON_ARRAY(?),
+             'Complete every safety domain in Rule Governance before submission.')`,
+    [uuidv4(), id, genericName.toLowerCase()]
+  );
+  if (rxClass === 'OTC') {
+    await pool.execute(
+      `INSERT INTO otc_label_evidence
+       (id,drug_id,population_key,evidence_status,evidence_notes)
+       VALUES (?,?, 'ADULT','MISSING',
+               'Add the exact registered product label in Rule Governance.')`,
+      [uuidv4(), id]
+    );
+  }
   await recordAudit({
     actor: { id: req.user.sub, role: 'admin' },
     action: 'FORMULARY_MEDICINE_CREATED',
@@ -334,6 +845,116 @@ router.put('/users/:id/active', async (req, res) => {
   });
   publishUser(req.params.id, 'ACCOUNT_STATUS_CHANGED', { is_active: Boolean(active) });
   res.json({ id: req.params.id, is_active: active });
+});
+
+// Pharmacist credential review is deliberately separate from account status.
+// An active pharmacist-role account cannot sign a clinical decision until an
+// administrator records an independently checked, unexpired license.
+router.get('/pharmacist-credentials', async (_req, res) => {
+  const [rows] = await pool.execute(
+    `SELECT pharmacist.id,pharmacist.full_name,pharmacist.license_number,
+            pharmacist.license_jurisdiction,pharmacist.license_status,
+            pharmacist.license_expires_on,pharmacist.license_evidence_url,
+            pharmacist.license_verified_at,user.is_active
+     FROM pharmacists pharmacist
+     JOIN users user ON user.id=pharmacist.id
+     ORDER BY FIELD(pharmacist.license_status,'PENDING','EXPIRED','SUSPENDED','VERIFIED'),
+              pharmacist.full_name`
+  );
+  res.json({
+    summary: {
+      total: rows.length,
+      verified: rows.filter((row) => row.license_status === 'VERIFIED').length,
+      pending: rows.filter((row) => row.license_status === 'PENDING').length,
+      blocked: rows.filter((row) => ['SUSPENDED', 'EXPIRED'].includes(row.license_status)).length,
+    },
+    pharmacists: rows,
+    verification_portal: 'https://verification.prc.gov.ph/',
+    notice:
+      'Credential status is an administrative record. Confirm the license independently with the issuing regulator before marking it verified.',
+  });
+});
+
+router.put('/pharmacist-credentials/:id', async (req, res) => {
+  const status = String(req.body?.license_status || 'PENDING').trim().toUpperCase();
+  if (!['PENDING', 'VERIFIED', 'SUSPENDED', 'EXPIRED'].includes(status)) {
+    return res.status(400).json({ error: 'Invalid credential status' });
+  }
+  const licenseNumber = String(req.body?.license_number || '').trim().slice(0, 100);
+  const jurisdiction = String(req.body?.license_jurisdiction || '').trim().slice(0, 100);
+  const evidenceUrl = String(req.body?.license_evidence_url || '').trim().slice(0, 1000);
+  const expiresOn = String(req.body?.license_expires_on || '').trim();
+  if (evidenceUrl && !/^https:\/\//i.test(evidenceUrl)) {
+    return res.status(400).json({ error: 'Credential evidence must use an HTTPS URL' });
+  }
+  if (expiresOn && !/^\d{4}-\d{2}-\d{2}$/.test(expiresOn)) {
+    return res.status(400).json({ error: 'Enter a valid license expiry date' });
+  }
+  if (status === 'VERIFIED') {
+    if (!licenseNumber || !jurisdiction || !evidenceUrl || !expiresOn) {
+      return res.status(422).json({
+        error:
+          'License number, jurisdiction, regulator evidence, and expiry date are required to verify a pharmacist.',
+      });
+    }
+    const expiry = new Date(`${expiresOn}T23:59:59Z`);
+    if (Number.isNaN(expiry.getTime()) || expiry < new Date()) {
+      return res.status(422).json({ error: 'An expired license cannot be marked verified' });
+    }
+  }
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const [[current]] = await conn.execute(
+      `SELECT id,license_status FROM pharmacists WHERE id=? FOR UPDATE`,
+      [req.params.id]
+    );
+    if (!current) {
+      await conn.rollback();
+      return res.status(404).json({ error: 'Pharmacist not found' });
+    }
+    await conn.execute(
+      `UPDATE pharmacists
+       SET license_number=?,license_jurisdiction=?,license_status=?,license_expires_on=?,
+           license_evidence_url=?,
+           license_verified_at=CASE WHEN ?='VERIFIED' THEN NOW(3) ELSE license_verified_at END,
+           license_verified_by=CASE WHEN ?='VERIFIED' THEN ? ELSE license_verified_by END
+       WHERE id=?`,
+      [
+        licenseNumber || null,
+        jurisdiction || null,
+        status,
+        expiresOn || null,
+        evidenceUrl || null,
+        status,
+        status,
+        req.user.sub,
+        req.params.id,
+      ]
+    );
+    await recordAudit({
+      actor: { id: req.user.sub, role: 'admin' },
+      action: 'PHARMACIST_CREDENTIAL_STATUS_UPDATED',
+      entityType: 'pharmacist_credential',
+      entityId: req.params.id,
+      metadata: {
+        from: current.license_status,
+        to: status,
+        jurisdiction: jurisdiction || null,
+        expires_on: expiresOn || null,
+        evidence_recorded: Boolean(evidenceUrl),
+      },
+      executor: conn,
+    });
+    await conn.commit();
+    publishUser(req.params.id, 'PHARMACIST_CREDENTIAL_CHANGED', { license_status: status });
+    res.json({ id: req.params.id, license_status: status });
+  } catch (error) {
+    await conn.rollback();
+    throw error;
+  } finally {
+    conn.release();
+  }
 });
 
 // ── GET /api/admin/orders ─────────────────────────────────────────────────────

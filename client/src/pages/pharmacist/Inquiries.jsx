@@ -102,7 +102,7 @@ export default function Inquiries() {
                 <div className="d-flex justify-content-between align-items-center mb-2">
                   <strong className="pw-code">{active.patient_code}</strong>
                   <button className="btn btn-sm btn-outline-danger" onClick={close}>
-                    Close & purge
+                Complete conversation
                   </button>
                 </div>
                 <div style={{ maxHeight: 320, overflowY: 'auto' }} className="mb-2">

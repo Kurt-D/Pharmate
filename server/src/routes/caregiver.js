@@ -446,6 +446,7 @@ router.post('/patients/:code/deliveries', async (req, res) => {
 // Open a Medication Inquiry on the patient's behalf (UC-09). The pharmacist sees
 // it by patient_code only; a restricted-substance subject is declined (TC-11).
 router.post('/patients/:code/inquiries', async (req, res) => {
+  res.set('Cache-Control', 'no-store');
   const patientId = await linkedPatientId(req.user.sub, req.params.code);
   if (!patientId) return res.status(404).json({ error: 'Patient not linked' });
   const { subject, branch_id, drug_name } = req.body ?? {};
@@ -454,6 +455,7 @@ router.post('/patients/:code/inquiries', async (req, res) => {
     branchId: branch_id ?? null,
     drugName: drug_name ?? null,
   });
+  if (result.error === 'inquiry_consent_required') return res.status(403).json(result);
   if (result.error === 'restricted') {
     return res.status(403).json({
       error: 'restricted_substance',
