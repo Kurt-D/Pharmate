@@ -926,7 +926,8 @@ export default function Medications() {
     try {
       const media = await captureOcrImage(source);
       if (!media) return;
-      const url = media.webPath || (media.thumbnail ? `data:image/jpeg;base64,${media.thumbnail}` : '');
+      const url =
+        media.webPath || (media.thumbnail ? `data:image/jpeg;base64,${media.thumbnail}` : '');
       if (!url) throw new Error('The selected image could not be opened.');
       setScanPhoto({ url });
       setScanName('');
@@ -2362,7 +2363,9 @@ function MedicineScanner({
                 <Icon name="camera" />
               </span>
               <strong>{tr('Open Camera', 'Buksan ang Camera')}</strong>
-              <small>{tr('Read locally with Google ML Kit', 'Basahin sa device gamit ang Google ML Kit')}</small>
+              <small>
+                {tr('Read locally with Google ML Kit', 'Basahin sa device gamit ang Google ML Kit')}
+              </small>
             </button>
             <button disabled={busy} onClick={() => onChoosePhoto('gallery')} type="button">
               <span>
@@ -2402,9 +2405,7 @@ function MedicineScanner({
 
             {ocr && (
               <div
-                className={
-                  ocr.outcome === 'ACCEPTED' ? 'pm-med-scan-match' : 'pm-med-scan-warning'
-                }
+                className={ocr.outcome === 'ACCEPTED' ? 'pm-med-scan-match' : 'pm-med-scan-warning'}
                 role="status"
               >
                 <Icon name={ocr.outcome === 'ACCEPTED' ? 'check' : 'info'} />
@@ -2437,7 +2438,7 @@ function MedicineScanner({
                     <Icon name="shield" size={14} /> {tr('Correct medicine', 'Tamang gamot')}
                   </em>
                 </div>
-                  <small>
+                <small>
                   {tr('Field confidence', 'Kumpiyansa sa fields')}: {confidence}%
                 </small>
               </div>
@@ -2542,10 +2543,7 @@ function MedicineScanner({
                 </label>
                 <button
                   disabled={
-                    busy ||
-                    !name.trim() ||
-                    !reviewed ||
-                    ocr?.outcome === 'RECAPTURE_REQUIRED'
+                    busy || !name.trim() || !reviewed || ocr?.outcome === 'RECAPTURE_REQUIRED'
                   }
                   type="submit"
                 >

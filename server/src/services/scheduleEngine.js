@@ -58,9 +58,7 @@ function baseTimes(rule) {
   if (frequency === 'BEDTIME' || food === 'BEDTIME') return anchored([routine.bedtime]);
   if (frequency === 'QD') {
     return anchored(
-      food === 'EMPTY_STOMACH' || food === 'BEFORE_MEAL'
-        ? [routine.wake + 30]
-        : [routine.breakfast]
+      food === 'EMPTY_STOMACH' || food === 'BEFORE_MEAL' ? [routine.wake + 30] : [routine.breakfast]
     );
   }
   const match = frequency.match(/^Q(\d{1,2})H$/);
@@ -163,8 +161,8 @@ function explanation(item, time, shift) {
     item.schedule_basis === 'PRESCRIPTION_DIRECTIONS'
       ? 'the exact directions from your approved prescription'
       : item.schedule_basis === 'PATIENT_LABEL'
-      ? 'how often you confirmed from the medicine label'
-      : 'the checked schedule information for this medicine';
+        ? 'how often you confirmed from the medicine label'
+        : 'the checked schedule information for this medicine';
   if (item.food_rule === 'WITH_MEAL') anchor = 'a main meal';
   if (item.food_rule === 'BEFORE_MEAL') anchor = '30 minutes before a meal anchor';
   if (item.food_rule === 'AFTER_MEAL') anchor = '30 minutes after a meal anchor';
@@ -175,8 +173,10 @@ function explanation(item, time, shift) {
 }
 
 function isPrn(item) {
-  return String(item.rule_kind || '').toUpperCase() === 'PRN' ||
-    String(item.standard_frequency || '').toUpperCase() === 'PRN';
+  return (
+    String(item.rule_kind || '').toUpperCase() === 'PRN' ||
+    String(item.standard_frequency || '').toUpperCase() === 'PRN'
+  );
 }
 
 function prnTracker(item) {
@@ -204,9 +204,7 @@ export function generateClinicalSchedule(items = [], interactions = []) {
   const fixedItems = unique.filter((item) => !isPrn(item));
   const incompletePrn = prnItems.filter(
     (item) =>
-      !['VERIFIED', 'REFERENCE', 'PRESCRIPTION'].includes(
-        item.clinical_rule_status
-      ) ||
+      !['VERIFIED', 'REFERENCE', 'PRESCRIPTION'].includes(item.clinical_rule_status) ||
       !String(item.dosage_instruction || '').trim() ||
       !String(item.label_direction || item.prescription_directions || '').trim() ||
       !Number.isInteger(Number(item.max_daily_doses)) ||
@@ -235,8 +233,8 @@ export function generateClinicalSchedule(items = [], interactions = []) {
           code: 'VERIFIED_RULE_UNAVAILABLE',
           severity: 'blocking',
           drug_id: item.drug_id,
-            message: `A complete verified frequency and daily reminder limit is unavailable for ${item.generic_name}.`,
-          })),
+          message: `A complete verified frequency and daily reminder limit is unavailable for ${item.generic_name}.`,
+        })),
         ...incompletePrn.map((item) => ({
           code: 'PRN_DIRECTIONS_REQUIRED',
           severity: 'blocking',

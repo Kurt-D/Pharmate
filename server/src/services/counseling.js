@@ -29,7 +29,8 @@ export function validateAppointmentRequest(input = {}, now = new Date()) {
   if (!String(input.branch_id || '').trim()) return { error: 'Select a pharmacy branch.' };
   if (!TOPICS.has(topic)) return { error: 'Select a valid counseling topic.' };
   if (!MODALITIES.has(modality)) return { error: 'Select a valid appointment type.' };
-  if (!DURATIONS.has(durationMinutes)) return { error: 'Appointment duration must be 15, 30, 45, or 60 minutes.' };
+  if (!DURATIONS.has(durationMinutes))
+    return { error: 'Appointment duration must be 15, 30, 45, or 60 minutes.' };
   if (Number.isNaN(start.getTime())) return { error: 'Select a valid appointment date and time.' };
   if (start.getTime() < now.getTime() + 30 * 60000) {
     return { error: 'Appointments must be requested at least 30 minutes in advance.' };
@@ -51,9 +52,15 @@ export function validateAppointmentRequest(input = {}, now = new Date()) {
 export function validateAppointmentDecision(input = {}) {
   const action = String(input.action || '').toUpperCase();
   if (!['CONFIRM', 'DECLINE'].includes(action)) return { error: 'Select confirm or decline.' };
-  const reason = String(input.reason || '').trim().slice(0, 500) || null;
+  const reason =
+    String(input.reason || '')
+      .trim()
+      .slice(0, 500) || null;
   const meetingUrl = input.meeting_url ? httpsUrl(input.meeting_url) : null;
-  const instructions = String(input.session_instructions || '').trim().slice(0, 500) || null;
+  const instructions =
+    String(input.session_instructions || '')
+      .trim()
+      .slice(0, 500) || null;
   if (action === 'DECLINE' && !reason) return { error: 'A reason is required when declining.' };
   if (action === 'CONFIRM' && !meetingUrl && !instructions) {
     return { error: 'Add a secure HTTPS meeting link or session instructions.' };
@@ -110,7 +117,9 @@ export async function createAppointment(patientId, input, actor) {
     services = [];
   }
   if (services.length && !services.includes('consultation')) {
-    return { error: { status: 400, message: 'This branch does not offer counseling appointments.' } };
+    return {
+      error: { status: 400, message: 'This branch does not offer counseling appointments.' },
+    };
   }
   const id = uuidv4();
   const conn = await pool.getConnection();
@@ -190,10 +199,14 @@ export async function decideAppointment(pharmacistId, appointmentId, input, acto
     }
     if (appointment.status !== 'REQUESTED') {
       await conn.rollback();
-      return { error: { status: 409, message: 'This appointment is no longer awaiting a decision.' } };
+      return {
+        error: { status: 409, message: 'This appointment is no longer awaiting a decision.' },
+      };
     }
     if (input.action === 'CONFIRM') {
-      const end = new Date(new Date(appointment.scheduled_start_at).getTime() + appointment.duration_minutes * 60000);
+      const end = new Date(
+        new Date(appointment.scheduled_start_at).getTime() + appointment.duration_minutes * 60000
+      );
       const [[conflict]] = await conn.execute(
         `SELECT id FROM counseling_appointments
          WHERE pharmacist_id=? AND status='CONFIRMED'
@@ -204,7 +217,9 @@ export async function decideAppointment(pharmacistId, appointmentId, input, acto
       );
       if (conflict) {
         await conn.rollback();
-        return { error: { status: 409, message: 'This time overlaps another confirmed appointment.' } };
+        return {
+          error: { status: 409, message: 'This time overlaps another confirmed appointment.' },
+        };
       }
     }
     const nextStatus = input.action === 'CONFIRM' ? 'CONFIRMED' : 'DECLINED';
@@ -258,9 +273,11 @@ function generatedSummaryText(appointment, medications) {
     '',
     'Medicine plan reviewed:',
   ];
-  if (!medications.length) lines.push('- No active medicine directions were available in PharMate at the time of review.');
+  if (!medications.length)
+    lines.push('- No active medicine directions were available in PharMate at the time of review.');
   for (const medication of medications) {
-    const directions = medication.dosage_instruction || medication.frequency || 'Follow the dispensing label.';
+    const directions =
+      medication.dosage_instruction || medication.frequency || 'Follow the dispensing label.';
     lines.push(`- ${medication.drug_name_raw}: ${directions}`);
   }
   lines.push(
@@ -312,7 +329,14 @@ export async function completeAppointment(pharmacistId, appointmentId, actor) {
        VALUES (?,?,?,?,?,?)
        ON DUPLICATE KEY UPDATE summary_text=VALUES(summary_text),
          source_snapshot_json=VALUES(source_snapshot_json),status='DRAFT',published_at=NULL`,
-      [summaryId, appointment.id, appointment.patient_id, pharmacistId, summaryText, JSON.stringify(sourceSnapshot)]
+      [
+        summaryId,
+        appointment.id,
+        appointment.patient_id,
+        pharmacistId,
+        summaryText,
+        JSON.stringify(sourceSnapshot),
+      ]
     );
     const [[summary]] = await conn.execute(
       'SELECT id FROM counseling_summaries WHERE appointment_id=?',
@@ -339,7 +363,12 @@ export async function completeAppointment(pharmacistId, appointmentId, actor) {
       executor: conn,
     });
     await conn.commit();
-    return { id: appointment.id, patient_id: appointment.patient_id, status: 'COMPLETED', summary_id: summary.id };
+    return {
+      id: appointment.id,
+      patient_id: appointment.patient_id,
+      status: 'COMPLETED',
+      summary_id: summary.id,
+    };
   } catch (error) {
     await conn.rollback();
     throw error;
@@ -351,7 +380,12 @@ export async function completeAppointment(pharmacistId, appointmentId, actor) {
 export async function updateCounselingSummary(pharmacistId, summaryId, text, actor) {
   const summaryText = String(text || '').trim();
   if (summaryText.length < 40 || summaryText.length > 10000) {
-    return { error: { status: 400, message: 'Counseling summary must be between 40 and 10,000 characters.' } };
+    return {
+      error: {
+        status: 400,
+        message: 'Counseling summary must be between 40 and 10,000 characters.',
+      },
+    };
   }
   const conn = await pool.getConnection();
   try {
@@ -368,7 +402,10 @@ export async function updateCounselingSummary(pharmacistId, summaryId, text, act
       await conn.rollback();
       return { error: { status: 409, message: 'Only draft summaries can be edited.' } };
     }
-    await conn.execute('UPDATE counseling_summaries SET summary_text=? WHERE id=?', [summaryText, summaryId]);
+    await conn.execute('UPDATE counseling_summaries SET summary_text=? WHERE id=?', [
+      summaryText,
+      summaryId,
+    ]);
     const version = await nextSummaryVersion(conn, summaryId);
     await conn.execute(
       `INSERT INTO counseling_summary_revisions
@@ -416,7 +453,12 @@ export async function publishCounselingSummary(pharmacistId, summaryId, credenti
       `UPDATE counseling_summaries SET status='PUBLISHED',published_at=NOW(3),
          reviewer_license_number=?,reviewer_license_jurisdiction=?,reviewer_license_expires_on=?
        WHERE id=?`,
-      [credential.license_number, credential.license_jurisdiction, credential.license_expires_on, summaryId]
+      [
+        credential.license_number,
+        credential.license_jurisdiction,
+        credential.license_expires_on,
+        summaryId,
+      ]
     );
     await conn.execute(
       `INSERT INTO counseling_summary_revisions

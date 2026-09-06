@@ -219,10 +219,12 @@ router.put('/anchors', async (req, res) => {
 });
 
 router.get('/safety-profile', async (req, res) => {
-  await pool.execute('INSERT IGNORE INTO patient_safety_profiles (patient_id) VALUES (?)', [req.user.sub]);
-  const [[row]] = await pool.execute(
-    'SELECT * FROM patient_safety_profiles WHERE patient_id=?', [req.user.sub]
-  );
+  await pool.execute('INSERT IGNORE INTO patient_safety_profiles (patient_id) VALUES (?)', [
+    req.user.sub,
+  ]);
+  const [[row]] = await pool.execute('SELECT * FROM patient_safety_profiles WHERE patient_id=?', [
+    req.user.sub,
+  ]);
   const profile = serializeSafetyProfile(row);
   res.json({ ...profile, missing_for_safety_check: missingSafetyContext(profile) });
 });
@@ -232,14 +234,22 @@ router.put('/safety-profile', async (req, res) => {
   if (parsed.error) return res.status(400).json({ error: parsed.error });
   const entries = Object.entries(parsed.value);
   if (!entries.length) return res.status(400).json({ error: 'Nothing to update' });
-  await pool.execute('INSERT IGNORE INTO patient_safety_profiles (patient_id) VALUES (?)', [req.user.sub]);
+  await pool.execute('INSERT IGNORE INTO patient_safety_profiles (patient_id) VALUES (?)', [
+    req.user.sub,
+  ]);
   const sets = entries.map(([field]) => `${field}=?`);
-  if (parsed.value.profile_completed) sets.push('completed_at=CURRENT_TIMESTAMP(3)', 'consented_at=COALESCE(consented_at,CURRENT_TIMESTAMP(3))');
-  await pool.execute(
-    `UPDATE patient_safety_profiles SET ${sets.join(',')} WHERE patient_id=?`,
-    [...entries.map(([, value]) => value), req.user.sub]
-  );
-  const [[row]] = await pool.execute('SELECT * FROM patient_safety_profiles WHERE patient_id=?', [req.user.sub]);
+  if (parsed.value.profile_completed)
+    sets.push(
+      'completed_at=CURRENT_TIMESTAMP(3)',
+      'consented_at=COALESCE(consented_at,CURRENT_TIMESTAMP(3))'
+    );
+  await pool.execute(`UPDATE patient_safety_profiles SET ${sets.join(',')} WHERE patient_id=?`, [
+    ...entries.map(([, value]) => value),
+    req.user.sub,
+  ]);
+  const [[row]] = await pool.execute('SELECT * FROM patient_safety_profiles WHERE patient_id=?', [
+    req.user.sub,
+  ]);
   const profile = serializeSafetyProfile(row);
   res.json({ ...profile, missing_for_safety_check: missingSafetyContext(profile) });
 });

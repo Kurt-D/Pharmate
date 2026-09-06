@@ -63,7 +63,9 @@ const AUTHORITATIVE_REFERENCE_HOSTS = new Set([
 function hasAuthoritativeReference(value) {
   try {
     const url = new URL(String(value || ''));
-    return url.protocol === 'https:' && AUTHORITATIVE_REFERENCE_HOSTS.has(url.hostname.toLowerCase());
+    return (
+      url.protocol === 'https:' && AUTHORITATIVE_REFERENCE_HOSTS.has(url.hostname.toLowerCase())
+    );
   } catch {
     return false;
   }
@@ -128,7 +130,9 @@ function idsFrom(body) {
       refill_reminders_enabled: record?.refill_reminders_enabled === true,
       end_date: String(record?.end_date || '').trim(),
       first_dose_time: String(record?.first_dose_time || '').trim(),
-      schedule_mode: String(record?.schedule_mode || '').trim().toUpperCase(),
+      schedule_mode: String(record?.schedule_mode || '')
+        .trim()
+        .toUpperCase(),
     }))
     .filter((record) => /^[0-9a-f-]{36}$/i.test(record.drug_id));
 }
@@ -237,7 +241,9 @@ async function loadRules(records, executor = pool) {
 }
 
 async function loadApprovedPrescriptionDirections(patientId, items, executor = pool) {
-  const ids = [...new Set(items.filter((item) => item.rx_class === 'RX').map((item) => item.drug_id))];
+  const ids = [
+    ...new Set(items.filter((item) => item.rx_class === 'RX').map((item) => item.drug_id)),
+  ];
   if (!patientId || !ids.length) return new Map();
   const placeholders = ids.map(() => '?').join(',');
   const [rows] = await executor.execute(
@@ -356,7 +362,9 @@ async function loadSafetyAssessment(patientId, rules, interactions, executor = p
 }
 
 async function generateFromRequest(body, executor = pool, patientId = null) {
-  const scheduleMode = String(body?.schedule_mode || '').trim().toUpperCase();
+  const scheduleMode = String(body?.schedule_mode || '')
+    .trim()
+    .toUpperCase();
   const requested = idsFrom(body).map((record) => ({ ...record, schedule_mode: scheduleMode }));
   if (!requested.length) return { error: 'Select at least one medication.', status: 400 };
   if (new Set(requested.map((item) => item.drug_id)).size !== requested.length) {
@@ -529,10 +537,10 @@ async function generateFromRequest(body, executor = pool, patientId = null) {
           ? 'MIXED_GOVERNED_DIRECTIONS'
           : 'PRESCRIPTION_DIRECTIONS'
         : rules.some((rule) => rule.schedule_basis === 'REFERENCE_REVIEW_REQUIRED')
-        ? 'REFERENCE_REVIEW_REQUIRED'
-        : rules.some((rule) => rule.schedule_basis === 'PATIENT_LABEL')
-          ? 'PATIENT_LABEL'
-          : 'VERIFIED_CLINICAL_RULE'
+          ? 'REFERENCE_REVIEW_REQUIRED'
+          : rules.some((rule) => rule.schedule_basis === 'PATIENT_LABEL')
+            ? 'PATIENT_LABEL'
+            : 'VERIFIED_CLINICAL_RULE'
       : 'PATIENT_LABEL';
   result.requires_prescription_match = result.schedule_basis === 'REFERENCE_REVIEW_REQUIRED';
   result.requires_label_match = result.schedule_basis === 'REFERENCE_REVIEW_REQUIRED';
@@ -660,13 +668,7 @@ async function upsertMedicationIntakes(executor, patientId, rules) {
              label_direction=?, purpose=?, food_instruction=?, quantity_on_hand=?, quantity_unit=?,
              refill_reminders_enabled=?, entry_method=?, ocr_confidence=?, patient_confirmed=?, start_date=?, end_date=?, updated_at=NOW(3)
          WHERE id=? AND patient_id=?`,
-        [
-          ...values.slice(0, 6),
-          rule.is_prn ? 1 : 0,
-          ...values.slice(6),
-          current.id,
-          patientId,
-        ]
+        [...values.slice(0, 6), rule.is_prn ? 1 : 0, ...values.slice(6), current.id, patientId]
       );
       await executor.execute(
         `UPDATE medications
@@ -866,7 +868,8 @@ router.post('/save-reminders', async (req, res) => {
     ) {
       await conn.rollback();
       return res.status(400).json({
-        error: 'Confirm that you reviewed the reference schedule and that it matches the medicine label.',
+        error:
+          'Confirm that you reviewed the reference schedule and that it matches the medicine label.',
       });
     }
     const { medicationIds, createdMedicationIds } = await upsertMedicationIntakes(

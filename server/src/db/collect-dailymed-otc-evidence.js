@@ -2,12 +2,22 @@ import 'dotenv/config';
 import mysql from 'mysql2/promise';
 
 const FORM_TERMS = {
-  tablet: ['TABLET', 'CAPLET'], capsule: ['CAPSULE'], syrup: ['SYRUP', 'LIQUID'],
-  suspension: ['SUSPENSION'], cream: ['CREAM'], gel: ['GEL'], lotion: ['LOTION'],
-  ointment: ['OINTMENT'], solution: ['SOLUTION'], 'eye drops': ['OPHTHALMIC'],
-  'ear drops': ['OTIC'], 'nasal spray': ['NASAL', 'SPRAY'],
-  'mouth rinse': ['MOUTHWASH', 'RINSE'], 'mouthwash/spray': ['MOUTHWASH', 'SPRAY'],
-  'effervescent tablet': ['TABLET'], 'chewable tablet': ['CHEWABLE'],
+  tablet: ['TABLET', 'CAPLET'],
+  capsule: ['CAPSULE'],
+  syrup: ['SYRUP', 'LIQUID'],
+  suspension: ['SUSPENSION'],
+  cream: ['CREAM'],
+  gel: ['GEL'],
+  lotion: ['LOTION'],
+  ointment: ['OINTMENT'],
+  solution: ['SOLUTION'],
+  'eye drops': ['OPHTHALMIC'],
+  'ear drops': ['OTIC'],
+  'nasal spray': ['NASAL', 'SPRAY'],
+  'mouth rinse': ['MOUTHWASH', 'RINSE'],
+  'mouthwash/spray': ['MOUTHWASH', 'SPRAY'],
+  'effervescent tablet': ['TABLET'],
+  'chewable tablet': ['CHEWABLE'],
 };
 
 function matchesForm(title, form) {
@@ -17,16 +27,27 @@ function matchesForm(title, form) {
   return !terms.length || terms.some((term) => upper.includes(term));
 }
 
-const normalize = (value) => String(value || '').toLowerCase()
-  .replace(/hydrochloride|hcl|sodium|maleate|otic|ophthalmic|topical|\W/g, '');
+const normalize = (value) =>
+  String(value || '')
+    .toLowerCase()
+    .replace(/hydrochloride|hcl|sodium|maleate|otic|ophthalmic|topical|\W/g, '');
 function xmlIngredients(xml) {
-  return [...new Set([...xml.matchAll(/<ingredient classCode="ACTIB">[\s\S]*?<ingredientSubstance>[\s\S]*?<name>([^<]+)<\/name>/g)].map((match) => normalize(match[1])))];
+  return [
+    ...new Set(
+      [
+        ...xml.matchAll(
+          /<ingredient classCode="ACTIB">[\s\S]*?<ingredientSubstance>[\s\S]*?<name>([^<]+)<\/name>/g
+        ),
+      ].map((match) => normalize(match[1]))
+    ),
+  ];
 }
 function exactIngredients(xml, name) {
   const found = xmlIngredients(xml);
   const expected = String(name).split('+').map(normalize).filter(Boolean);
-  return found.length === expected.length && expected.every((item) =>
-    found.some((active) => active.includes(item) || item.includes(active))
+  return (
+    found.length === expected.length &&
+    expected.every((item) => found.some((active) => active.includes(item) || item.includes(active)))
   );
 }
 function exactStrength(xml, strength) {
@@ -40,7 +61,9 @@ function exactStrength(xml, strength) {
 }
 function exactForm(xml, form) {
   const terms = FORM_TERMS[String(form || '').toLowerCase()] || [];
-  const codes = [...xml.matchAll(/<formCode[^>]+displayName="([^"]+)"/g)].map((match) => match[1].toUpperCase());
+  const codes = [...xml.matchAll(/<formCode[^>]+displayName="([^"]+)"/g)].map((match) =>
+    match[1].toUpperCase()
+  );
   return !terms.length || codes.some((code) => terms.some((term) => code.includes(term)));
 }
 async function validateCandidate(candidate, medicine) {
@@ -51,14 +74,19 @@ async function validateCandidate(candidate, medicine) {
   );
   if (!response.ok) return false;
   const xml = await response.text();
-  return /displayName="Human OTC Drug Label"/i.test(xml) &&
-    exactIngredients(xml, medicine.generic_name) && exactStrength(xml, medicine.common_strength) &&
-    exactForm(xml, medicine.dosage_form);
+  return (
+    /displayName="Human OTC Drug Label"/i.test(xml) &&
+    exactIngredients(xml, medicine.generic_name) &&
+    exactStrength(xml, medicine.common_strength) &&
+    exactForm(xml, medicine.dosage_form)
+  );
 }
 
 const connection = await mysql.createConnection({
-  host: process.env.DB_HOST || '127.0.0.1', port: Number(process.env.DB_PORT) || 3307,
-  database: process.env.DB_NAME || 'pharmate', user: process.env.DB_USER || 'root',
+  host: process.env.DB_HOST || '127.0.0.1',
+  port: Number(process.env.DB_PORT) || 3307,
+  database: process.env.DB_NAME || 'pharmate',
+  user: process.env.DB_USER || 'root',
   password: process.env.DB_PASS || process.env.DB_PASSWORD || '',
 });
 
@@ -95,7 +123,9 @@ try {
       }
       const sourceUrl = `https://dailymed.nlm.nih.gov/dailymed/drugInfo.cfm?setid=${candidate.setid}`;
       const revision = new Date(candidate.published_date);
-      const revisionDate = Number.isNaN(revision.valueOf()) ? null : revision.toISOString().slice(0, 10);
+      const revisionDate = Number.isNaN(revision.valueOf())
+        ? null
+        : revision.toISOString().slice(0, 10);
       await connection.execute(
         `UPDATE otc_label_evidence
             SET product_name=?,source_authority='DailyMed candidate label',source_url=?,

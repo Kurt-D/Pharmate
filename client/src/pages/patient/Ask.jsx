@@ -84,7 +84,9 @@ export default function Ask() {
     setThread(null);
     setMessages([]);
     setSubject('');
-    setBanner('Inquiry completed. Your conversation remains in consultation history on PharMate’s server.');
+    setBanner(
+      'Inquiry completed. Your conversation remains in consultation history on PharMate’s server.'
+    );
   }
 
   return (
@@ -92,7 +94,9 @@ export default function Ask() {
       <h1 className="pm-title" style={{ fontSize: '1.4rem' }}>
         Ask a Pharmacist
       </h1>
-      <p className="pm-subtitle">Your patient code replaces your profile name; messages may still identify you.</p>
+      <p className="pm-subtitle">
+        Your patient code replaces your profile name; messages may still identify you.
+      </p>
       <InquiryConsent consent={consent} />
 
       {/* Scope boundary — always visible, before any message is sent. */}
@@ -166,7 +170,12 @@ export default function Ask() {
               onChange={(e) => setDraft(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && send()}
             />
-            <button className="pm-btn-primary" style={{ width: 'auto' }} onClick={send} disabled={!consent.consented}>
+            <button
+              className="pm-btn-primary"
+              style={{ width: 'auto' }}
+              onClick={send}
+              disabled={!consent.consented}
+            >
               Send
             </button>
           </div>

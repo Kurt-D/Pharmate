@@ -466,8 +466,7 @@ test('PRN medicine is saved as a non-recurring tracker', async () => {
     quantity_unit: 'tablets',
     start_date: testDate(),
     label_frequency: 'PRN',
-    label_direction:
-      'Take 1 tablet every 6 hours as needed; do not exceed 4 doses in 24 hours',
+    label_direction: 'Take 1 tablet every 6 hours as needed; do not exceed 4 doses in 24 hours',
     label_food_instruction: 'NONE',
     entry_method: 'MANUAL',
     patient_confirmed: true,

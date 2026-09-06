@@ -1,10 +1,5 @@
 import { Capacitor } from '@capacitor/core';
-import {
-  Camera,
-  CameraDirection,
-  EncodingType,
-  MediaTypeSelection,
-} from '@capacitor/camera';
+import { Camera, CameraDirection, EncodingType, MediaTypeSelection } from '@capacitor/camera';
 import { Script, TextRecognition } from '@capacitor-mlkit/text-recognition';
 
 export const OCR_ENGINE = 'GOOGLE_ML_KIT_TEXT_RECOGNITION_V2';
@@ -12,7 +7,10 @@ export const OCR_ENGINE_VERSION = '8.2.0';
 export const OCR_CONFIDENCE_THRESHOLD = 0.75;
 
 const FORMULATIONS = [
-  ['extended release tablet', /\b(?:extended|sustained|modified)[ -]?release\s+tablets?\b|\b(?:xr|sr|mr)\s+tablets?\b/i],
+  [
+    'extended release tablet',
+    /\b(?:extended|sustained|modified)[ -]?release\s+tablets?\b|\b(?:xr|sr|mr)\s+tablets?\b/i,
+  ],
   ['dispersible tablet', /\bdispersible\s+tablets?\b/i],
   ['chewable tablet', /\bchewable\s+tablets?\b/i],
   ['oral suspension', /\boral\s+suspensions?\b/i],
@@ -35,8 +33,10 @@ const FORMULATIONS = [
   ['injection', /\binjections?\b/i],
 ];
 
-const LABEL_NOISE = /\b(?:manufactured|distributed|registration|reg\.?\s*no|batch|lot|expiry|expires|keep out|store at|prescription|warning|generic name|brand name|each tablet|each capsule|film-coated)\b/i;
-const STRENGTH_PATTERN = /(?:\b\d+(?:\.\d+)?\s*(?:mg|mcg|µg|ug|g|mL|ml|IU|units?)(?:\s*\/\s*\d+(?:\.\d+)?\s*(?:mL|ml|g))?\b|\b\d+(?:\.\d+)?\s*%)/i;
+const LABEL_NOISE =
+  /\b(?:manufactured|distributed|registration|reg\.?\s*no|batch|lot|expiry|expires|keep out|store at|prescription|warning|generic name|brand name|each tablet|each capsule|film-coated)\b/i;
+const STRENGTH_PATTERN =
+  /(?:\b\d+(?:\.\d+)?\s*(?:mg|mcg|µg|ug|g|mL|ml|IU|units?)(?:\s*\/\s*\d+(?:\.\d+)?\s*(?:mL|ml|g))?\b|\b\d+(?:\.\d+)?\s*%)/i;
 
 function titleCase(value) {
   return String(value || '')
@@ -45,7 +45,9 @@ function titleCase(value) {
 }
 
 export function extractMedicineFields(text) {
-  const clean = String(text || '').replaceAll('\u00a0', ' ').trim();
+  const clean = String(text || '')
+    .replaceAll('\u00a0', ' ')
+    .trim();
   const lines = clean
     .split(/\r?\n/)
     .map((line) => line.replace(/\s+/g, ' ').trim())
@@ -63,10 +65,7 @@ export function extractMedicineFields(text) {
     )
     .find(
       (line) =>
-        line.length >= 4 &&
-        line.length <= 80 &&
-        /[a-z]{3}/i.test(line) &&
-        !LABEL_NOISE.test(line)
+        line.length >= 4 && line.length <= 80 && /[a-z]{3}/i.test(line) && !LABEL_NOISE.test(line)
     );
   return {
     name: titleCase(candidate || ''),
@@ -77,15 +76,30 @@ export function extractMedicineFields(text) {
 
 export function classifyImageQuality({ width, height, brightness, contrast, sharpness }) {
   if (Math.min(Number(width) || 0, Number(height) || 0) < 480) {
-    return { code: 'TOO_SMALL', score: 0.25, message: 'Move closer and retake the label at a higher resolution.' };
+    return {
+      code: 'TOO_SMALL',
+      score: 0.25,
+      message: 'Move closer and retake the label at a higher resolution.',
+    };
   }
   if ((Number(brightness) || 0) < 45) {
-    return { code: 'LOW_LIGHT', score: 0.35, message: 'The label is too dark. Add light and avoid shadows.' };
+    return {
+      code: 'LOW_LIGHT',
+      score: 0.35,
+      message: 'The label is too dark. Add light and avoid shadows.',
+    };
   }
   if ((Number(sharpness) || 0) < 35 || (Number(contrast) || 0) < 18) {
-    return { code: 'BLURRY', score: 0.4, message: 'The label looks blurry. Hold the phone steady and retake it.' };
+    return {
+      code: 'BLURRY',
+      score: 0.4,
+      message: 'The label looks blurry. Hold the phone steady and retake it.',
+    };
   }
-  const score = Math.min(1, 0.65 + Math.min(0.2, Number(sharpness) / 1000) + Math.min(0.15, Number(contrast) / 300));
+  const score = Math.min(
+    1,
+    0.65 + Math.min(0.2, Number(sharpness) / 1000) + Math.min(0.15, Number(contrast) / 300)
+  );
   return { code: 'GOOD', score: Math.round(score * 10000) / 10000, message: '' };
 }
 
@@ -199,7 +213,8 @@ export async function recognizeMedicineImage(media) {
       processing_ms: Math.round(performance.now() - started),
       text: '',
       fields: { name: '', strength: '', formulation: '' },
-      message: 'Google ML Kit scanning is available in the installed Android or iOS app. Enter the label details manually in this browser.',
+      message:
+        'Google ML Kit scanning is available in the installed Android or iOS app. Enter the label details manually in this browser.',
     };
   }
   const quality = classifyImageQuality(await imageStats(media.webPath || media.uri));
@@ -225,7 +240,11 @@ export async function recognizeMedicineImage(media) {
   return {
     ...base,
     available: true,
-    outcome: incomplete ? 'MANUAL_REVIEW' : confidence >= OCR_CONFIDENCE_THRESHOLD ? 'ACCEPTED' : 'MANUAL_REVIEW',
+    outcome: incomplete
+      ? 'MANUAL_REVIEW'
+      : confidence >= OCR_CONFIDENCE_THRESHOLD
+        ? 'ACCEPTED'
+        : 'MANUAL_REVIEW',
     image_quality: incomplete ? 'INCOMPLETE' : quality.code,
     image_quality_score: quality.score,
     field_confidence: confidence,

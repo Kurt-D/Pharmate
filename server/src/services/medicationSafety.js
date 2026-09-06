@@ -35,7 +35,10 @@ function ageInYears(dateOfBirth, today = new Date()) {
 
 function validPastOrPresentDate(value, today = new Date()) {
   if (!value) return false;
-  const date = value instanceof Date ? new Date(value.getTime()) : new Date(`${String(value).slice(0, 10)}T00:00:00Z`);
+  const date =
+    value instanceof Date
+      ? new Date(value.getTime())
+      : new Date(`${String(value).slice(0, 10)}T00:00:00Z`);
   if (Number.isNaN(date.getTime())) return false;
   const currentDate = new Date(today);
   currentDate.setUTCHours(23, 59, 59, 999);
@@ -65,11 +68,15 @@ export function checkSafetyRule(rule = {}) {
   ]) {
     if (!String(rule[field] || '').trim()) missingFields.push(field);
   }
-  if (!/^https:\/\//i.test(String(rule.source_url || ''))) conflicts.push('source_url_must_use_https');
+  if (!/^https:\/\//i.test(String(rule.source_url || '')))
+    conflicts.push('source_url_must_use_https');
   if (rule.source_revision_date && !validPastOrPresentDate(rule.source_revision_date)) {
     conflicts.push('invalid_source_revision_date');
   }
-  if (rule.rule_version != null && (!Number.isInteger(Number(rule.rule_version)) || Number(rule.rule_version) <= 0)) {
+  if (
+    rule.rule_version != null &&
+    (!Number.isInteger(Number(rule.rule_version)) || Number(rule.rule_version) <= 0)
+  ) {
     conflicts.push('invalid_rule_version');
   }
   const minimumAge = rule.minimum_age_years == null ? null : Number(rule.minimum_age_years);
@@ -107,26 +114,55 @@ export function checkSafetyRule(rule = {}) {
 }
 
 function warning(code, severity, drug, message, details = {}) {
-  return { code, severity, drug_id: drug?.drug_id, medicine: drug?.generic_name, message, ...details };
+  return {
+    code,
+    severity,
+    drug_id: drug?.drug_id,
+    medicine: drug?.generic_name,
+    message,
+    ...details,
+  };
 }
 
 function actionWarning(action, code, drug, message) {
   if (action === 'ALLOW') return null;
-  return warning(code, 'blocking', drug, message, { requires_pharmacist_review: action === 'REVIEW' });
+  return warning(code, 'blocking', drug, message, {
+    requires_pharmacist_review: action === 'REVIEW',
+  });
 }
 
-export function evaluateMedicationSafety({ profileRow, medicines = [], safetyRules = [], interactions = [] }) {
+export function evaluateMedicationSafety({
+  profileRow,
+  medicines = [],
+  safetyRules = [],
+  interactions = [],
+}) {
   if (!profileRow) {
     return {
       can_schedule: false,
       missing_profile_fields: ['safety_profile'],
-      warnings: [warning('SAFETY_PROFILE_REQUIRED', 'blocking', null, 'Complete your safety profile before PharMate creates a schedule.')],
+      warnings: [
+        warning(
+          'SAFETY_PROFILE_REQUIRED',
+          'blocking',
+          null,
+          'Complete your safety profile before PharMate creates a schedule.'
+        ),
+      ],
     };
   }
   const profile = serializeSafetyProfile(profileRow);
   const missing = missingSafetyContext(profile);
   const warnings = missing.length
-    ? [warning('SAFETY_PROFILE_INCOMPLETE', 'blocking', null, 'Complete the missing safety profile fields before PharMate creates a schedule.', { fields: missing })]
+    ? [
+        warning(
+          'SAFETY_PROFILE_INCOMPLETE',
+          'blocking',
+          null,
+          'Complete the missing safety profile fields before PharMate creates a schedule.',
+          { fields: missing }
+        ),
+      ]
     : [];
   const rulesByDrug = new Map(safetyRules.map((rule) => [String(rule.drug_id), rule]));
   const age = ageInYears(profile.date_of_birth);
@@ -148,40 +184,106 @@ export function evaluateMedicationSafety({ profileRow, medicines = [], safetyRul
     }
     const allergyTerms = [drug.generic_name, ...jsonArray(rule.allergy_terms_json)];
     if (allergyTerms.some((term) => containsTerm(profile.allergies, term))) {
-      warnings.push(warning('ALLERGY_MATCH', 'blocking', drug, `${drug.generic_name} matches an allergy in your safety profile. Do not create this schedule; contact your pharmacist.`));
+      warnings.push(
+        warning(
+          'ALLERGY_MATCH',
+          'blocking',
+          drug,
+          `${drug.generic_name} matches an allergy in your safety profile. Do not create this schedule; contact your pharmacist.`
+        )
+      );
     }
     const minimumAge = rule.minimum_age_years == null ? null : Number(rule.minimum_age_years);
     const maximumAge = rule.maximum_age_years == null ? null : Number(rule.maximum_age_years);
     if ((minimumAge !== null && age < minimumAge) || (maximumAge !== null && age > maximumAge)) {
-      warnings.push(warning('AGE_OUTSIDE_REVIEWED_RANGE', 'blocking', drug, `${drug.generic_name} is outside the age range covered by the reviewed rule.`));
+      warnings.push(
+        warning(
+          'AGE_OUTSIDE_REVIEWED_RANGE',
+          'blocking',
+          drug,
+          `${drug.generic_name} is outside the age range covered by the reviewed rule.`
+        )
+      );
     }
     const minimumWeight = rule.minimum_weight_kg == null ? null : Number(rule.minimum_weight_kg);
     const maximumWeight = rule.maximum_weight_kg == null ? null : Number(rule.maximum_weight_kg);
     if ((minimumWeight !== null || maximumWeight !== null) && profile.weight_kg === '') {
-      warnings.push(warning('WEIGHT_REQUIRED', 'blocking', drug, `Weight is required for the reviewed ${drug.generic_name} rule.`));
-    } else if ((minimumWeight !== null && Number(profile.weight_kg) < minimumWeight) || (maximumWeight !== null && Number(profile.weight_kg) > maximumWeight)) {
-      warnings.push(warning('WEIGHT_OUTSIDE_REVIEWED_RANGE', 'blocking', drug, `${drug.generic_name} is outside the weight range covered by the reviewed rule.`));
+      warnings.push(
+        warning(
+          'WEIGHT_REQUIRED',
+          'blocking',
+          drug,
+          `Weight is required for the reviewed ${drug.generic_name} rule.`
+        )
+      );
+    } else if (
+      (minimumWeight !== null && Number(profile.weight_kg) < minimumWeight) ||
+      (maximumWeight !== null && Number(profile.weight_kg) > maximumWeight)
+    ) {
+      warnings.push(
+        warning(
+          'WEIGHT_OUTSIDE_REVIEWED_RANGE',
+          'blocking',
+          drug,
+          `${drug.generic_name} is outside the weight range covered by the reviewed rule.`
+        )
+      );
     }
     const conditions = jsonArray(rule.condition_rules_json);
     for (const condition of conditions) {
       if (!containsTerm(profile.conditions, condition?.term)) continue;
-      const item = actionWarning(condition?.action, 'CONDITION_REVIEW_REQUIRED', drug, condition?.message || `${drug.generic_name} needs pharmacist review because of a condition in your profile.`);
+      const item = actionWarning(
+        condition?.action,
+        'CONDITION_REVIEW_REQUIRED',
+        drug,
+        condition?.message ||
+          `${drug.generic_name} needs pharmacist review because of a condition in your profile.`
+      );
       if (item) warnings.push(item);
     }
-    if (profile.kidney_status === 'YES' || (profile.kidney_status === 'UNSURE' && rule.kidney_action !== 'ALLOW')) {
-      const item = actionWarning(rule.kidney_action, 'KIDNEY_REVIEW_REQUIRED', drug, `${drug.generic_name} needs pharmacist review for the kidney information in your profile.`);
+    if (
+      profile.kidney_status === 'YES' ||
+      (profile.kidney_status === 'UNSURE' && rule.kidney_action !== 'ALLOW')
+    ) {
+      const item = actionWarning(
+        rule.kidney_action,
+        'KIDNEY_REVIEW_REQUIRED',
+        drug,
+        `${drug.generic_name} needs pharmacist review for the kidney information in your profile.`
+      );
       if (item) warnings.push(item);
     }
-    if (profile.liver_status === 'YES' || (profile.liver_status === 'UNSURE' && rule.liver_action !== 'ALLOW')) {
-      const item = actionWarning(rule.liver_action, 'LIVER_REVIEW_REQUIRED', drug, `${drug.generic_name} needs pharmacist review for the liver information in your profile.`);
+    if (
+      profile.liver_status === 'YES' ||
+      (profile.liver_status === 'UNSURE' && rule.liver_action !== 'ALLOW')
+    ) {
+      const item = actionWarning(
+        rule.liver_action,
+        'LIVER_REVIEW_REQUIRED',
+        drug,
+        `${drug.generic_name} needs pharmacist review for the liver information in your profile.`
+      );
       if (item) warnings.push(item);
     }
-    if (profile.pregnancy_status === 'PREGNANT' || (profile.pregnancy_status === 'UNSURE' && rule.pregnancy_action !== 'ALLOW')) {
-      const item = actionWarning(rule.pregnancy_action, 'PREGNANCY_REVIEW_REQUIRED', drug, `${drug.generic_name} needs pharmacist review for pregnancy information in your profile.`);
+    if (
+      profile.pregnancy_status === 'PREGNANT' ||
+      (profile.pregnancy_status === 'UNSURE' && rule.pregnancy_action !== 'ALLOW')
+    ) {
+      const item = actionWarning(
+        rule.pregnancy_action,
+        'PREGNANCY_REVIEW_REQUIRED',
+        drug,
+        `${drug.generic_name} needs pharmacist review for pregnancy information in your profile.`
+      );
       if (item) warnings.push(item);
     }
     if (profile.pregnancy_status === 'BREASTFEEDING') {
-      const item = actionWarning(rule.breastfeeding_action, 'BREASTFEEDING_REVIEW_REQUIRED', drug, `${drug.generic_name} needs pharmacist review for breastfeeding information in your profile.`);
+      const item = actionWarning(
+        rule.breastfeeding_action,
+        'BREASTFEEDING_REVIEW_REQUIRED',
+        drug,
+        `${drug.generic_name} needs pharmacist review for breastfeeding information in your profile.`
+      );
       if (item) warnings.push(item);
     }
   }

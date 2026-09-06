@@ -131,7 +131,8 @@ export default function PrescriptionShop() {
     if (file.type.startsWith('image/')) {
       const reader = new FileReader();
       reader.onload = () => savePrescription(String(reader.result || ''));
-      reader.onerror = () => setMessage('We could not read that photo. Please take or choose another one.');
+      reader.onerror = () =>
+        setMessage('We could not read that photo. Please take or choose another one.');
       reader.readAsDataURL(file);
       return;
     }
@@ -226,7 +227,12 @@ export default function PrescriptionShop() {
                   <strong>Check Your Prescription Photo</strong>
                   <span>Make sure the name, medicine, dosage, and doctor details are clear.</span>
                 </figcaption>
-                <a href={preview} target="_blank" rel="noreferrer" aria-label="Open full-size prescription photo">
+                <a
+                  href={preview}
+                  target="_blank"
+                  rel="noreferrer"
+                  aria-label="Open full-size prescription photo"
+                >
                   <img src={preview} alt="Full preview of the selected prescription" />
                   <span>Tap photo to view full size</span>
                 </a>

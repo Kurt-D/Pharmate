@@ -57,7 +57,8 @@ export function evaluateOcrFields(detected = {}, confirmed = {}) {
   return {
     ...scores,
     field_accuracy_pct: available.length
-      ? Math.round((available.reduce((sum, score) => sum + score, 0) / available.length) * 100) / 100
+      ? Math.round((available.reduce((sum, score) => sum + score, 0) / available.length) * 100) /
+        100
       : null,
     manual_correction_used: available.some((score) => score < 100),
   };
@@ -79,7 +80,10 @@ export function validateOcrEvaluation(input = {}) {
   if (confidence != null && (!Number.isFinite(confidence) || confidence < 0 || confidence > 1)) {
     return { error: 'OCR field confidence must be between 0 and 1.' };
   }
-  if (qualityScore != null && (!Number.isFinite(qualityScore) || qualityScore < 0 || qualityScore > 1)) {
+  if (
+    qualityScore != null &&
+    (!Number.isFinite(qualityScore) || qualityScore < 0 || qualityScore > 1)
+  ) {
     return { error: 'Image-quality score must be between 0 and 1.' };
   }
   if (!Number.isFinite(threshold) || threshold < 0.5 || threshold > 0.99) {
@@ -88,11 +92,17 @@ export function validateOcrEvaluation(input = {}) {
   if (outcome === 'ACCEPTED' && (confidence == null || confidence < threshold)) {
     return { error: 'A scan below the confidence threshold cannot be accepted.' };
   }
-  if (['BLURRY', 'INCOMPLETE', 'LOW_LIGHT', 'TOO_SMALL'].includes(imageQuality) && outcome === 'ACCEPTED') {
+  if (
+    ['BLURRY', 'INCOMPLETE', 'LOW_LIGHT', 'TOO_SMALL'].includes(imageQuality) &&
+    outcome === 'ACCEPTED'
+  ) {
     return { error: 'A scan with an image-quality warning cannot be accepted.' };
   }
   const processingMs = input.processing_ms == null ? null : Number(input.processing_ms);
-  if (processingMs != null && (!Number.isInteger(processingMs) || processingMs < 0 || processingMs > 300000)) {
+  if (
+    processingMs != null &&
+    (!Number.isInteger(processingMs) || processingMs < 0 || processingMs > 300000)
+  ) {
     return { error: 'OCR processing time is invalid.' };
   }
   const detected = {
@@ -131,7 +141,8 @@ export function validateOcrEvaluation(input = {}) {
 
 export async function saveOcrEvaluation(patientId, value, executor = pool) {
   const id = value.id;
-  if (!id || !/^[0-9a-f-]{36}$/i.test(id)) return { error: 'A valid OCR evaluation id is required.' };
+  if (!id || !/^[0-9a-f-]{36}$/i.test(id))
+    return { error: 'A valid OCR evaluation id is required.' };
   const [result] = await executor.execute(
     `INSERT IGNORE INTO ocr_scan_evaluations
        (id,patient_id,purpose,engine,engine_version,sample_country,sample_code,

@@ -35,7 +35,11 @@ export async function pharmacistCredential(pharmacistId, executor = pool, option
     [pharmacistId]
   );
   const assessment = assessPharmacistCredential(row || {});
-  return { ...(row || {}), credential_valid: assessment.valid, credential_issues: assessment.reasons };
+  return {
+    ...(row || {}),
+    credential_valid: assessment.valid,
+    credential_issues: assessment.reasons,
+  };
 }
 
 export function publicCredential(credential = {}) {

@@ -475,8 +475,7 @@ export default function AutomatedAddMedication() {
       ]);
       const suggestedMedicines = allMedicines.map((item) => ({
         ...item,
-        frequency_code:
-          governedDirections.get(String(item.id))?.frequency || item.frequency_code,
+        frequency_code: governedDirections.get(String(item.id))?.frequency || item.frequency_code,
         label_direction:
           governedDirections.get(String(item.id))?.label_direction ||
           governedDirections.get(String(item.id))?.directions ||
@@ -739,12 +738,8 @@ export default function AutomatedAddMedication() {
             ...request,
             schedule_mode: 'SUGGESTED',
             review_confirmed: true,
-            reference_review_confirmed: needsLabelConfirmation
-              ? referenceConfirmed
-              : undefined,
-            prescription_match_confirmed: needsLabelConfirmation
-              ? referenceConfirmed
-              : undefined,
+            reference_review_confirmed: needsLabelConfirmation ? referenceConfirmed : undefined,
+            prescription_match_confirmed: needsLabelConfirmation ? referenceConfirmed : undefined,
           },
         });
       } else {
@@ -1321,10 +1316,7 @@ export default function AutomatedAddMedication() {
           )}
         >
           <p>
-            {tr(
-              'Choose how to set your reminders.',
-              'Piliin kung paano itatakda ang paalala.'
-            )}
+            {tr('Choose how to set your reminders.', 'Piliin kung paano itatakda ang paalala.')}
           </p>
           <article className="pm-wizard__method suggested">
             <ShieldCheck />
@@ -1721,16 +1713,15 @@ export default function AutomatedAddMedication() {
                       )
                     : tr('Check the times before saving.', 'Suriin ang mga oras bago i-save.')}
                 </span>
-                {needsLabelConfirmation &&
-                  schedule?.rule_provenance?.[0]?.evidence_source_url && (
-                    <a
-                      href={schedule.rule_provenance[0].evidence_source_url}
-                      rel="noreferrer"
-                      target="_blank"
-                    >
-                      {tr('View official reference', 'Tingnan ang opisyal na sanggunian')}
-                    </a>
-                  )}
+                {needsLabelConfirmation && schedule?.rule_provenance?.[0]?.evidence_source_url && (
+                  <a
+                    href={schedule.rule_provenance[0].evidence_source_url}
+                    rel="noreferrer"
+                    target="_blank"
+                  >
+                    {tr('View official reference', 'Tingnan ang opisyal na sanggunian')}
+                  </a>
+                )}
               </div>
             </aside>
           )}
@@ -1776,10 +1767,7 @@ export default function AutomatedAddMedication() {
           {schedule?.warnings
             ?.filter((item) => item.severity === 'warning')
             .map((item) => (
-              <aside
-                className="pm-wizard__warning"
-                key={`${item.code}-${item.drug_id || ''}`}
-              >
+              <aside className="pm-wizard__warning" key={`${item.code}-${item.drug_id || ''}`}>
                 <Info />
                 <span>{item.message}</span>
               </aside>
@@ -1852,10 +1840,7 @@ export default function AutomatedAddMedication() {
                   type="checkbox"
                 />
                 <span>
-                    {tr(
-                    'The medicine and times are correct.',
-                    'Tama ang gamot at mga oras.'
-                  )}
+                  {tr('The medicine and times are correct.', 'Tama ang gamot at mga oras.')}
                 </span>
               </label>
               {error && (
@@ -1869,11 +1854,7 @@ export default function AutomatedAddMedication() {
               )}
               <button
                 className="pm-wizard__primary"
-                disabled={
-                  !confirmed ||
-                  working ||
-                  (needsLabelConfirmation && !referenceConfirmed)
-                }
+                disabled={!confirmed || working || (needsLabelConfirmation && !referenceConfirmed)}
                 onClick={confirmAndSave}
                 type="button"
               >

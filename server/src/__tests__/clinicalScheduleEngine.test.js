@@ -63,15 +63,18 @@ describe('automated clinical schedule engine', () => {
       generic_name: 'Second medicine',
     });
     for (const interaction_type of ['AVOID', 'MONITOR']) {
-      const result = generateClinicalSchedule([rule(), second], [
-        {
-          drug_a_id: rule().drug_id,
-          drug_b_id: second.drug_id,
-          interaction_type,
-          severity: 'moderate',
-          min_gap_hours: null,
-        },
-      ]);
+      const result = generateClinicalSchedule(
+        [rule(), second],
+        [
+          {
+            drug_a_id: rule().drug_id,
+            drug_b_id: second.drug_id,
+            interaction_type,
+            severity: 'moderate',
+            min_gap_hours: null,
+          },
+        ]
+      );
       expect(result.can_save).toBe(false);
       expect(result.warnings).toEqual(
         expect.arrayContaining([expect.objectContaining({ code: 'NO_CONFLICT_FREE_SOLUTION' })])

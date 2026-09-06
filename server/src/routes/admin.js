@@ -59,7 +59,8 @@ router.get('/ocr-validation', async (_req, res) => {
   );
   res.json({
     measured: Number(summary.measured_runs) > 0,
-    methodology: 'Corrected medicine name, strength, and formulation compared with on-device ML Kit output.',
+    methodology:
+      'Corrected medicine name, strength, and formulation compared with on-device ML Kit output.',
     confidence_threshold: 0.75,
     summary: numericSummary,
     quality: quality.map((row) => ({
@@ -123,7 +124,10 @@ function governancePayload(row) {
   const isPrescription = row.rx_class === 'RX';
   const effectiveStatus = isPrescription
     ? 'PATIENT_SPECIFIC_DIRECTIONS'
-    : row.clinical_rule_status === 'VERIFIED' && row.safety_status === 'VERIFIED' && clinical.valid && safety.valid
+    : row.clinical_rule_status === 'VERIFIED' &&
+        row.safety_status === 'VERIFIED' &&
+        clinical.valid &&
+        safety.valid
       ? 'READY'
       : row.clinical_rule_status === 'IN_REVIEW' || row.safety_status === 'IN_REVIEW'
         ? 'IN_REVIEW'
@@ -142,7 +146,10 @@ function governancePayload(row) {
 // Administrator evidence preparation. Pharmacists remain the only role allowed
 // to verify a clinical rule; an admin submission enters their existing queue.
 router.get('/rule-governance', async (req, res) => {
-  const query = String(req.query.q || '').trim().toLowerCase().slice(0, 100);
+  const query = String(req.query.q || '')
+    .trim()
+    .toLowerCase()
+    .slice(0, 100);
   const params = [];
   let where = ' WHERE drug.availability=1';
   if (query) {
@@ -223,27 +230,39 @@ router.put('/rule-governance/:id', async (req, res) => {
   const conditionRules = Array.isArray(req.body?.condition_rules)
     ? req.body.condition_rules
         .map((item) => ({
-          term: String(item?.term || '').trim().toLowerCase(),
+          term: String(item?.term || '')
+            .trim()
+            .toLowerCase(),
           action: ['ALLOW', 'REVIEW', 'BLOCK'].includes(String(item?.action || '').toUpperCase())
             ? String(item.action).toUpperCase()
             : 'REVIEW',
-          message: String(item?.message || '').trim().slice(0, 500),
+          message: String(item?.message || '')
+            .trim()
+            .slice(0, 500),
         }))
         .filter((item) => item.term)
     : [];
   const clinicalFields = {
     common_strength: String(req.body?.common_strength || '').trim(),
     dosage_form: String(req.body?.dosage_form || '').trim(),
-    administration_route: String(req.body?.administration_route || '').trim().toUpperCase(),
-    release_type: String(req.body?.release_type || '').trim().toUpperCase(),
+    administration_route: String(req.body?.administration_route || '')
+      .trim()
+      .toUpperCase(),
+    release_type: String(req.body?.release_type || '')
+      .trim()
+      .toUpperCase(),
     supported_frequency_codes: codes,
-    frequency_default: String(req.body?.frequency_default || '').trim().toUpperCase(),
+    frequency_default: String(req.body?.frequency_default || '')
+      .trim()
+      .toUpperCase(),
     max_daily_doses: req.body?.max_daily_doses === '' ? null : Number(req.body?.max_daily_doses),
     default_units_per_dose:
       req.body?.units_per_dose === '' ? null : Number(req.body?.units_per_dose),
     min_interval_hours:
       req.body?.min_interval_hours === '' ? null : Number(req.body?.min_interval_hours),
-    food_rule: String(req.body?.food_rule || 'NONE').trim().toUpperCase(),
+    food_rule: String(req.body?.food_rule || 'NONE')
+      .trim()
+      .toUpperCase(),
     administration_instruction: String(req.body?.administration_instruction || '').trim(),
     clinical_rationale: String(req.body?.clinical_rationale || '').trim(),
     guidance_do: String(req.body?.guidance_do || '').trim(),
@@ -291,7 +310,8 @@ router.put('/rule-governance/:id', async (req, res) => {
     if (action === 'SUBMIT' && current.rx_class !== 'OTC') {
       await conn.rollback();
       return res.status(422).json({
-        error: 'Prescription medicines use approved patient-specific directions, not a catalog schedule.',
+        error:
+          'Prescription medicines use approved patient-specific directions, not a catalog schedule.',
       });
     }
     const clinicalCandidate = {
@@ -310,10 +330,8 @@ router.put('/rule-governance/:id', async (req, res) => {
         safety_consistency: safetyValidation,
       });
     }
-    const nextVersion = Math.max(
-      Number(current.rule_version || 1),
-      Number(current.safety_rule_version || 1)
-    ) + 1;
+    const nextVersion =
+      Math.max(Number(current.rule_version || 1), Number(current.safety_rule_version || 1)) + 1;
     const clinicalStatus = action === 'SUBMIT' ? 'IN_REVIEW' : 'UNVERIFIED';
     const safetyStatus = action === 'SUBMIT' ? 'IN_REVIEW' : 'DRAFT';
     await conn.execute(
@@ -876,13 +894,21 @@ router.get('/pharmacist-credentials', async (_req, res) => {
 });
 
 router.put('/pharmacist-credentials/:id', async (req, res) => {
-  const status = String(req.body?.license_status || 'PENDING').trim().toUpperCase();
+  const status = String(req.body?.license_status || 'PENDING')
+    .trim()
+    .toUpperCase();
   if (!['PENDING', 'VERIFIED', 'SUSPENDED', 'EXPIRED'].includes(status)) {
     return res.status(400).json({ error: 'Invalid credential status' });
   }
-  const licenseNumber = String(req.body?.license_number || '').trim().slice(0, 100);
-  const jurisdiction = String(req.body?.license_jurisdiction || '').trim().slice(0, 100);
-  const evidenceUrl = String(req.body?.license_evidence_url || '').trim().slice(0, 1000);
+  const licenseNumber = String(req.body?.license_number || '')
+    .trim()
+    .slice(0, 100);
+  const jurisdiction = String(req.body?.license_jurisdiction || '')
+    .trim()
+    .slice(0, 100);
+  const evidenceUrl = String(req.body?.license_evidence_url || '')
+    .trim()
+    .slice(0, 1000);
   const expiresOn = String(req.body?.license_expires_on || '').trim();
   if (evidenceUrl && !/^https:\/\//i.test(evidenceUrl)) {
     return res.status(400).json({ error: 'Credential evidence must use an HTTPS URL' });

@@ -735,9 +735,13 @@ export default function ProfileRedesign() {
         {panel === 'privacy' && (
           <div className="pm-profile-panel">
             <p>{t('profile.privacyText')}</p>
-            <Link to="/privacy#inquiries">{tr('Inquiry privacy policy', 'Inquiry privacy policy')}</Link>
+            <Link to="/privacy#inquiries">
+              {tr('Inquiry privacy policy', 'Inquiry privacy policy')}
+            </Link>
             {' · '}
-            <Link to="/patient/ask">{tr('Manage inquiry consent', 'Pamahalaan ang pahintulot sa inquiry')}</Link>
+            <Link to="/patient/ask">
+              {tr('Manage inquiry consent', 'Pamahalaan ang pahintulot sa inquiry')}
+            </Link>
           </div>
         )}
         <button onClick={() => navigate('/patient/accessibility')}>

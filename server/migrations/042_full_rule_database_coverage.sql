@@ -1,12 +1,12 @@
 ALTER TABLE medication_rule_variants
-  ADD COLUMN IF NOT EXISTS rule_kind
+  ADD COLUMN rule_kind
     ENUM('FIXED_DAILY','FIXED_INTERVAL','MEAL_ANCHORED','BEDTIME','PRN','PATIENT_SPECIFIC','UNKNOWN')
     NOT NULL DEFAULT 'UNKNOWN' AFTER schedule_rule_status,
-  ADD COLUMN IF NOT EXISTS automation_status
+  ADD COLUMN automation_status
     ENUM('READY_VERIFIED','READY_REFERENCE','NEEDS_EVIDENCE','NEEDS_DIRECTIONS','MANUAL_ONLY')
     NOT NULL DEFAULT 'NEEDS_EVIDENCE' AFTER rule_kind,
-  ADD COLUMN IF NOT EXISTS automation_block_reason VARCHAR(500) NULL AFTER automation_status,
-  ADD COLUMN IF NOT EXISTS assessed_at DATETIME(3) NULL AFTER automation_block_reason;
+  ADD COLUMN automation_block_reason VARCHAR(500) NULL AFTER automation_status,
+  ADD COLUMN assessed_at DATETIME(3) NULL AFTER automation_block_reason;
 
 INSERT INTO medication_rule_variants
   (id,drug_id,strength,dosage_form,administration_route,release_type,

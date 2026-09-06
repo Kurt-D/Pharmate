@@ -5,7 +5,10 @@ import { fileURLToPath } from 'node:url';
 import mysql from 'mysql2/promise';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const sql = await readFile(path.resolve(here, '../../migrations/042_full_rule_database_coverage.sql'), 'utf8');
+const sql = await readFile(
+  path.resolve(here, '../../migrations/042_full_rule_database_coverage.sql'),
+  'utf8'
+);
 const connection = await mysql.createConnection({
   host: process.env.DB_HOST || 'localhost',
   port: Number(process.env.DB_PORT) || 3306,

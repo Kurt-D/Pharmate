@@ -136,7 +136,8 @@ export default function PrescriptionUpload() {
     try {
       const media = await captureOcrImage(source);
       if (!media) return;
-      const preview = media.webPath || (media.thumbnail ? `data:image/jpeg;base64,${media.thumbnail}` : '');
+      const preview =
+        media.webPath || (media.thumbnail ? `data:image/jpeg;base64,${media.thumbnail}` : '');
       if (!preview) throw new Error('The selected image could not be opened.');
       loadPreview(preview);
       await runOcr(media);
@@ -335,7 +336,9 @@ export default function PrescriptionUpload() {
                 )}
               </div>
               {ocrBusy && (
-                <div className="pm-banner pm-banner--info mb-2">Reading locally with Google ML Kit…</div>
+                <div className="pm-banner pm-banner--info mb-2">
+                  Reading locally with Google ML Kit…
+                </div>
               )}
               {ocrError && <div className="pm-banner pm-banner--warn mb-2">{ocrError}</div>}
               {ocrScan?.available && (
@@ -375,11 +378,11 @@ export default function PrescriptionUpload() {
                 <div className="position-relative mb-2">
                   <input
                     className="form-control"
-                  value={medicineName}
-                  onChange={(event) => {
-                    setMedicineName(event.target.value);
-                    setSelectedDrug(null);
-                    setOcrReviewed(false);
+                    value={medicineName}
+                    onChange={(event) => {
+                      setMedicineName(event.target.value);
+                      setSelectedDrug(null);
+                      setOcrReviewed(false);
                     }}
                     placeholder="Search the verified medicine list"
                     autoComplete="off"

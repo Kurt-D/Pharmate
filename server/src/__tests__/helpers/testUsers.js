@@ -57,10 +57,11 @@ export async function createPatientTestUser({ email, password }) {
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
-    await conn.execute(
-      "INSERT INTO users (id,email,password_hash,role) VALUES (?,?,?,'patient')",
-      [id, email, passwordHash]
-    );
+    await conn.execute("INSERT INTO users (id,email,password_hash,role) VALUES (?,?,?,'patient')", [
+      id,
+      email,
+      passwordHash,
+    ]);
     await conn.execute('INSERT INTO patients (id,patient_code) VALUES (?,?)', [id, patientCode]);
     await conn.execute('INSERT INTO patient_anchors (patient_id) VALUES (?)', [id]);
     await conn.commit();

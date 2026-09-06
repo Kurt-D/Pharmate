@@ -218,7 +218,9 @@ export async function logDose(patientId, scheduleId, opts = {}) {
       const events = [
         ...recentLogs.map((row) => ({ time: new Date(row.logged_at).getTime(), candidate: false })),
         { time: candidateTime, candidate: true },
-      ].sort((left, right) => left.time - right.time || Number(left.candidate) - Number(right.candidate));
+      ].sort(
+        (left, right) => left.time - right.time || Number(left.candidate) - Number(right.candidate)
+      );
       const dayMs = 24 * 60 * 60 * 1000;
       let exceedsMaximum = false;
       for (let left = 0; left < events.length; left += 1) {

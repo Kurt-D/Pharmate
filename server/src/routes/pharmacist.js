@@ -28,10 +28,7 @@ import { inquiryChanged, orderChanged, prescriptionChanged } from '../services/d
 import { publishRole } from '../services/realtimeEvents.js';
 import { checkClinicalRule, verificationSummary } from '../services/clinicalRuleVerification.js';
 import { checkSafetyRule } from '../services/medicationSafety.js';
-import {
-  pharmacistCredential,
-  publicCredential,
-} from '../services/pharmacistCredential.js';
+import { pharmacistCredential, publicCredential } from '../services/pharmacistCredential.js';
 import {
   completeAppointment,
   decideAppointment,
@@ -47,8 +44,7 @@ router.use(requireAuth, requireRole('pharmacist'));
 
 function rejectUnlicensedReview(res, credential) {
   return res.status(403).json({
-    error:
-      'A currently verified pharmacist credential is required for clinical review decisions.',
+    error: 'A currently verified pharmacist credential is required for clinical review decisions.',
     credential: publicCredential(credential),
   });
 }
@@ -59,7 +55,10 @@ router.get('/credential', async (req, res) => {
 
 router.get('/appointments', async (req, res) => {
   const status = req.query.status ? String(req.query.status).toUpperCase() : null;
-  if (status && !['REQUESTED', 'CONFIRMED', 'COMPLETED', 'DECLINED', 'CANCELLED'].includes(status)) {
+  if (
+    status &&
+    !['REQUESTED', 'CONFIRMED', 'COMPLETED', 'DECLINED', 'CANCELLED'].includes(status)
+  ) {
     return res.status(400).json({ error: 'Unsupported appointment status.' });
   }
   res.json(await pharmacistAppointments(req.user.sub, status));
@@ -111,12 +110,7 @@ router.put('/counseling-summaries/:id', async (req, res) => {
 router.post('/counseling-summaries/:id/publish', async (req, res) => {
   const credential = await pharmacistCredential(req.user.sub);
   if (!credential.credential_valid) return rejectUnlicensedReview(res, credential);
-  const result = await publishCounselingSummary(
-    req.user.sub,
-    req.params.id,
-    credential,
-    req.user
-  );
+  const result = await publishCounselingSummary(req.user.sub, req.params.id, credential, req.user);
   if (result.error) return res.status(result.error.status).json({ error: result.error.message });
   await createPatientNotification({
     patientId: result.patient_id,
@@ -782,7 +776,8 @@ router.post('/clinical-rules/:id/decision', async (req, res) => {
       }
       if (
         type === 'SPACING' &&
-        (!Number.isFinite(Number(interaction.min_gap_hours)) || Number(interaction.min_gap_hours) <= 0)
+        (!Number.isFinite(Number(interaction.min_gap_hours)) ||
+          Number(interaction.min_gap_hours) <= 0)
       ) {
         issues.push(`${interaction.id}:invalid_spacing_gap`);
       }
@@ -849,7 +844,13 @@ router.post('/clinical-rules/:id/decision', async (req, res) => {
          SET safety_status=?,verified_by=?,verified_at=CASE WHEN ?='VERIFIED' THEN NOW(3) ELSE NULL END
          WHERE id=?`,
         [
-          action === 'VERIFY' ? 'VERIFIED' : action === 'REJECT' ? 'REJECTED' : action === 'RETIRE' ? 'RETIRED' : 'IN_REVIEW',
+          action === 'VERIFY'
+            ? 'VERIFIED'
+            : action === 'REJECT'
+              ? 'REJECTED'
+              : action === 'RETIRE'
+                ? 'RETIRED'
+                : 'IN_REVIEW',
           action === 'VERIFY' ? req.user.sub : null,
           status,
           safetyRule.id,

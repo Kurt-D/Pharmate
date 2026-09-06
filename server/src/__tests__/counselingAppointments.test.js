@@ -2,7 +2,11 @@ import request from 'supertest';
 import { v4 as uuidv4 } from 'uuid';
 import app from '../index.js';
 import { pool } from '../db/connection.js';
-import { createAccessToken, createPatientTestUser, createPrivilegedTestUser } from './helpers/testUsers.js';
+import {
+  createAccessToken,
+  createPatientTestUser,
+  createPrivilegedTestUser,
+} from './helpers/testUsers.js';
 
 const PASSWORD = 'TestPass@123';
 const auth = (token) => ({ Authorization: `Bearer ${token}` });
@@ -48,16 +52,13 @@ function future(minutes = 180) {
 }
 
 async function requestAppointment(start = future()) {
-  return request(app)
-    .post('/api/patient/appointments')
-    .set(auth(patientToken))
-    .send({
-      branch_id: branchId,
-      topic: 'POST_DISPENSING',
-      modality: 'VIDEO',
-      duration_minutes: 30,
-      scheduled_start_at: start,
-    });
+  return request(app).post('/api/patient/appointments').set(auth(patientToken)).send({
+    branch_id: branchId,
+    topic: 'POST_DISPENSING',
+    modality: 'VIDEO',
+    duration_minutes: 30,
+    scheduled_start_at: start,
+  });
 }
 
 test('patient requests a virtual follow-up and pharmacist queue stays pseudonymous', async () => {
@@ -85,7 +86,9 @@ test('confirmation requires secure session details and blocks overlapping appoin
   expect(confirmed.status).toBe(200);
   expect(confirmed.body.status).toBe('CONFIRMED');
 
-  const second = await requestAppointment(new Date(new Date(start).getTime() + 10 * 60000).toISOString());
+  const second = await requestAppointment(
+    new Date(new Date(start).getTime() + 10 * 60000).toISOString()
+  );
   const conflict = await request(app)
     .post(`/api/pharmacist/appointments/${second.body.id}/decision`)
     .set(auth(pharmacistToken))
@@ -108,7 +111,9 @@ test('completion creates a draft that becomes patient-visible only after pharmac
   const beforePublish = await request(app)
     .get('/api/patient/counseling-summaries')
     .set(auth(patientToken));
-  expect(beforePublish.body.find((summary) => summary.id === completed.body.summary_id)).toBeFalsy();
+  expect(
+    beforePublish.body.find((summary) => summary.id === completed.body.summary_id)
+  ).toBeFalsy();
 
   const reviewedText = [
     'Pharmacist-reviewed post-dispensing counseling summary.',
@@ -135,7 +140,9 @@ test('completion creates a draft that becomes patient-visible only after pharmac
     'SELECT status,reviewer_license_number FROM counseling_summaries WHERE id=?',
     [completed.body.summary_id]
   );
-  expect(stored).toEqual(expect.objectContaining({ status: 'PUBLISHED', reviewer_license_number: 'TEST-LICENSE' }));
+  expect(stored).toEqual(
+    expect.objectContaining({ status: 'PUBLISHED', reviewer_license_number: 'TEST-LICENSE' })
+  );
 });
 
 test('patient can cancel only an open appointment', async () => {
@@ -145,6 +152,10 @@ test('patient can cancel only an open appointment', async () => {
     .set(auth(patientToken));
   expect(cancelled.body.status).toBe('CANCELLED');
   expect(
-    (await request(app).post(`/api/patient/appointments/${created.body.id}/cancel`).set(auth(patientToken))).status
+    (
+      await request(app)
+        .post(`/api/patient/appointments/${created.body.id}/cancel`)
+        .set(auth(patientToken))
+    ).status
   ).toBe(409);
 });

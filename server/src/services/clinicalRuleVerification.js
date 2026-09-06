@@ -43,7 +43,10 @@ function supportedCodes(value) {
 
 function validPastOrPresentDate(value, today = new Date()) {
   if (!value) return false;
-  const date = value instanceof Date ? new Date(value.getTime()) : new Date(`${String(value).slice(0, 10)}T00:00:00Z`);
+  const date =
+    value instanceof Date
+      ? new Date(value.getTime())
+      : new Date(`${String(value).slice(0, 10)}T00:00:00Z`);
   if (Number.isNaN(date.getTime())) return false;
   const currentDate = new Date(today);
   currentDate.setUTCHours(23, 59, 59, 999);
@@ -91,7 +94,8 @@ export function checkClinicalRule(rule = {}) {
   }
   if (
     String(rule.rx_class || '').toUpperCase() === 'OTC' &&
-    (!Number.isFinite(Number(rule.default_units_per_dose)) || Number(rule.default_units_per_dose) <= 0)
+    (!Number.isFinite(Number(rule.default_units_per_dose)) ||
+      Number(rule.default_units_per_dose) <= 0)
   ) {
     conflicts.push('invalid_units_per_dose');
   }
@@ -132,7 +136,10 @@ export function checkClinicalRule(rule = {}) {
   if (rule.evidence_reviewed_at && !validPastOrPresentDate(rule.evidence_reviewed_at)) {
     conflicts.push('invalid_evidence_reviewed_at');
   }
-  if (rule.rule_version != null && (!Number.isInteger(Number(rule.rule_version)) || Number(rule.rule_version) <= 0)) {
+  if (
+    rule.rule_version != null &&
+    (!Number.isInteger(Number(rule.rule_version)) || Number(rule.rule_version) <= 0)
+  ) {
     conflicts.push('invalid_rule_version');
   }
   if (rule.catalog_status && rule.catalog_status !== 'VERIFIED') {

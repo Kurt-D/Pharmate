@@ -5,7 +5,12 @@ const STATUS_FIELDS = {
   kidney_status: ['YES', 'NO', 'UNSURE', 'UNANSWERED'],
   liver_status: ['YES', 'NO', 'UNSURE', 'UNANSWERED'],
   pregnancy_status: [
-    'PREGNANT', 'BREASTFEEDING', 'NEITHER', 'NOT_APPLICABLE', 'UNSURE', 'UNANSWERED',
+    'PREGNANT',
+    'BREASTFEEDING',
+    'NEITHER',
+    'NOT_APPLICABLE',
+    'UNSURE',
+    'UNANSWERED',
   ],
 };
 

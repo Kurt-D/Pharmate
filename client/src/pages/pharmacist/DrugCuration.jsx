@@ -482,7 +482,7 @@ function ClinicalRuleVerification() {
           ? `Cannot verify. Missing: ${consistency.missing_fields.join(', ') || 'none'}. Conflicts: ${consistency.conflicts.join(', ') || 'none'}.`
           : safetyConsistency
             ? `Cannot verify the safety rule. Missing: ${safetyConsistency.missing_fields.join(', ') || 'none'}. Conflicts: ${safetyConsistency.conflicts.join(', ') || 'none'}.`
-          : error.message
+            : error.message
       );
     } finally {
       setWorking(false);
@@ -663,8 +663,8 @@ function ClinicalRuleVerification() {
                       </span>
                     </div>
                     <p className="small text-muted mt-2 mb-2">
-                      Review the submitted age, weight, allergy, condition, interaction,
-                      pregnancy, breastfeeding, kidney, and liver coverage before signing.
+                      Review the submitted age, weight, allergy, condition, interaction, pregnancy,
+                      breastfeeding, kidney, and liver coverage before signing.
                     </p>
                     <div className="row g-2 small">
                       <div className="col-md-6">
@@ -675,10 +675,18 @@ function ClinicalRuleVerification() {
                         Weight: {reviewContext.safety.minimum_weight_kg ?? 'no minimum'} to{' '}
                         {reviewContext.safety.maximum_weight_kg ?? 'no maximum'} kg
                       </div>
-                      <div className="col-md-6">Pregnancy: {reviewContext.safety.pregnancy_action || 'missing'}</div>
-                      <div className="col-md-6">Breastfeeding: {reviewContext.safety.breastfeeding_action || 'missing'}</div>
-                      <div className="col-md-6">Kidney: {reviewContext.safety.kidney_action || 'missing'}</div>
-                      <div className="col-md-6">Liver: {reviewContext.safety.liver_action || 'missing'}</div>
+                      <div className="col-md-6">
+                        Pregnancy: {reviewContext.safety.pregnancy_action || 'missing'}
+                      </div>
+                      <div className="col-md-6">
+                        Breastfeeding: {reviewContext.safety.breastfeeding_action || 'missing'}
+                      </div>
+                      <div className="col-md-6">
+                        Kidney: {reviewContext.safety.kidney_action || 'missing'}
+                      </div>
+                      <div className="col-md-6">
+                        Liver: {reviewContext.safety.liver_action || 'missing'}
+                      </div>
                       <div className="col-12">
                         Allergy terms:{' '}
                         {jsonArrayValue(reviewContext.safety.allergy_terms_json).join(', ') ||
@@ -708,12 +716,18 @@ function ClinicalRuleVerification() {
                           className={`badge ${Number(reviewContext.safety[field]) ? 'bg-success' : 'bg-danger'}`}
                           key={field}
                         >
-                          {label} {Number(reviewContext.safety[field]) ? 'reviewed' : 'not reviewed'}
+                          {label}{' '}
+                          {Number(reviewContext.safety[field]) ? 'reviewed' : 'not reviewed'}
                         </span>
                       ))}
                     </div>
                     {reviewContext.safety.source_url && (
-                      <a className="small d-inline-block mt-2" href={reviewContext.safety.source_url} rel="noreferrer" target="_blank">
+                      <a
+                        className="small d-inline-block mt-2"
+                        href={reviewContext.safety.source_url}
+                        rel="noreferrer"
+                        target="_blank"
+                      >
                         Open submitted safety source
                       </a>
                     )}

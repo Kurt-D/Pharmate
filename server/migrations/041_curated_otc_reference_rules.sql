@@ -1,5 +1,5 @@
 ALTER TABLE drug_reference
-  ADD COLUMN IF NOT EXISTS default_units_per_dose DECIMAL(6,2) NULL AFTER max_daily_doses;
+  ADD COLUMN default_units_per_dose DECIMAL(6,2) NULL AFTER max_daily_doses;
 
 -- These are source-backed OTC reference rules, not pharmacist-verified rules.
 -- The engine exposes them as REFERENCE_REVIEW_REQUIRED and requires the patient

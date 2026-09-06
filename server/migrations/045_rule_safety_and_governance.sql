@@ -7,9 +7,9 @@ ALTER TABLE medication_schedules
   ) NOT NULL DEFAULT 'STANDARD_REVIEW';
 
 ALTER TABLE otc_label_evidence
-  ADD COLUMN IF NOT EXISTS evidence_version INT UNSIGNED NOT NULL DEFAULT 1 AFTER evidence_status,
-  ADD COLUMN IF NOT EXISTS prepared_by_user_id CHAR(36) NULL AFTER evidence_version,
-  ADD COLUMN IF NOT EXISTS submitted_at DATETIME(3) NULL AFTER prepared_by_user_id,
+  ADD COLUMN evidence_version INT UNSIGNED NOT NULL DEFAULT 1 AFTER evidence_status,
+  ADD COLUMN prepared_by_user_id CHAR(36) NULL AFTER evidence_version,
+  ADD COLUMN submitted_at DATETIME(3) NULL AFTER prepared_by_user_id,
   ADD CONSTRAINT fk_otc_evidence_prepared_by FOREIGN KEY (prepared_by_user_id)
     REFERENCES users(id) ON DELETE SET NULL;
 

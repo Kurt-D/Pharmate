@@ -69,7 +69,12 @@ export default function PatientVoiceAlert({ alert, dose, onTake, onScan, onSnooz
         <div className="pm-reminder__copy">
           <small>{tr('Scheduled medicine reminder', 'Naka-iskedyul na paalala')}</small>
           <h3>“{reminderText}”</h3>
-          <p>{tr('Please check your medicine before taking it.', 'Suriin muna ang gamot bago ito inumin.')}</p>
+          <p>
+            {tr(
+              'Please check your medicine before taking it.',
+              'Suriin muna ang gamot bago ito inumin.'
+            )}
+          </p>
         </div>
       </div>
       <div className={`pm-wave ${speaking ? 'speaking' : ''}`} aria-hidden="true">

@@ -133,7 +133,9 @@ export default function AskRedesign() {
   const [historyLoading, setHistoryLoading] = useState(false);
   const [priorityTokens, setPriorityTokens] = useState(loadPriorityTokens);
   const [usePriority, setUsePriority] = useState(false);
-  const [conversationLabels, setConversationLabels] = useState(() => loadConversationLabels(user.id));
+  const [conversationLabels, setConversationLabels] = useState(() =>
+    loadConversationLabels(user.id)
+  );
   const [editingLabelId, setEditingLabelId] = useState(null);
   const [labelDraft, setLabelDraft] = useState('');
   const [showAllHistory, setShowAllHistory] = useState(true);
@@ -275,7 +277,12 @@ export default function AskRedesign() {
 
   async function start() {
     if (!consent.consented) {
-      setError(tr('Enable inquiry consent above before sending a question.', 'Paganahin muna ang pahintulot sa inquiry sa itaas.'));
+      setError(
+        tr(
+          'Enable inquiry consent above before sending a question.',
+          'Paganahin muna ang pahintulot sa inquiry sa itaas.'
+        )
+      );
       return;
     }
     if (!branchId || !pharmacist || !question.trim()) {
@@ -334,7 +341,12 @@ export default function AskRedesign() {
 
   async function reconnect(conversation = thread) {
     if (!consent.consented) {
-      setError(tr('Enable inquiry consent above before requesting a follow-up.', 'Paganahin muna ang pahintulot sa inquiry sa itaas.'));
+      setError(
+        tr(
+          'Enable inquiry consent above before requesting a follow-up.',
+          'Paganahin muna ang pahintulot sa inquiry sa itaas.'
+        )
+      );
       return;
     }
     setError('');
@@ -835,7 +847,9 @@ export default function AskRedesign() {
               <div className="pm-ask-security">
                 <ChatIcon name="shield" />
                 <span>
-                  <strong>{tr('Saved consultation history', 'Naka-save na kasaysayan ng konsultasyon')}</strong>
+                  <strong>
+                    {tr('Saved consultation history', 'Naka-save na kasaysayan ng konsultasyon')}
+                  </strong>
                   <small>
                     {tr(
                       'Stored on PharMate’s server for you and the assigned pharmacist. Read the inquiry privacy policy above.',

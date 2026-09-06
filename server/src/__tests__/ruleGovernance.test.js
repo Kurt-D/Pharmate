@@ -115,9 +115,7 @@ test('admin can save and submit versioned OTC evidence without clinically verify
     expect.objectContaining({ safety_status: 'VERIFIED', verified_by: pharmacistId })
   );
 
-  const credentials = await request(app)
-    .get('/api/admin/pharmacist-credentials')
-    .set(auth(token));
+  const credentials = await request(app).get('/api/admin/pharmacist-credentials').set(auth(token));
   const pharmacistCredential = credentials.body.pharmacists.find(
     (item) => item.id === pharmacistId
   );

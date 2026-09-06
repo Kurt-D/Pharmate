@@ -30,14 +30,14 @@ controls.
 
 ## Who can see an inquiry
 
-| Recipient | Application access |
-| --- | --- |
-| Patient who owns the inquiry | Own inquiry list and message history, including completed conversations. |
+| Recipient                                                                  | Application access                                                                                                                                                                                                                                                         |
+| -------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Patient who owns the inquiry                                               | Own inquiry list and message history, including completed conversations.                                                                                                                                                                                                   |
 | Pharmacists eligible for the selected branch or requested pharmacist queue | Before assignment, a preview containing the subject, patient code, priority, status, dates, and message-count metadata; the subject may contain sensitive information. With no branch or pharmacist restriction, eligible pharmacists across branches can see the request. |
-| Assigned pharmacist | Conversation messages and the assigned inquiry's history. |
-| Actively linked caregiver | Can submit an inquiry on the patient's behalf only when the patient has already enabled inquiries; this permission does not provide a caregiver transcript-reading endpoint. |
-| Administrator portal | No inquiry transcript-reading API. Operational counts and audit activity are distinct from transcript access. |
-| Service database operators and people with database/backup access | Centrally stored records can be accessible through infrastructure privileges, independently of portal roles. |
+| Assigned pharmacist                                                        | Conversation messages and the assigned inquiry's history.                                                                                                                                                                                                                  |
+| Actively linked caregiver                                                  | Can submit an inquiry on the patient's behalf only when the patient has already enabled inquiries; this permission does not provide a caregiver transcript-reading endpoint.                                                                                               |
+| Administrator portal                                                       | No inquiry transcript-reading API. Operational counts and audit activity are distinct from transcript access.                                                                                                                                                              |
+| Service database operators and people with database/backup access          | Centrally stored records can be accessible through infrastructure privileges, independently of portal roles.                                                                                                                                                               |
 
 Other patients and unassigned pharmacists cannot read a transcript through the
 inquiry API. Application role restrictions must not be described as a guarantee
@@ -96,11 +96,11 @@ with access to the device or browser storage.
 These endpoints require a signed-in patient access token. Caregivers and staff
 cannot accept or withdraw inquiry consent for a patient.
 
-| Endpoint | Behavior |
-| --- | --- |
-| `GET /api/patient/inquiry-consent` | Returns the current policy version and the patient's consent status. Does not grant consent. |
-| `POST /api/patient/inquiry-consent` | Accepts `{ "accepted": true, "policy_version": "2026-09-06" }`; records affirmative consent to the current version. |
-| `DELETE /api/patient/inquiry-consent` | Withdraws inquiry consent. Does not delete inquiries or consent audit history. |
+| Endpoint                              | Behavior                                                                                                            |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `GET /api/patient/inquiry-consent`    | Returns the current policy version and the patient's consent status. Does not grant consent.                        |
+| `POST /api/patient/inquiry-consent`   | Accepts `{ "accepted": true, "policy_version": "2026-09-06" }`; records affirmative consent to the current version. |
+| `DELETE /api/patient/inquiry-consent` | Withdraws inquiry consent. Does not delete inquiries or consent audit history.                                      |
 
 Successful calls return `consented`, `policy_version`, `accepted_at`, and
 `revoked_at`. Timestamps are `null` when no corresponding event has occurred.
@@ -116,16 +116,16 @@ from permission to add new content.
 
 ## Implementation traceability
 
-| Claim | Implementation to inspect |
-| --- | --- |
-| Versioned notice shared by public policy and patient consent UI | `shared/inquiryPrivacy.mjs`; public `/privacy#inquiries` page; patient Ask screen. |
-| Central subject/message persistence and transcript access restrictions | `server/src/services/inquiry.js`; `inquiry_threads` and `inquiry_messages`; patient/pharmacist inquiry routes. |
-| Patient-only consent and caregiver enforcement | `server/src/services/inquiryConsent.js`; patient inquiry-consent routes; inquiry service checks; caregiver inquiry route. |
-| Consent audit and new-thread policy snapshots, without legacy opt-in | `server/migrations/048_inquiry_privacy_consent.sql`; patient consent columns; `inquiry_consent_events`; `inquiry_threads.consent_policy_version` and `consent_accepted_at`. |
-| Retention after closure | Inquiry service `closeThread` updates status and closing timestamp; it does not delete messages. |
-| Patient-specific local labels, in-memory transcript display | `client/src/pages/patient/AskRedesign.jsx` and its local-label storage helper. |
-| Selected profile columns encrypted; inquiry text not included | `server/src/utils/crypto.js`, inquiry inserts, and [security notes](security.md). |
-| Text not broadcast in inquiry update notifications | `server/src/services/domainEvents.js`; identifiers and update metadata trigger authenticated history fetches. |
+| Claim                                                                  | Implementation to inspect                                                                                                                                                   |
+| ---------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Versioned notice shared by public policy and patient consent UI        | `shared/inquiryPrivacy.mjs`; public `/privacy#inquiries` page; patient Ask screen.                                                                                          |
+| Central subject/message persistence and transcript access restrictions | `server/src/services/inquiry.js`; `inquiry_threads` and `inquiry_messages`; patient/pharmacist inquiry routes.                                                              |
+| Patient-only consent and caregiver enforcement                         | `server/src/services/inquiryConsent.js`; patient inquiry-consent routes; inquiry service checks; caregiver inquiry route.                                                   |
+| Consent audit and new-thread policy snapshots, without legacy opt-in   | `server/migrations/048_inquiry_privacy_consent.sql`; patient consent columns; `inquiry_consent_events`; `inquiry_threads.consent_policy_version` and `consent_accepted_at`. |
+| Retention after closure                                                | Inquiry service `closeThread` updates status and closing timestamp; it does not delete messages.                                                                            |
+| Patient-specific local labels, in-memory transcript display            | `client/src/pages/patient/AskRedesign.jsx` and its local-label storage helper.                                                                                              |
+| Selected profile columns encrypted; inquiry text not included          | `server/src/utils/crypto.js`, inquiry inserts, and [security notes](security.md).                                                                                           |
+| Text not broadcast in inquiry update notifications                     | `server/src/services/domainEvents.js`; identifiers and update metadata trigger authenticated history fetches.                                                               |
 
 ## Scope of assurance
 

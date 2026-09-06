@@ -9,7 +9,10 @@ function localInputValue(date = new Date(Date.now() + 86400000)) {
 }
 
 function appointmentLabel(value) {
-  return String(value || '').toLowerCase().replaceAll('_', ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+  return String(value || '')
+    .toLowerCase()
+    .replaceAll('_', ' ')
+    .replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 export default function Appointments() {
@@ -94,7 +97,10 @@ export default function Appointments() {
     setBusy(true);
     try {
       await api(`/api/patient/appointments/${id}/cancel`, { method: 'POST' });
-      setNotice({ kind: 'success', message: tr('Appointment cancelled.', 'Kinansela ang appointment.') });
+      setNotice({
+        kind: 'success',
+        message: tr('Appointment cancelled.', 'Kinansela ang appointment.'),
+      });
       await load();
     } catch (error) {
       setNotice({ kind: 'error', message: error.message });
@@ -116,7 +122,9 @@ export default function Appointments() {
             )}
           </p>
         </div>
-        <strong>{upcoming.length} {tr('upcoming', 'paparating')}</strong>
+        <strong>
+          {upcoming.length} {tr('upcoming', 'paparating')}
+        </strong>
       </header>
 
       {notice && <div className={`pm-counsel-notice is-${notice.kind}`}>{notice.message}</div>}
@@ -132,12 +140,19 @@ export default function Appointments() {
               onChange={(event) => setForm({ ...form, branch_id: event.target.value })}
             >
               <option value="">{tr('Select a branch', 'Pumili ng sangay')}</option>
-              {branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
+              {branches.map((branch) => (
+                <option key={branch.id} value={branch.id}>
+                  {branch.name}
+                </option>
+              ))}
             </select>
           </label>
           <label>
             {tr('Follow-up topic', 'Paksa ng follow-up')}
-            <select value={form.topic} onChange={(event) => setForm({ ...form, topic: event.target.value })}>
+            <select
+              value={form.topic}
+              onChange={(event) => setForm({ ...form, topic: event.target.value })}
+            >
               <option value="POST_DISPENSING">Post-dispensing counseling</option>
               <option value="MEDICATION_REVIEW">Medication review</option>
               <option value="MISSED_DOSE">Missed-dose support</option>
@@ -157,7 +172,10 @@ export default function Appointments() {
           </label>
           <label>
             {tr('Session type', 'Uri ng session')}
-            <select value={form.modality} onChange={(event) => setForm({ ...form, modality: event.target.value })}>
+            <select
+              value={form.modality}
+              onChange={(event) => setForm({ ...form, modality: event.target.value })}
+            >
               <option value="VIDEO">Video</option>
               <option value="AUDIO">Audio</option>
               <option value="PHONE">Phone</option>
@@ -165,12 +183,21 @@ export default function Appointments() {
           </label>
           <label>
             {tr('Duration', 'Tagal')}
-            <select value={form.duration_minutes} onChange={(event) => setForm({ ...form, duration_minutes: event.target.value })}>
-              {[15, 30, 45, 60].map((minutes) => <option key={minutes} value={minutes}>{minutes} minutes</option>)}
+            <select
+              value={form.duration_minutes}
+              onChange={(event) => setForm({ ...form, duration_minutes: event.target.value })}
+            >
+              {[15, 30, 45, 60].map((minutes) => (
+                <option key={minutes} value={minutes}>
+                  {minutes} minutes
+                </option>
+              ))}
             </select>
           </label>
           <button type="submit" disabled={busy || !form.branch_id}>
-            {busy ? tr('Sending…', 'Ipinapadala…') : tr('Request Appointment', 'Humiling ng Appointment')}
+            {busy
+              ? tr('Sending…', 'Ipinapadala…')
+              : tr('Request Appointment', 'Humiling ng Appointment')}
           </button>
         </form>
       </section>
@@ -178,23 +205,42 @@ export default function Appointments() {
       <section className="pm-counsel-card">
         <h2>{tr('Your appointments', 'Iyong mga appointment')}</h2>
         <div className="pm-appointment-list">
-          {appointments.length === 0 && <p className="pm-counsel-empty">{tr('No appointments yet.', 'Wala pang appointment.')}</p>}
+          {appointments.length === 0 && (
+            <p className="pm-counsel-empty">
+              {tr('No appointments yet.', 'Wala pang appointment.')}
+            </p>
+          )}
           {appointments.map((appointment) => (
             <article key={appointment.id}>
               <div>
-                <span className={`pm-counsel-status is-${appointment.status.toLowerCase()}`}>{appointmentLabel(appointment.status)}</span>
+                <span className={`pm-counsel-status is-${appointment.status.toLowerCase()}`}>
+                  {appointmentLabel(appointment.status)}
+                </span>
                 <h3>{appointmentLabel(appointment.topic)}</h3>
-                <p>{appointment.branch_name} · {appointmentLabel(appointment.modality)} · {appointment.duration_minutes} minutes</p>
+                <p>
+                  {appointment.branch_name} · {appointmentLabel(appointment.modality)} ·{' '}
+                  {appointment.duration_minutes} minutes
+                </p>
                 <time>{new Date(appointment.scheduled_start_at).toLocaleString()}</time>
                 {appointment.decision_reason && <small>{appointment.decision_reason}</small>}
-                {appointment.session_instructions && <small>{appointment.session_instructions}</small>}
+                {appointment.session_instructions && (
+                  <small>{appointment.session_instructions}</small>
+                )}
               </div>
               <div className="pm-appointment-actions">
                 {appointment.status === 'CONFIRMED' && appointment.meeting_url && (
-                  <a href={appointment.meeting_url} target="_blank" rel="noreferrer">Join secure session</a>
+                  <a href={appointment.meeting_url} target="_blank" rel="noreferrer">
+                    Join secure session
+                  </a>
                 )}
                 {['REQUESTED', 'CONFIRMED'].includes(appointment.status) && (
-                  <button type="button" disabled={busy} onClick={() => cancelAppointment(appointment.id)}>Cancel</button>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => cancelAppointment(appointment.id)}
+                  >
+                    Cancel
+                  </button>
                 )}
               </div>
             </article>
@@ -211,7 +257,11 @@ export default function Appointments() {
           )}
         </p>
         <div className="pm-summary-list">
-          {summaries.length === 0 && <p className="pm-counsel-empty">{tr('No published summaries yet.', 'Wala pang published summary.')}</p>}
+          {summaries.length === 0 && (
+            <p className="pm-counsel-empty">
+              {tr('No published summaries yet.', 'Wala pang published summary.')}
+            </p>
+          )}
           {summaries.map((summary) => (
             <article key={summary.id}>
               <header>
@@ -219,7 +269,9 @@ export default function Appointments() {
                 <time>{new Date(summary.published_at).toLocaleString()}</time>
               </header>
               <pre>{summary.summary_text}</pre>
-              <footer>{summary.pharmacist_name} · {summary.branch_name} · {summary.template_version}</footer>
+              <footer>
+                {summary.pharmacist_name} · {summary.branch_name} · {summary.template_version}
+              </footer>
             </article>
           ))}
         </div>

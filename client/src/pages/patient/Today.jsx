@@ -426,7 +426,8 @@ export default function Today() {
     try {
       const media = await captureOcrImage(source);
       if (!media) return;
-      const url = media.webPath || (media.thumbnail ? `data:image/jpeg;base64,${media.thumbnail}` : '');
+      const url =
+        media.webPath || (media.thumbnail ? `data:image/jpeg;base64,${media.thumbnail}` : '');
       if (!url) throw new Error('The selected image could not be opened.');
       setScanPhoto({ url });
       const scan = await recognizeMedicineImage(media);
@@ -680,8 +681,7 @@ export default function Today() {
               disabled={!nextDose}
               onClick={markDueDoseTaken}
             >
-              <HomeIcon name="check" size={18} />{' '}
-              {tr('Mark as Taken', 'Markahan bilang Nainom')}
+              <HomeIcon name="check" size={18} /> {tr('Mark as Taken', 'Markahan bilang Nainom')}
             </button>
             <button
               type="button"
@@ -1120,12 +1120,20 @@ export default function Today() {
 
             {!scanPhoto ? (
               <div className="pm-scan-choices">
-                <button type="button" disabled={scanCapturing} onClick={() => chooseScanPhoto('camera')}>
+                <button
+                  type="button"
+                  disabled={scanCapturing}
+                  onClick={() => chooseScanPhoto('camera')}
+                >
                   <span aria-hidden="true">📷</span>
                   <strong>Take a Photo</strong>
                   <small>{scanCapturing ? 'Opening…' : 'Use on-device Google ML Kit'}</small>
                 </button>
-                <button type="button" disabled={scanCapturing} onClick={() => chooseScanPhoto('gallery')}>
+                <button
+                  type="button"
+                  disabled={scanCapturing}
+                  onClick={() => chooseScanPhoto('gallery')}
+                >
                   <span aria-hidden="true">▣</span>
                   <strong>Choose a Photo</strong>
                   <small>Read a saved label on this device</small>
@@ -1208,7 +1216,9 @@ export default function Today() {
                     disabled={scanOcr?.outcome === 'RECAPTURE_REQUIRED'}
                     onChange={(event) => setScanReviewed(event.target.checked)}
                   />
-                  <span>I checked the medicine name, strength, and formulation against the package.</span>
+                  <span>
+                    I checked the medicine name, strength, and formulation against the package.
+                  </span>
                 </label>
                 <p className="pm-scan-privacy">
                   The photo and Google ML Kit recognition stay on this device. Confirmed fields and

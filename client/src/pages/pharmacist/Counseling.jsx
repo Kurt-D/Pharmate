@@ -3,7 +3,10 @@ import { api } from '../../api.js';
 import '../../styles/counseling.css';
 
 function label(value) {
-  return String(value || '').toLowerCase().replaceAll('_', ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+  return String(value || '')
+    .toLowerCase()
+    .replaceAll('_', ' ')
+    .replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 export default function Counseling() {
@@ -89,22 +92,35 @@ export default function Counseling() {
     <main className="px-counseling">
       {!credential?.credential_valid && (
         <div className="px-counsel-credential">
-          Clinical counseling decisions are locked until your pharmacist credential is verified and current.
+          Clinical counseling decisions are locked until your pharmacist credential is verified and
+          current.
         </div>
       )}
       {notice && <div className={`pm-counsel-notice is-${notice.kind}`}>{notice.message}</div>}
       <div className="px-counsel-toolbar">
         {['ALL', 'REQUESTED', 'CONFIRMED', 'COMPLETED'].map((item) => (
-          <button key={item} className={status === item ? 'active' : ''} onClick={() => setStatus(item)} type="button">
+          <button
+            key={item}
+            className={status === item ? 'active' : ''}
+            onClick={() => setStatus(item)}
+            type="button"
+          >
             {label(item)}
           </button>
         ))}
-        <button type="button" onClick={() => load(selectedId)}>Refresh</button>
+        <button type="button" onClick={() => load(selectedId)}>
+          Refresh
+        </button>
       </div>
       <div className="px-counsel-grid">
         <section className="px-counsel-queue">
-          <header><h2>Appointment queue</h2><span>{visible.length}</span></header>
-          {visible.length === 0 && <p className="pm-counsel-empty">No appointments in this view.</p>}
+          <header>
+            <h2>Appointment queue</h2>
+            <span>{visible.length}</span>
+          </header>
+          {visible.length === 0 && (
+            <p className="pm-counsel-empty">No appointments in this view.</p>
+          )}
           {visible.map((appointment) => (
             <button
               className={selectedId === appointment.id ? 'selected' : ''}
@@ -112,7 +128,9 @@ export default function Counseling() {
               onClick={() => setSelectedId(appointment.id)}
               type="button"
             >
-              <span className={`pm-counsel-status is-${appointment.status.toLowerCase()}`}>{label(appointment.status)}</span>
+              <span className={`pm-counsel-status is-${appointment.status.toLowerCase()}`}>
+                {label(appointment.status)}
+              </span>
               <strong>{appointment.patient_code}</strong>
               <small>{label(appointment.topic)}</small>
               <time>{new Date(appointment.scheduled_start_at).toLocaleString()}</time>
@@ -125,39 +143,140 @@ export default function Counseling() {
           ) : (
             <>
               <header>
-                <div><small>Patient code</small><h2>{selected.patient_code}</h2></div>
-                <span className={`pm-counsel-status is-${selected.status.toLowerCase()}`}>{label(selected.status)}</span>
+                <div>
+                  <small>Patient code</small>
+                  <h2>{selected.patient_code}</h2>
+                </div>
+                <span className={`pm-counsel-status is-${selected.status.toLowerCase()}`}>
+                  {label(selected.status)}
+                </span>
               </header>
               <dl>
-                <div><dt>Topic</dt><dd>{label(selected.topic)}</dd></div>
-                <div><dt>Session</dt><dd>{label(selected.modality)} · {selected.duration_minutes} minutes</dd></div>
-                <div><dt>When</dt><dd>{new Date(selected.scheduled_start_at).toLocaleString()}</dd></div>
-                <div><dt>Branch</dt><dd>{selected.branch_name}</dd></div>
+                <div>
+                  <dt>Topic</dt>
+                  <dd>{label(selected.topic)}</dd>
+                </div>
+                <div>
+                  <dt>Session</dt>
+                  <dd>
+                    {label(selected.modality)} · {selected.duration_minutes} minutes
+                  </dd>
+                </div>
+                <div>
+                  <dt>When</dt>
+                  <dd>{new Date(selected.scheduled_start_at).toLocaleString()}</dd>
+                </div>
+                <div>
+                  <dt>Branch</dt>
+                  <dd>{selected.branch_name}</dd>
+                </div>
               </dl>
               {selected.status === 'REQUESTED' && (
                 <div className="px-counsel-decision">
-                  <label>Secure HTTPS meeting link<input value={meetingUrl} onChange={(event) => setMeetingUrl(event.target.value)} placeholder="https://…" /></label>
-                  <label>Session instructions<textarea value={instructions} onChange={(event) => setInstructions(event.target.value)} rows={2} placeholder="How the patient should join" /></label>
-                  <label>Reason when declining<textarea value={reason} onChange={(event) => setReason(event.target.value)} rows={2} /></label>
-                  <div><button disabled={busy || !credential?.credential_valid} onClick={() => run('CONFIRM')} type="button">Confirm</button><button className="danger" disabled={busy || !credential?.credential_valid || !reason.trim()} onClick={() => run('DECLINE')} type="button">Decline</button></div>
+                  <label>
+                    Secure HTTPS meeting link
+                    <input
+                      value={meetingUrl}
+                      onChange={(event) => setMeetingUrl(event.target.value)}
+                      placeholder="https://…"
+                    />
+                  </label>
+                  <label>
+                    Session instructions
+                    <textarea
+                      value={instructions}
+                      onChange={(event) => setInstructions(event.target.value)}
+                      rows={2}
+                      placeholder="How the patient should join"
+                    />
+                  </label>
+                  <label>
+                    Reason when declining
+                    <textarea
+                      value={reason}
+                      onChange={(event) => setReason(event.target.value)}
+                      rows={2}
+                    />
+                  </label>
+                  <div>
+                    <button
+                      disabled={busy || !credential?.credential_valid}
+                      onClick={() => run('CONFIRM')}
+                      type="button"
+                    >
+                      Confirm
+                    </button>
+                    <button
+                      className="danger"
+                      disabled={busy || !credential?.credential_valid || !reason.trim()}
+                      onClick={() => run('DECLINE')}
+                      type="button"
+                    >
+                      Decline
+                    </button>
+                  </div>
                 </div>
               )}
               {selected.status === 'CONFIRMED' && (
                 <div className="px-counsel-session">
-                  {selected.meeting_url && <a href={selected.meeting_url} target="_blank" rel="noreferrer">Open secure session</a>}
+                  {selected.meeting_url && (
+                    <a href={selected.meeting_url} target="_blank" rel="noreferrer">
+                      Open secure session
+                    </a>
+                  )}
                   <p>{selected.session_instructions}</p>
-                  <button disabled={busy || !credential?.credential_valid} onClick={() => run('COMPLETE')} type="button">Complete visit & generate draft</button>
+                  <button
+                    disabled={busy || !credential?.credential_valid}
+                    onClick={() => run('COMPLETE')}
+                    type="button"
+                  >
+                    Complete visit & generate draft
+                  </button>
                 </div>
               )}
               {selected.summary_id && (
                 <div className="px-counsel-summary">
-                  <div><h3>Post-dispensing summary</h3><span className={`pm-counsel-status is-${selected.summary_status.toLowerCase()}`}>{label(selected.summary_status)}</span></div>
-                  <p>The draft is generated only from stored medication directions. Review every line before publishing.</p>
-                  <textarea value={summaryText} onChange={(event) => setSummaryText(event.target.value)} rows={14} readOnly={selected.summary_status !== 'DRAFT'} />
+                  <div>
+                    <h3>Post-dispensing summary</h3>
+                    <span
+                      className={`pm-counsel-status is-${selected.summary_status.toLowerCase()}`}
+                    >
+                      {label(selected.summary_status)}
+                    </span>
+                  </div>
+                  <p>
+                    The draft is generated only from stored medication directions. Review every line
+                    before publishing.
+                  </p>
+                  <textarea
+                    value={summaryText}
+                    onChange={(event) => setSummaryText(event.target.value)}
+                    rows={14}
+                    readOnly={selected.summary_status !== 'DRAFT'}
+                  />
                   {selected.summary_status === 'DRAFT' && (
-                    <div><button disabled={busy || !credential?.credential_valid} onClick={() => run('SAVE')} type="button">Save draft</button><button disabled={busy || !credential?.credential_valid || summaryText.trim().length < 40} onClick={() => run('PUBLISH')} type="button">Publish to patient</button></div>
+                    <div>
+                      <button
+                        disabled={busy || !credential?.credential_valid}
+                        onClick={() => run('SAVE')}
+                        type="button"
+                      >
+                        Save draft
+                      </button>
+                      <button
+                        disabled={
+                          busy || !credential?.credential_valid || summaryText.trim().length < 40
+                        }
+                        onClick={() => run('PUBLISH')}
+                        type="button"
+                      >
+                        Publish to patient
+                      </button>
+                    </div>
                   )}
-                  {selected.summary_status === 'PUBLISHED' && <small>Published {new Date(selected.published_at).toLocaleString()}</small>}
+                  {selected.summary_status === 'PUBLISHED' && (
+                    <small>Published {new Date(selected.published_at).toLocaleString()}</small>
+                  )}
                 </div>
               )}
             </>

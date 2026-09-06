@@ -16,7 +16,10 @@ const TITLES = {
   dashboard: ['Dashboard', 'Manage medicine operations efficiently'],
   patients: ['Patients', 'Manage linked patient records'],
   inquiries: ['Counseling', 'Manage and communicate with patients'],
-  appointments: ['Appointments & Counseling', 'Schedule follow-ups and review post-dispensing summaries'],
+  appointments: [
+    'Appointments & Counseling',
+    'Schedule follow-ups and review post-dispensing summaries',
+  ],
   validation: [
     'Prescription Verification',
     'Review and verify prescriptions before dispensing medications.',
