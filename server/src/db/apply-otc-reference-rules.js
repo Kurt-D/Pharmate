@@ -19,7 +19,9 @@ const connection = await mysql.createConnection({
 });
 
 try {
-  await connection.query(sql);
+  // Schema changes belong to the migration runner. This command reapplies only
+  // the data rules after seeding, when the column already exists.
+  await connection.query(sql.replace(/^ALTER TABLE\b[^;]*;\s*/i, ''));
   console.log('Applied curated OTC reference rules.');
 } finally {
   await connection.end();

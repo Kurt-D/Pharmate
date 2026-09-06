@@ -19,7 +19,8 @@ const connection = await mysql.createConnection({
 });
 
 try {
-  await connection.query(sql);
+  // Migrations create the columns once; coverage synchronization is repeatable.
+  await connection.query(sql.replace(/^ALTER TABLE\b[^;]*;\s*/i, ''));
   await connection.query(
     `INSERT INTO medication_safety_rules
        (drug_id,population_key,allergy_terms_json,evidence_notes)
