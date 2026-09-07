@@ -41,14 +41,7 @@ export async function issueOtp(executor, userId, purpose, now = new Date()) {
   await executor.execute(
     `INSERT INTO otp_codes (id,user_id,purpose,otp_hash,expires_at,created_at)
      VALUES (?,?,?,?,?,?)`,
-    [
-      id,
-      userId,
-      purpose,
-      hashOtp(userId, purpose, otp),
-      new Date(now.getTime() + OTP_TTL_MS),
-      now,
-    ]
+    [id, userId, purpose, hashOtp(userId, purpose, otp), new Date(now.getTime() + OTP_TTL_MS), now]
   );
   return { id, otp, expiresAt: new Date(now.getTime() + OTP_TTL_MS) };
 }
