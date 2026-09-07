@@ -93,15 +93,20 @@ describe('dashboard calculations and dose ordering', () => {
   beforeAll(async () => {
     const now = Date.now();
     const manilaNow = new Date(now + 8 * 60 * 60 * 1000);
+    const currentManilaMidnight =
+      Date.UTC(manilaNow.getUTCFullYear(), manilaNow.getUTCMonth(), manilaNow.getUTCDate()) -
+      8 * 60 * 60 * 1000;
     const nextManilaMidnight =
       Date.UTC(manilaNow.getUTCFullYear(), manilaNow.getUTCMonth(), manilaNow.getUTCDate() + 1) -
       8 * 60 * 60 * 1000;
     const remaining = nextManilaMidnight - now;
+    const elapsed = now - currentManilaMidnight;
+    const past = [0.2, 0.4, 0.6].map((part) => new Date(currentManilaMidnight + elapsed * part));
     const future = [0.2, 0.4, 0.6, 0.8].map((part) => new Date(now + remaining * part));
     await addDoses(patientId, [
-      { time: new Date(now - 3 * 60 * 60 * 1000), status: 'missed' },
-      { time: new Date(now - 2 * 60 * 60 * 1000), status: 'taken' },
-      { time: new Date(now - 1 * 60 * 60 * 1000), status: 'taken_late' },
+      { time: past[0], status: 'missed' },
+      { time: past[1], status: 'taken' },
+      { time: past[2], status: 'taken_late' },
       ...future.map((time) => ({ time, status: 'scheduled' })),
     ]);
   });

@@ -129,7 +129,7 @@ export async function getPatientMedicationSchedule(patientId, options = {}) {
       WHERE ms.patient_id = ?
         AND ms.scheduled_time >= ? AND ms.scheduled_time < ?
         AND (ms.status IN ('taken','taken_late','missed') OR (
-          m.schedule_status = 'APPROVED' AND ms.is_confirmed = 1 AND
+          m.status = 'active' AND m.schedule_status = 'APPROVED' AND ms.is_confirmed = 1 AND
           ms.schedule_version = (SELECT COALESCE(MAX(ms2.schedule_version), 0)
             FROM medication_schedules ms2
             WHERE ms2.patient_id = ms.patient_id AND ms2.medication_id = ms.medication_id)
