@@ -74,6 +74,7 @@ jobs:
           DB_PASS: pharmate
           JWT_SECRET: ci-secret-access
           JWT_REFRESH_SECRET: ci-secret-refresh
+          OTP_SECRET: 'ci-only-otp-secret-0123456789abcdef0123456789abcdef0123456789abcdef'
           AES_KEY: '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef'
           BCRYPT_COST: '4'
         run: npm --prefix server test
