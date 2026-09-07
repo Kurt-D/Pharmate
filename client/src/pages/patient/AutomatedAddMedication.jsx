@@ -68,10 +68,19 @@ const PRESET_TIMES = [
 
 function readDraft() {
   try {
-    return JSON.parse(sessionStorage.getItem(DRAFT_KEY) || 'null') || {};
+    return JSON.parse(sessionStorage.getItem(DRAFT_KEY) || localStorage.getItem(DRAFT_KEY) || 'null') || {};
   } catch {
     return {};
   }
+}
+function frequencyDetails(code) {
+  const rules = {
+    QD: ['ONCE_DAILY', 1], BID: ['TWICE_DAILY', 2], TID: ['THREE_TIMES_DAILY', 3],
+    QID: ['SPECIFIC_TIMES', 4], Q4H: ['EVERY_N_HOURS', 6, 4], Q6H: ['EVERY_N_HOURS', 4, 6],
+    Q8H: ['EVERY_N_HOURS', 3, 8], Q12H: ['EVERY_N_HOURS', 2, 12], PRN: ['AS_NEEDED', 0],
+  };
+  const [frequencyType, count, intervalHours = null] = rules[code] || [null, null, null];
+  return { frequencyType, count, intervalHours };
 }
 function today(offset = 0) {
   const date = new Date();
@@ -172,9 +181,7 @@ export default function AutomatedAddMedication() {
 
   useEffect(() => {
     if (saved) return;
-    sessionStorage.setItem(
-      DRAFT_KEY,
-      JSON.stringify({
+    const serializedDraft = JSON.stringify({
         step,
         durationPage,
         phase,
@@ -186,8 +193,9 @@ export default function AutomatedAddMedication() {
         manualTimes,
         editingMedicine,
         medicineDates,
-      })
-    );
+      });
+    sessionStorage.setItem(DRAFT_KEY, serializedDraft);
+    localStorage.setItem(DRAFT_KEY, serializedDraft);
   }, [
     durationPage,
     editingMedicine,
@@ -232,6 +240,12 @@ export default function AutomatedAddMedication() {
   }, [phase, query, step]);
 
   const update = (changes) => {
+    if ('start_date' in changes || 'end_date' in changes || 'duration' in changes) {
+      const key = String(medicine?._draftKey || medicine?.id || '');
+      setMedicineDates((current) =>
+        Object.fromEntries(Object.entries(current).filter(([itemKey]) => itemKey !== key && itemKey !== String(medicine?.id || '')))
+      );
+    }
     setMedicine((current) => ({ ...current, ...changes }));
     setError('');
   };
@@ -267,6 +281,9 @@ export default function AutomatedAddMedication() {
         release_type_snapshot: item.release_choice || '',
         refill_reminders_enabled: Boolean(item.refill_reminders),
         first_dose_time: item.first_dose_time || '',
+        frequency_type: frequencyDetails(item.frequency_code).frequencyType,
+        interval_hours: frequencyDetails(item.frequency_code).intervalHours,
+        frequency_source: 'PATIENT_SELECTED',
         entry_method: 'MANUAL',
         patient_confirmed: true,
       })),
@@ -427,12 +444,13 @@ export default function AutomatedAddMedication() {
         method: 'POST',
         body: request,
       });
-      const dateMap = {};
+      const dateMap = { ...medicineDates };
       for (const item of allMedicines)
-        dateMap[String(item.id)] = treatmentDates(
-          item.start_date,
-          endDateFor(item.start_date, item.duration, item.end_date)
-        );
+        if (!dateMap[String(item.id)])
+          dateMap[String(item.id)] = treatmentDates(
+            item.start_date,
+            endDateFor(item.start_date, item.duration, item.end_date)
+          );
       setMedicineList(allMedicines);
       setMedicineDates(dateMap);
       setSchedule(response.data);
@@ -560,7 +578,23 @@ export default function AutomatedAddMedication() {
       generate
     );
   }
-  function applyEditedMedicineTimes() {
+  async function applyEditedMedicineTimes() {
+    const frequency = frequencyDetails(medicine.frequency_code);
+    try {
+      await api('/api/medications/validate-schedule', {
+        method: 'POST',
+        body: {
+          frequencyType: frequency.frequencyType,
+          intervalHours: frequency.intervalHours,
+          scheduleTimes: manualRows().map((row) => row.time),
+          startDate: medicine.start_date,
+          endDate: selectedEndDate || null,
+        },
+      });
+    } catch (requestError) {
+      setError(requestError.body?.message || requestError.body?.error || requestError.message);
+      return;
+    }
     const medicineKey = String(editingMedicine?.drug_id || editingMedicine?.name || intake.drug_id);
     const groups = (schedule?.schedule || [])
       .map((slot) => ({
@@ -586,7 +620,21 @@ export default function AutomatedAddMedication() {
     groups.sort((left, right) => left.time.localeCompare(right.time));
     setSchedule((current) => ({ ...current, schedule: groups }));
     setSource('manual');
+    setConfirmed(false);
+    setError('');
     setPhase('review');
+  }
+
+  function askPharmacist() {
+    const times = (schedule?.schedule || []).map((slot) => slot.time);
+    const context = {
+      topic: 'Medication Schedule Verification',
+      draftKey: String(medicine?._draftKey || ''),
+      medicationId: medicine?.id || null,
+      question: `I am adding ${intake?.medicine_name || 'a medicine'} to my medication schedule.\n\nMy instructions are:\n${intake?.dosage_instruction || ''}${intake?.label_direction ? `; ${intake.label_direction}` : ''}\nFrequency: ${medicine?.frequency_code || 'not specified'}\n\nThe suggested schedule is:\n${times.length ? times.join('\n') : 'No exact reminder times have been confirmed yet.'}\n\nIs this schedule correct based on my medication instructions, or should the times be adjusted?`,
+    };
+    sessionStorage.setItem('pm_schedule_inquiry_draft', JSON.stringify(context));
+    navigate('/patient/ask', { state: { medicationScheduleInquiry: context } });
   }
   function deleteScheduledMedicines(keys) {
     if (!keys.length) return;
@@ -675,6 +723,7 @@ export default function AutomatedAddMedication() {
       localStorage.setItem('pm_medication_schedule_source', source);
       sessionStorage.setItem('pm_medicine_added_success', '1');
       sessionStorage.removeItem(DRAFT_KEY);
+      localStorage.removeItem(DRAFT_KEY);
       setSaved(true);
       setPhase('success');
     } catch (requestError) {
@@ -1281,7 +1330,7 @@ export default function AutomatedAddMedication() {
               onEdit={() =>
                 confirmEditMedicineTimes({ drug_id: intake.drug_id, name: intake.medicine_name })
               }
-              onAsk={() => navigate('/patient/ask')}
+              onAsk={askPharmacist}
               tr={tr}
             />
           )}
@@ -1382,12 +1431,22 @@ export default function AutomatedAddMedication() {
           </section>
           <button
             className="pm-wizard__add-time"
-            onClick={() => setManualTimes((times) => [...times, '12:00'])}
+            onClick={() => {
+              const maximum = frequencyDetails(medicine.frequency_code).count;
+              if (Number.isInteger(maximum) && manualTimes.length >= maximum) {
+                setError(maximum === 1
+                  ? tr('This medication is set to once daily. Only one scheduled time can be added.', 'Isang beses lang kada araw ang gamot na ito.')
+                  : tr(`This frequency allows ${maximum} scheduled times per day.`, `Hanggang ${maximum} oras lamang kada araw.`));
+                return;
+              }
+              setManualTimes((times) => [...times, '12:00']);
+            }}
             type="button"
           >
             <Plus />
             {tr('Add another time', 'Magdagdag ng oras')}
           </button>
+          {error && <div className="pm-wizard__error" role="alert"><Info />{error}</div>}
           <div className="pm-wizard__edit-actions">
             <button
               className="cancel"
@@ -1470,6 +1529,14 @@ export default function AutomatedAddMedication() {
             tr={tr}
           />
           <button
+            className="pm-wizard__secondary"
+            onClick={askPharmacist}
+            type="button"
+          >
+            <ShieldCheck />
+            {tr('Ask a Pharmacist', 'Magtanong sa Parmasyutiko')}
+          </button>
+          <button
             className="pm-wizard__add-medicine-review"
             onClick={addAnotherMedicine}
             type="button"
@@ -1508,7 +1575,7 @@ export default function AutomatedAddMedication() {
                 type="button"
               >
                 {working ? <LoaderCircle className="spin" /> : <CheckCircle2 />}
-                {tr('Save All Medicines and Schedules', 'I-save ang Lahat ng Gamot at Iskedyul')}
+                {tr('Confirm Schedule', 'Kumpirmahin ang Iskedyul')}
               </button>
             </>
           )}

@@ -111,7 +111,16 @@ export default function OrdersRedesign() {
           ...(response.data.refills || []).map((item) => ({ ...item, fulfillment: 'pickup' })),
         ];
         setServerOrders(
-          combined.sort((a, b) => new Date(b.requested_at) - new Date(a.requested_at))
+          combined.map((order) => ({
+            ...order,
+            type: order.rx_class === 'RX' || order.source === 'RX_VALIDATED' ? 'rx' : 'otc',
+            created_at: order.requested_at,
+            items: [{ name: order.drug || 'Pharmacy order', quantity: 1 }],
+            payment: order.payment_method,
+            contact: 'Saved patient contact',
+            address: order.fulfillment === 'pickup' ? order.branch : 'Saved delivery address',
+            total: null,
+          })).sort((a, b) => new Date(b.requested_at) - new Date(a.requested_at))
         );
       })
       .catch(() => setServerOrders([]));
@@ -122,13 +131,13 @@ export default function OrdersRedesign() {
   );
   const active = useMemo(
     () =>
-      localOrders.filter(
+      [...serverOrders, ...localOrders].filter(
         (order) => statusIndex(order.status) < 3 && order.status !== 'needs_resubmission'
       ),
-    [localOrders]
+    [localOrders, serverOrders]
   );
   const completed = useMemo(
-    () => [...localOrders.filter((order) => statusIndex(order.status) === 3), ...serverOrders],
+    () => [...serverOrders, ...localOrders].filter((order) => statusIndex(order.status) === 3),
     [localOrders, serverOrders]
   );
   function tracker(order) {
@@ -242,7 +251,7 @@ export default function OrdersRedesign() {
                         : 'Doorstep delivery'}
                   </p>
                 </div>
-                <strong>{money(order.total)}</strong>
+                <strong>{order.total == null ? '' : money(order.total)}</strong>
               </button>
               {expanded === order.id && (
                 <div className="pm-order-card-detail">

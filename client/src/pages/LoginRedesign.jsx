@@ -137,6 +137,8 @@ export default function LoginRedesign() {
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [resetComplete, setResetComplete] = useState(false);
   const [resendSeconds, setResendSeconds] = useState(0);
+  const [mfa, setMfa] = useState(null);
+  const [mfaCode, setMfaCode] = useState('');
 
   const passwordScore = useMemo(
     () => PASSWORD_CHECKS.filter((check) => check.test(newPassword)).length,
@@ -215,6 +217,19 @@ export default function LoginRedesign() {
       });
       const data = await response.json().catch(() => ({}));
 
+      if (response.status === 202 && data.code === 'MFA_REQUIRED') {
+        setMfa({ token: data.mfaToken, setup: false });
+        setMessage('Enter the code from your authenticator app to finish signing in.');
+        return;
+      }
+      if (response.status === 428 && data.code === 'MFA_SETUP_REQUIRED') {
+        setMfa({ token: data.setupToken, setup: true, secret: data.secret });
+        setMessage(
+          'Staff accounts require two-factor authentication. Add this key to your authenticator app.'
+        );
+        return;
+      }
+
       if (!response.ok) {
         setCaptcha({ captchaToken: '', captchaAnswer: '' });
         captchaRef.current?.reset();
@@ -258,6 +273,32 @@ export default function LoginRedesign() {
     }
   }
 
+  async function submitMfa(event) {
+    event.preventDefault();
+    clearFeedback();
+    setLoading(true);
+    try {
+      const path = mfa.setup ? '/api/auth/mfa/enroll/verify' : '/api/auth/mfa/verify';
+      const tokenField = mfa.setup ? 'setupToken' : 'mfaToken';
+      const response = await fetch(apiUrl(path), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ [tokenField]: mfa.token, code: mfaCode }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setError(data.error || 'The authenticator code could not be verified.');
+        return;
+      }
+      login(data.user, data.accessToken, data.refreshToken);
+      navigate(homeForRole(data.role || data.user.role), { replace: true });
+    } catch {
+      setError('PharMate cannot reach the server right now. Please check your connection.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
   async function submitLogin(event) {
     event.preventDefault();
     await authenticate(email, password);
@@ -272,9 +313,17 @@ export default function LoginRedesign() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ credential }),
       });
-      const data = await response.json().catch(() => ({}));
+      const contentType = response.headers.get('content-type') || '';
+      const data = contentType.includes('application/json')
+        ? await response.json().catch(() => ({}))
+        : {};
       if (!response.ok) {
-        setError(data.error || 'Google sign-in could not be completed.');
+        setError(
+          data.error ||
+            (response.status >= 500
+              ? 'PharMate cannot reach the authentication server right now. Please try again.'
+              : 'Google sign-in could not be completed.')
+        );
         return;
       }
       login(data.user, data.accessToken, data.refreshToken);
@@ -415,8 +464,39 @@ export default function LoginRedesign() {
               )}
             </div>
 
+            {mfa && (
+              <form className="auth-form auth-mfa" onSubmit={submitMfa}>
+                {mfa.setup && (
+                  <div className="auth-alert cooldown">
+                    <span>
+                      <strong>Authenticator setup key</strong>
+                      <code>{mfa.secret}</code>
+                    </span>
+                  </div>
+                )}
+                <label>
+                  <span>6-digit authenticator code</span>
+                  <input
+                    autoComplete="one-time-code"
+                    inputMode="numeric"
+                    maxLength={6}
+                    onChange={(event) => setMfaCode(event.target.value.replace(/\D/g, ''))}
+                    pattern="[0-9]{6}"
+                    required
+                    value={mfaCode}
+                  />
+                </label>
+                <button className="auth-primary" disabled={loading || mfaCode.length !== 6}>
+                  {mfa.setup ? 'Enable 2FA and sign in' : 'Verify and sign in'}
+                </button>
+                <button className="auth-text-button" onClick={() => setMfa(null)} type="button">
+                  Cancel and return to login
+                </button>
+              </form>
+            )}
+
             <form
-              className={`auth-form${loginLocked ? ' auth-form--locked' : ''}`}
+              className={`auth-form${loginLocked || mfa ? ' auth-form--locked' : ''}`}
               onSubmit={submitLogin}
             >
               <label>
@@ -427,7 +507,7 @@ export default function LoginRedesign() {
                   onChange={(event) => setEmail(event.target.value)}
                   placeholder="Enter your email address"
                   autoComplete="email"
-                  disabled={loginLocked || loading}
+                  disabled={loginLocked || loading || Boolean(mfa)}
                   required
                 />
               </label>
@@ -441,7 +521,7 @@ export default function LoginRedesign() {
                     onChange={(event) => setPassword(event.target.value)}
                     placeholder="Enter your password"
                     autoComplete="current-password"
-                    disabled={loginLocked || loading}
+                    disabled={loginLocked || loading || Boolean(mfa)}
                     required
                   />
                   <button
@@ -486,7 +566,7 @@ export default function LoginRedesign() {
 
               <button
                 className="auth-primary"
-                disabled={loading || loginLocked || !captchaComplete}
+                disabled={loading || loginLocked || Boolean(mfa) || !captchaComplete}
               >
                 {loading ? <span className="auth-spinner" aria-hidden="true" /> : null}
                 {loading ? 'Signing in…' : 'Login'}

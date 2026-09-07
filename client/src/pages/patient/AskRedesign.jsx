@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { api } from '../../api.js';
 import { useLanguage } from '../../context/LanguageContext.jsx';
 
@@ -112,6 +113,8 @@ function ChatIcon({ name }) {
 }
 
 export default function AskRedesign() {
+  const location = useLocation();
+  const navigate = useNavigate();
   const { language } = useLanguage();
   const tr = (english, filipino) => (language === 'fil' ? filipino : english);
   const [branches, setBranches] = useState([]);
@@ -145,6 +148,17 @@ export default function AskRedesign() {
   const poll = useRef(null);
   const threadId = thread?.id;
   const threadStatus = thread?.status;
+  const [scheduleInquiry] = useState(() => {
+    if (location.state?.medicationScheduleInquiry) return location.state.medicationScheduleInquiry;
+    try { return JSON.parse(sessionStorage.getItem('pm_schedule_inquiry_draft') || 'null'); }
+    catch { return null; }
+  });
+
+  useEffect(() => {
+    if (!scheduleInquiry?.question) return;
+    setQuestion(scheduleInquiry.question);
+    setRequestStep(1);
+  }, [scheduleInquiry]);
 
   useEffect(() => {
     api('/api/directory/branches')
@@ -276,7 +290,13 @@ export default function AskRedesign() {
     try {
       const response = await api('/api/patient/inquiries', {
         method: 'POST',
-        body: { subject: question.trim(), branch_id: branchId, pharmacist_id: pharmacist.id },
+        body: {
+          subject: scheduleInquiry?.topic || question.trim(),
+          branch_id: branchId,
+          pharmacist_id: pharmacist.id,
+          medication_id: scheduleInquiry?.medicationId || null,
+          medication_draft_id: scheduleInquiry?.draftKey || null,
+        },
       });
       await api(`/api/patient/inquiries/${response.data.thread_id}/messages`, {
         method: 'POST',
@@ -291,10 +311,11 @@ export default function AskRedesign() {
         pharmacist_name: pharmacist.full_name,
         branch_id: branchId,
         pharmacist_id: pharmacist.id,
-        subject: question.trim(),
+        subject: scheduleInquiry?.topic || question.trim(),
         priority: priorityApplied ? 'high' : 'normal',
       });
       setQuestion('');
+      sessionStorage.removeItem('pm_schedule_inquiry_draft');
       setUsePriority(false);
     } catch (requestError) {
       setError(requestError.message);
@@ -645,6 +666,7 @@ export default function AskRedesign() {
 
           {requestStep === 1 && (
             <section className="pm-ask-card pm-ask-single-step">
+              {scheduleInquiry && <p><strong>{scheduleInquiry.topic}</strong><br />{tr('Your unfinished medication setup is saved. You can return to it at any time.', 'Naka-save ang hindi pa tapos na medication setup.')}</p>}
               <button className="pm-ask-back" onClick={() => setRequestStep(0)} type="button">
                 <ChatIcon name="back" />
                 {tr('Back', 'Bumalik')}
@@ -817,6 +839,11 @@ export default function AskRedesign() {
               >
                 {tr('Send Question', 'Ipadala ang Tanong')}
               </button>
+              {scheduleInquiry && (
+                <button className="pm-ask-secondary" onClick={() => navigate('/patient/medications/add')} type="button">
+                  {tr('Return to Medication Setup', 'Bumalik sa Medication Setup')}
+                </button>
+              )}
               <div className="pm-ask-security">
                 <ChatIcon name="shield" />
                 <span>

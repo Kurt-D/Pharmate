@@ -1,4 +1,6 @@
 import { Check, CircleDollarSign, Clock3, PackageCheck, ReceiptText, Truck } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { api, apiUpload } from '../../api.js';
 
 const STEPS = [
   { id: 'pending', label: 'Order Placed', description: 'The pharmacy received the request.' },
@@ -102,20 +104,105 @@ function OrderCard({ order }) {
   );
 }
 
-export default function CaregiverOrders({ orders }) {
+export default function CaregiverOrders({ orders, patientCode, onPlaced }) {
+  const [catalog, setCatalog] = useState([]);
+  const [branches, setBranches] = useState([]);
+  const [drugId, setDrugId] = useState('');
+  const [branchId, setBranchId] = useState('');
+  const [quantity, setQuantity] = useState(1);
+  const [prescription, setPrescription] = useState(null);
+  const [error, setError] = useState('');
+  const selectedDrug = catalog.find((item) => item.id === drugId);
+  useEffect(() => {
+    Promise.all([api('/api/caregiver/drugs?q=&limit=100'), api('/api/directory/branches')])
+      .then(([drugs, locations]) => {
+        setCatalog(drugs.data.filter((item) => item.availability));
+        setBranches(locations.data);
+      })
+      .catch((requestError) => setError(requestError.message));
+  }, []);
+  async function placeOrder(event) {
+    event.preventDefault();
+    setError('');
+    try {
+      const body = new FormData();
+      body.append('drug_id', drugId);
+      body.append('branch_id', branchId);
+      body.append('quantity', quantity);
+      body.append('fulfillment', 'pickup');
+      body.append('payment_method', 'CASH_ON_PICKUP');
+      if (prescription) body.append('photo', prescription);
+      await apiUpload(`/api/caregiver/patients/${patientCode}/orders`, body);
+      setDrugId('');
+      setPrescription(null);
+      await onPlaced?.();
+    } catch (requestError) {
+      setError(requestError.message);
+    }
+  }
   const active = orders.filter((order) => !['delivered', 'cancelled'].includes(order.status));
   const history = orders.filter((order) => ['delivered', 'cancelled'].includes(order.status));
   return (
     <main className="grid gap-4 px-4 pb-4 pt-5">
       <header className="cg-page-header">
-        <p className="m-0 text-sm font-semibold text-blue-700">View-only tracking</p>
+        <p className="m-0 text-sm font-semibold text-blue-700">Order for linked patient</p>
         <h1 className="mb-0 mt-1 text-2xl font-bold tracking-tight text-slate-900">
           Patient Orders
         </h1>
         <p className="mb-0 mt-1 text-sm font-medium leading-5 text-slate-600">
-          Follow pharmacy preparation and delivery without changing the patient’s order.
+          Place and follow pharmacy orders for the selected linked patient.
         </p>
       </header>
+      {error && (
+        <div
+          className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700"
+          role="alert"
+        >
+          {error}
+        </div>
+      )}
+      <form
+        className="grid gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
+        onSubmit={placeOrder}
+      >
+        <h2 className="m-0 text-lg font-bold text-slate-900">Place an order</h2>
+        <select required value={drugId} onChange={(event) => setDrugId(event.target.value)}>
+          <option value="">Select medicine</option>
+          {catalog.map((drug) => (
+            <option key={drug.id} value={drug.id}>
+              {drug.generic_name} ({drug.rx_class})
+            </option>
+          ))}
+        </select>
+        <input
+          min="1"
+          max="100"
+          required
+          type="number"
+          value={quantity}
+          onChange={(event) => setQuantity(event.target.value)}
+          aria-label="Quantity"
+        />
+        <select required value={branchId} onChange={(event) => setBranchId(event.target.value)}>
+          <option value="">Select pharmacy branch</option>
+          {branches.map((branch) => (
+            <option key={branch.id} value={branch.id}>
+              {branch.name}
+            </option>
+          ))}
+        </select>
+        {selectedDrug?.rx_class === 'RX' && (
+          <input
+            accept="image/jpeg,image/png,image/webp"
+            required
+            type="file"
+            onChange={(event) => setPrescription(event.target.files?.[0] || null)}
+          />
+        )}
+        <button className="rounded-xl bg-blue-600 px-4 py-3 font-bold text-white" type="submit">
+          Place pickup order
+        </button>
+      </form>
       <section className="flex items-start gap-3 rounded-2xl border border-blue-200 bg-blue-50 p-4">
         <Truck className="mt-0.5 h-5 w-5 shrink-0 text-blue-700" />
         <div>

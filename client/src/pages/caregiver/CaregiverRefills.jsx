@@ -18,6 +18,12 @@ const DOSE_STYLES = {
     card: 'border-amber-200 bg-amber-50',
     badge: 'border-amber-200 bg-white text-amber-700',
   },
+  due: {
+    title: 'Due right now',
+    color: 'text-blue-700',
+    card: 'border-blue-200 bg-blue-50',
+    badge: 'border-blue-200 bg-white text-blue-700',
+  },
   overdue: {
     title: 'Missed doses',
     color: 'text-rose-700',
@@ -63,10 +69,10 @@ function DoseSection({ status, doses, onReminder }) {
               <span
                 className={`rounded-full border px-2 py-1 text-[10px] font-bold ${style.badge}`}
               >
-                {status === 'overdue' ? 'Missed' : status === 'taken' ? 'Taken' : 'Upcoming'}
+                {status === 'overdue' ? 'Missed' : status === 'taken' ? 'Taken' : status === 'due' ? 'Due now' : 'Upcoming'}
               </span>
             </div>
-            {status !== 'taken' && (
+            {status === 'due' && (
               <button
                 className="mt-3 flex min-h-[46px] w-full items-center justify-center gap-2 rounded-xl border border-blue-200 bg-white px-3 text-sm font-bold text-blue-700 active:scale-[.99]"
                 onClick={() => onReminder(dose)}
@@ -84,6 +90,7 @@ function DoseSection({ status, doses, onReminder }) {
 }
 
 function DoseCalendar({ timeline, onClose }) {
+  const [selectedDay, setSelectedDay] = useState(() => new Date().getDate());
   const now = new Date();
   const year = now.getFullYear();
   const month = now.getMonth();
@@ -132,27 +139,30 @@ function DoseCalendar({ timeline, onClose }) {
           {Array.from({ length: days }, (_, index) => {
             const day = index + 1;
             const today = day === now.getDate();
+            const dayDoses = timeline.filter((dose) => new Date(dose.scheduledTime).getDate() === day);
             return (
-              <span
-                className={`grid min-h-[42px] place-items-center rounded-full ${today ? 'bg-blue-600 text-white' : 'text-slate-800'}`}
+              <button
+                className={`grid min-h-[42px] place-items-center rounded-full ${selectedDay === day ? 'bg-blue-600 text-white' : today ? 'bg-blue-100 text-blue-800' : 'text-slate-800'}`}
                 key={day}
+                onClick={() => setSelectedDay(day)}
+                type="button"
               >
-                {day}
-              </span>
+                {day}{dayDoses.length ? <small>•</small> : null}
+              </button>
             );
           })}
         </div>
         <div className="mt-5 rounded-xl border border-blue-100 bg-blue-50 p-4">
-          <strong className="text-sm text-slate-900">Today’s doses</strong>
+          <strong className="text-sm text-slate-900">Doses for {now.toLocaleDateString([], { month: 'short' })} {selectedDay}</strong>
           <div className="mt-2 flex flex-wrap gap-2">
             <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-bold text-amber-800">
-              {timeline.filter((dose) => dose.status === 'upcoming').length} Upcoming
+              {timeline.filter((dose) => new Date(dose.scheduledTime).getDate() === selectedDay && dose.status === 'upcoming').length} Upcoming
             </span>
             <span className="rounded-full bg-rose-100 px-2.5 py-1 text-xs font-bold text-rose-800">
-              {timeline.filter((dose) => dose.status === 'overdue').length} Missed
+              {timeline.filter((dose) => new Date(dose.scheduledTime).getDate() === selectedDay && dose.status === 'overdue').length} Missed
             </span>
             <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-800">
-              {timeline.filter((dose) => dose.status === 'taken').length} Taken
+              {timeline.filter((dose) => new Date(dose.scheduledTime).getDate() === selectedDay && dose.status === 'taken').length} Taken
             </span>
           </div>
         </div>
@@ -165,6 +175,7 @@ export default function CaregiverRefills({
   medications,
   previewMode,
   timeline = [],
+  doseHistory = [],
   canManageMedications = false,
   onSearchDrugs,
   onAddMedicine,
@@ -308,6 +319,31 @@ export default function CaregiverRefills({
           Preview stock information is shown while live balance data is unavailable.
         </div>
       )}
+      <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <h2 className="m-0 text-lg font-bold text-slate-900">Patient medications</h2>
+            <p className="mb-0 mt-1 text-sm font-medium text-slate-600">
+              Shared directly from the patient’s active medication records.
+            </p>
+          </div>
+          <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-bold text-blue-700">
+            {medications.length}
+          </span>
+        </div>
+        <div className="mt-3 grid gap-2">
+          {medications.length ? medications.map((item) => (
+            <article className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3" key={item.id}>
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-blue-100 text-blue-700"><Pill className="h-5 w-5" /></span>
+              <div className="min-w-0">
+                <strong className="block truncate text-sm text-slate-900">{item.drug_name_raw}</strong>
+                <small className="mt-1 block text-xs font-medium text-slate-600">{item.dosage_instruction || 'Follow the saved instructions'}</small>
+                <span className="mt-1 block text-xs font-semibold text-slate-500">{item.frequency || item.schedule_type || 'Saved schedule'} · {item.schedule_status}</span>
+              </div>
+            </article>
+          )) : <p className="m-0 text-sm font-medium text-slate-600">No active medication records.</p>}
+        </div>
+      </section>
       <section className="rounded-2xl border border-blue-200 bg-blue-50 p-4">
         <div className="flex items-center justify-between gap-3">
           <div>
@@ -318,7 +354,7 @@ export default function CaregiverRefills({
               Today’s medicine schedule
             </h2>
             <p className="mb-0 mt-1 text-sm font-medium text-slate-600">
-              Send the patient a reminder when a dose is due or missed.
+              Upcoming doses are view only. Send a reminder only while a dose is due.
             </p>
           </div>
           <button
@@ -339,6 +375,11 @@ export default function CaregiverRefills({
           View Calendar
         </button>
       </section>
+      <DoseSection
+        status="due"
+        doses={timeline.filter((dose) => dose.status === 'due')}
+        onReminder={onSendReminder}
+      />
       <DoseSection
         status="upcoming"
         doses={timeline.filter((dose) => dose.status === 'upcoming')}
@@ -448,7 +489,7 @@ export default function CaregiverRefills({
         )}
       </section>
       */}
-      {calendarOpen && <DoseCalendar timeline={timeline} onClose={() => setCalendarOpen(false)} />}
+      {calendarOpen && <DoseCalendar timeline={doseHistory} onClose={() => setCalendarOpen(false)} />}
       {/* The medicine editor belonged to the removed Active medicines section.
       {editing && (
         <div

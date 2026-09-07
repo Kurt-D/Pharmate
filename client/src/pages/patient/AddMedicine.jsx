@@ -959,7 +959,11 @@ export function LegacyAddMedicine() {
 
 export default function AddMedicine() {
   const [searchParams] = useSearchParams();
-  return searchParams.get('edit') ? <LegacyAddMedicine /> : <AutomatedAddMedication />;
+  return searchParams.get('edit') || searchParams.get('name') ? (
+    <LegacyAddMedicine />
+  ) : (
+    <AutomatedAddMedication />
+  );
 }
 
 function ScheduleSavedModal({ saved, onDone, onView, tr }) {

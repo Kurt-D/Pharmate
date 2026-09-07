@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Eye, EyeOff } from 'lucide-react';
 import { GoogleLogin } from '@react-oauth/google';
@@ -6,6 +6,7 @@ import pharmateLogo from '../assets/pharmate-logo.png';
 import CaptchaChallenge from '../components/CaptchaChallenge.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import { apiUrl } from '../config.js';
+import { homeForRole } from '../config/roleRoutes.js';
 import '../styles/auth.css';
 
 const GOOGLE_CLIENT_ID = (import.meta.env.VITE_GOOGLE_CLIENT_ID || '').trim();
@@ -50,13 +51,22 @@ export default function SignupRedesign() {
   const navigate = useNavigate();
   const { login } = useAuth();
   const captchaRef = useRef(null);
-  const [form, setForm] = useState({ name: '', email: '', password: '', confirm: '' });
+  const [form, setForm] = useState({
+    name: '',
+    email: '',
+    password: '',
+    confirm: '',
+    role: 'patient',
+  });
   const [agreed, setAgreed] = useState(false);
   const [captcha, setCaptcha] = useState({ captchaToken: '', captchaAnswer: '' });
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [verificationEmail, setVerificationEmail] = useState('');
+  const [verificationCode, setVerificationCode] = useState('');
+  const [resendSeconds, setResendSeconds] = useState(0);
   const set = (key, value) => setForm((current) => ({ ...current, [key]: value }));
   const passwordChecks = useMemo(
     () => PASSWORD_CHECKS.map((check) => ({ ...check, met: check.test(form.password) })),
@@ -64,9 +74,18 @@ export default function SignupRedesign() {
   );
   const captchaComplete = Boolean(captcha.captchaToken || captcha.captchaAnswer);
 
+  useEffect(() => {
+    if (resendSeconds <= 0) return undefined;
+    const timer = window.setInterval(
+      () => setResendSeconds((current) => Math.max(0, current - 1)),
+      1000
+    );
+    return () => window.clearInterval(timer);
+  }, [resendSeconds]);
+
   function finishAuthentication(data) {
     login(data.user, data.accessToken, data.refreshToken);
-    navigate('/patient/today', { replace: true });
+    navigate(homeForRole(data.role || data.user.role), { replace: true });
   }
 
   async function submit(event) {
@@ -89,18 +108,28 @@ export default function SignupRedesign() {
           password: form.password,
           confirmPassword: form.confirm,
           ...captcha,
-          role: 'patient',
+          role: form.role,
           full_name: form.name.trim(),
         }),
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
+        if (data.verificationRequired) {
+          setVerificationEmail(data.email || form.email.trim());
+          setError(data.message || 'Request another verification code to continue.');
+          return;
+        }
         setError(data.error || 'Could not create your account.');
         setCaptcha({ captchaToken: '', captchaAnswer: '' });
         captchaRef.current?.reset();
         return;
       }
-      finishAuthentication(data);
+      if (data.verificationRequired) {
+        setVerificationEmail(data.email || form.email.trim());
+        setResendSeconds(60);
+      } else {
+        finishAuthentication(data);
+      }
     } catch {
       setError('Cannot reach the server. Please try again.');
       setCaptcha({ captchaToken: '', captchaAnswer: '' });
@@ -108,6 +137,95 @@ export default function SignupRedesign() {
     } finally {
       setLoading(false);
     }
+  }
+
+  async function verifyEmail(event) {
+    event.preventDefault();
+    setLoading(true);
+    setError('');
+    try {
+      const response = await fetch(apiUrl('/api/auth/verify-email'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: verificationEmail, otp: verificationCode }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) return setError(data.message || data.error || 'Invalid verification code.');
+      finishAuthentication(data);
+    } catch {
+      setError('Cannot reach the server. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function resendVerification() {
+    setLoading(true);
+    setError('');
+    try {
+      const response = await fetch(apiUrl('/api/auth/resend-verification-otp'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: verificationEmail }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setResendSeconds(Number(data.retryAfter) || 60);
+        return setError(data.error || 'Please wait before requesting another code.');
+      }
+      setResendSeconds(60);
+    } catch {
+      setError('Cannot reach the server. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  if (verificationEmail) {
+    return (
+      <main className="auth-page">
+        <section className="auth-shell signup" aria-labelledby="verify-email-title">
+          <div className="auth-logo">
+            <img src={pharmateLogo} alt="PharMate" />
+          </div>
+          <header className="auth-heading">
+            <span className="auth-kicker">Email verification</span>
+            <h1 id="verify-email-title">Check your email</h1>
+            <p>Enter the six-digit code sent to {verificationEmail}.</p>
+          </header>
+          {error && (
+            <div className="auth-alert error" role="alert">
+              {error}
+            </div>
+          )}
+          <form className="auth-form" onSubmit={verifyEmail}>
+            <label>
+              <span>Verification code</span>
+              <input
+                autoComplete="one-time-code"
+                inputMode="numeric"
+                maxLength={6}
+                onChange={(event) => setVerificationCode(event.target.value.replace(/\D/g, ''))}
+                pattern="[0-9]{6}"
+                required
+                value={verificationCode}
+              />
+            </label>
+            <button className="auth-primary" disabled={loading || verificationCode.length !== 6}>
+              {loading ? 'Verifying…' : 'Verify Email'}
+            </button>
+            <button
+              className="auth-text-button"
+              disabled={loading || resendSeconds > 0}
+              onClick={resendVerification}
+              type="button"
+            >
+              {resendSeconds > 0 ? `Resend available in ${resendSeconds}s` : 'Resend code'}
+            </button>
+          </form>
+        </section>
+      </main>
+    );
   }
 
   async function submitGoogle(credential) {
@@ -121,11 +239,19 @@ export default function SignupRedesign() {
       const response = await fetch(apiUrl('/api/auth/google'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ credential }),
+        body: JSON.stringify({ credential, role: form.role }),
       });
-      const data = await response.json().catch(() => ({}));
+      const contentType = response.headers.get('content-type') || '';
+      const data = contentType.includes('application/json')
+        ? await response.json().catch(() => ({}))
+        : {};
       if (!response.ok) {
-        setError(data.error || 'Google sign-up could not be completed.');
+        setError(
+          data.error ||
+            (response.status >= 500
+              ? 'PharMate cannot reach the authentication server right now. Please try again.'
+              : 'Google sign-up could not be completed.')
+        );
         return;
       }
       finishAuthentication(data);
@@ -143,9 +269,9 @@ export default function SignupRedesign() {
           <img src={pharmateLogo} alt="PharMate" />
         </div>
         <header className="auth-heading">
-          <span className="auth-kicker">Patient registration</span>
+          <span className="auth-kicker">Patient or caregiver registration</span>
           <h1 id="signup-title">Create your account</h1>
-          <p>Set up your secure PharMate patient profile.</p>
+          <p>Set up your secure PharMate account.</p>
         </header>
         {error && (
           <div className="auth-alert error" role="alert">
@@ -153,6 +279,27 @@ export default function SignupRedesign() {
           </div>
         )}
         <form className="auth-form" onSubmit={submit}>
+          <fieldset className="auth-role-choice">
+            <legend>Account type</legend>
+            <label>
+              <input
+                checked={form.role === 'patient'}
+                name="role"
+                onChange={() => set('role', 'patient')}
+                type="radio"
+              />
+              <span>Patient</span>
+            </label>
+            <label>
+              <input
+                checked={form.role === 'caregiver'}
+                name="role"
+                onChange={() => set('role', 'caregiver')}
+                type="radio"
+              />
+              <span>Caregiver</span>
+            </label>
+          </fieldset>
           <label>
             <span>Full name</span>
             <input

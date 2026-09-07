@@ -10555,6 +10555,65 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   border: 2px solid #66bd5f;
   color: #1b6f31;
 }
+.pm-shop-mode-tabs.pm-shop-mode-switcher {
+  background: #fff;
+  border: 1px solid #cddcf0;
+  border-radius: 0.9rem;
+  display: block;
+  padding: 0.55rem;
+}
+.pm-shop-mode-tabs .pm-shop-mode-current {
+  align-items: center;
+  background: #edf4ff;
+  border: 1px solid #8bb5f4;
+  border-radius: 0.7rem;
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  min-width: 0;
+  width: 100%;
+  padding: 0.7rem 0.85rem;
+  text-align: left;
+}
+.pm-shop-mode-copy {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.pm-shop-mode-copy small {
+  color: #64748b;
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+.pm-shop-mode-copy strong {
+  color: #1558c9;
+  font-size: 0.92rem;
+  margin-top: 0.1rem;
+}
+.pm-shop-mode-copy > span {
+  color: #52647d;
+  font-size: 0.68rem;
+  margin-top: 0.12rem;
+}
+.pm-shop-mode-arrow {
+  align-items: center;
+  background: #1769f5;
+  border-radius: 50%;
+  color: #fff;
+  display: flex;
+  flex: 0 0 36px;
+  font-size: 1.65rem;
+  height: 36px;
+  justify-content: center;
+  line-height: 1;
+  margin-left: 0.75rem;
+}
+.pm-shop-mode-current:hover .pm-shop-mode-arrow,
+.pm-shop-mode-current:focus-visible .pm-shop-mode-arrow {
+  background: #0f56ce;
+  box-shadow: 0 0 0 4px #bcd5ff;
+}
 .pm-rx-shop {
   display: grid;
   gap: 1rem;

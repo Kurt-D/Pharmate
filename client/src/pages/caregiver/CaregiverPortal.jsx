@@ -28,20 +28,18 @@ function pageFromPath(pathname) {
 }
 
 function statusForDose(dose) {
-  if (['taken', 'taken_late'].includes(dose.status))
+  const status = String(dose.status || '').toUpperCase();
+  if (['TAKEN', 'TAKEN_LATE'].includes(status))
     return {
       status: 'taken',
       statusText: dose.logged_at
         ? `Taken at ${new Date(dose.logged_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`
         : 'Taken',
     };
-  const scheduled = new Date(dose.scheduled_time);
+  if (status === 'MISSED') return { status: 'overdue', statusText: 'Missed' };
+  if (status === 'DUE') return { status: 'due', statusText: 'Due right now' };
+  const scheduled = new Date(dose.scheduled_at || dose.scheduled_time);
   const difference = scheduled.getTime() - Date.now();
-  if (difference < 0)
-    return {
-      status: 'overdue',
-      statusText: `Overdue by ${Math.max(1, Math.round(Math.abs(difference) / 60000))}m`,
-    };
   return {
     status: 'upcoming',
     statusText:
@@ -60,7 +58,7 @@ function periodFor(date) {
 function normalizeTimeline(doses) {
   return (Array.isArray(doses) ? doses : [])
     .map((dose) => {
-      const scheduled = new Date(dose.scheduled_time);
+      const scheduled = new Date(dose.scheduled_at || dose.scheduled_time);
       return {
         id: dose.schedule_id || dose.id,
         medicine: dose.drug_name || dose.drug_name_raw || 'Medicine',
@@ -95,6 +93,7 @@ export default function CaregiverPortal() {
   const [selectedCode, setSelectedCode] = useState('');
   const [medications, setMedications] = useState([]);
   const [timeline, setTimeline] = useState([]);
+  const [doseHistory, setDoseHistory] = useState([]);
   const [orders, setOrders] = useState([]);
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -144,15 +143,26 @@ export default function CaregiverPortal() {
     if (!code) {
       setMedications([]);
       setTimeline([]);
+      setDoseHistory([]);
       setOrders([]);
       setPreviewMode(false);
       return;
     }
-    const [medicationResult, orderResult, timelineResult] = await Promise.allSettled([
-      api(`/api/caregiver/patients/${code}/medications`),
-      api(`/api/caregiver/patients/${code}/orders`),
-      api(`/api/caregiver/patients/${code}/today`),
-    ]);
+    const monthStart = new Date();
+    monthStart.setDate(1);
+    const monthEnd = new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 0);
+    const dateKey = (value) =>
+      new Date(value.getTime() - value.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+    const [medicationResult, orderResult, timelineResult, historyResult] = await Promise.allSettled(
+      [
+        api(`/api/caregiver/patients/${code}/medications`),
+        api(`/api/caregiver/patients/${code}/orders`),
+        api(`/api/caregiver/patients/${code}/today`),
+        api(
+          `/api/caregiver/patients/${code}/doses/history?startDate=${dateKey(monthStart)}&endDate=${dateKey(monthEnd)}`
+        ),
+      ]
+    );
     const medicines = medicationResult.status === 'fulfilled' ? medicationResult.value.data : [];
     const orderPayload =
       orderResult.status === 'fulfilled' ? orderResult.value.data : { refills: [], deliveries: [] };
@@ -166,6 +176,9 @@ export default function CaregiverPortal() {
       ].sort((a, b) => new Date(b.requested_at) - new Date(a.requested_at))
     );
     setTimeline(liveTimeline);
+    setDoseHistory(
+      historyResult.status === 'fulfilled' ? normalizeTimeline(historyResult.value.data) : []
+    );
     setPreviewMode(false);
   }, []);
 
@@ -204,7 +217,10 @@ export default function CaregiverPortal() {
 
   useEffect(() => {
     if (!selectedCode || previewMode) return;
-    scheduleCaregiverDoseAlerts(timeline, selectedPatient?.displayLabel || 'Linked patient');
+    scheduleCaregiverDoseAlerts(
+      timeline.filter((dose) => dose.status === 'due'),
+      selectedPatient?.displayLabel || 'Linked patient'
+    );
   }, [previewMode, selectedCode, selectedPatient?.displayLabel, timeline]);
 
   async function connectPatient({ code, relationship }) {
@@ -217,7 +233,7 @@ export default function CaregiverPortal() {
   async function sendVoiceAlert({ message, medicine }) {
     const response = await api(`/api/caregiver/patients/${selectedCode}/notify`, {
       method: 'POST',
-      body: { drug_name: medicine || 'scheduled medicine', voice_message: message },
+      body: { dose_id: voiceDose?.id, voice_message: message },
     });
     if (!response.data.notified) throw new Error('The patient has reminders turned off.');
     const event = {
@@ -360,6 +376,7 @@ export default function CaregiverPortal() {
                   onSelectPatient={setSelectedCode}
                   onAddPatient={() => setLinkOpen(true)}
                   timeline={timeline}
+                  doseHistory={doseHistory}
                   previewMode={previewMode}
                   patientLabel={selectedPatient?.displayLabel}
                   notificationCount={
@@ -368,7 +385,11 @@ export default function CaregiverPortal() {
                   onOpenNotifications={readCaregiverNotifications}
                   realtimeStatus={realtimeStatus}
                   onVoiceReminder={(dose) =>
-                    setVoiceDose(dose || timeline.find((item) => item.status !== 'taken') || null)
+                    setVoiceDose(
+                      dose?.status === 'due'
+                        ? dose
+                        : timeline.find((item) => item.status === 'due') || null
+                    )
                   }
                   onSnooze={snoozeAlert}
                   snoozedUntil={snoozedUntil}
@@ -398,7 +419,13 @@ export default function CaregiverPortal() {
                   onAddPatient={() => setLinkOpen(true)}
                 />
               )}
-              {activePage === 'orders' && <CaregiverOrders orders={orders} />}
+              {activePage === 'orders' && (
+                <CaregiverOrders
+                  orders={orders}
+                  patientCode={selectedCode}
+                  onPlaced={() => loadPatient(selectedCode)}
+                />
+              )}
               {activePage === 'profile' && (
                 <CaregiverSettings
                   profile={profile}

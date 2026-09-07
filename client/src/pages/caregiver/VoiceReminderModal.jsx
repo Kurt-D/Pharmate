@@ -11,7 +11,7 @@ function reminderPresets(patientLabel, medicine) {
     {
       id: 'medicine',
       icon: Pill,
-      message: `${patient}, oras na po para inumin ang inyong ${drug} pagkatapos kumain.`,
+      message: `${patient}, due na po ang inyong ${drug}. Pakisunod ang naka-save na tagubilin sa inyong schedule.`,
     },
     {
       id: 'maintenance',

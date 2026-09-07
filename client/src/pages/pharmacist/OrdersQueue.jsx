@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { api } from '../../api.js';
+import { api, apiBlobUrl } from '../../api.js';
 
 // Refill & delivery queue (Tier 2b). Patients shown by patient_code only; the
 // pharmacist advances status. Request + status tracking only — no payments.
@@ -16,6 +16,7 @@ export default function OrdersQueue() {
   const [reason, setReason] = useState('');
   const [adjusted, setAdjusted] = useState({});
   const [error, setError] = useState('');
+  const [orderPrescriptionUrl, setOrderPrescriptionUrl] = useState('');
 
   const loadRx = useCallback(() => {
     try {
@@ -120,6 +121,17 @@ export default function OrdersQueue() {
     }
   }
 
+  async function openOrderPrescription(kind, id) {
+    try {
+      if (orderPrescriptionUrl) URL.revokeObjectURL(orderPrescriptionUrl);
+      setOrderPrescriptionUrl(
+        await apiBlobUrl(`/api/pharmacist/orders/${kind}/${id}/prescription`)
+      );
+    } catch (requestError) {
+      setError(requestError.message);
+    }
+  }
+
   function table(kind, list) {
     return (
       <div className="pw-card p-3 mb-3">
@@ -133,6 +145,7 @@ export default function OrdersQueue() {
                 <tr>
                   <th>Patient</th>
                   <th>Medicine</th>
+                  <th>Qty / Prescription</th>
                   <th>Requested</th>
                   <th className="text-end">Status</th>
                 </tr>
@@ -144,6 +157,18 @@ export default function OrdersQueue() {
                       <span className="pw-code">{o.patient_code}</span>
                     </td>
                     <td>{o.drug}</td>
+                    <td>
+                      {o.quantity || 1}
+                      {o.prescription_id && (
+                        <button
+                          className="btn btn-link btn-sm"
+                          onClick={() => openOrderPrescription(kind, o.id)}
+                          type="button"
+                        >
+                          View Rx
+                        </button>
+                      )}
+                    </td>
                     <td className="small text-muted">
                       {new Date(o.requested_at).toLocaleString()}
                     </td>
@@ -178,6 +203,27 @@ export default function OrdersQueue() {
         Prescription orders cannot enter packing until a pharmacist verifies and signs them.
       </p>
       {error && <div className="alert alert-warning py-2">{error}</div>}
+      {orderPrescriptionUrl && (
+        <div className="pm-confirm-backdrop" role="presentation">
+          <div className="pm-confirm-dialog" role="dialog" aria-modal="true">
+            <h3>Order Prescription</h3>
+            <img
+              alt="Patient-submitted prescription"
+              src={orderPrescriptionUrl}
+              style={{ maxWidth: '100%' }}
+            />
+            <button
+              onClick={() => {
+                URL.revokeObjectURL(orderPrescriptionUrl);
+                setOrderPrescriptionUrl('');
+              }}
+              type="button"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
       <section className="pm-rx-verification-workspace">
         <header>
           <div>
