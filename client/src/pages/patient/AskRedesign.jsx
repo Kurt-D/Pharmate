@@ -158,8 +158,11 @@ export default function AskRedesign() {
   const threadStatus = thread?.status;
   const [scheduleInquiry] = useState(() => {
     if (location.state?.medicationScheduleInquiry) return location.state.medicationScheduleInquiry;
-    try { return JSON.parse(sessionStorage.getItem('pm_schedule_inquiry_draft') || 'null'); }
-    catch { return null; }
+    try {
+      return JSON.parse(sessionStorage.getItem('pm_schedule_inquiry_draft') || 'null');
+    } catch {
+      return null;
+    }
   });
 
   useEffect(() => {
@@ -693,7 +696,16 @@ export default function AskRedesign() {
 
           {requestStep === 1 && (
             <section className="pm-ask-card pm-ask-single-step">
-              {scheduleInquiry && <p><strong>{scheduleInquiry.topic}</strong><br />{tr('Your unfinished medication setup is saved. You can return to it at any time.', 'Naka-save ang hindi pa tapos na medication setup.')}</p>}
+              {scheduleInquiry && (
+                <p>
+                  <strong>{scheduleInquiry.topic}</strong>
+                  <br />
+                  {tr(
+                    'Your unfinished medication setup is saved. You can return to it at any time.',
+                    'Naka-save ang hindi pa tapos na medication setup.'
+                  )}
+                </p>
+              )}
               <button className="pm-ask-back" onClick={() => setRequestStep(0)} type="button">
                 <ChatIcon name="back" />
                 {tr('Back', 'Bumalik')}
@@ -867,7 +879,11 @@ export default function AskRedesign() {
                 {tr('Send Question', 'Ipadala ang Tanong')}
               </button>
               {scheduleInquiry && (
-                <button className="pm-ask-secondary" onClick={() => navigate('/patient/medications/add')} type="button">
+                <button
+                  className="pm-ask-secondary"
+                  onClick={() => navigate('/patient/medications/add')}
+                  type="button"
+                >
                   {tr('Return to Medication Setup', 'Bumalik sa Medication Setup')}
                 </button>
               )}

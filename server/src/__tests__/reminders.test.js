@@ -38,7 +38,9 @@ beforeAll(async () => {
     .post('/api/patient/medications')
     .set({ Authorization: `Bearer ${patientToken}` })
     .send({ drug_name: 'paracetamol', frequency: 'TID', source: 'OTC_SELF', is_prn: false });
-  await pool.execute("UPDATE medications SET schedule_status='APPROVED' WHERE id=?", [medication.body.id]);
+  await pool.execute("UPDATE medications SET schedule_status='APPROVED' WHERE id=?", [
+    medication.body.id,
+  ]);
   await pool.execute(
     `INSERT INTO medication_schedules
        (id,medication_id,patient_id,scheduled_time,generated_reason,is_confirmed,schedule_version,status)
@@ -118,10 +120,22 @@ describe('Reminder dispatch', () => {
     // Immediate scans do not duplicate the reminder.
     const after = await dueReminders(now);
     expect(after.some((d) => d.schedule_id === doseId)).toBe(false);
-    expect((await dueReminders(new Date(now.getTime() + 4 * 60000))).some((d) => d.schedule_id === doseId)).toBe(false);
-    expect((await dueReminders(new Date(now.getTime() + 5 * 60000))).some((d) => d.schedule_id === doseId)).toBe(true);
+    expect(
+      (await dueReminders(new Date(now.getTime() + 4 * 60000))).some(
+        (d) => d.schedule_id === doseId
+      )
+    ).toBe(false);
+    expect(
+      (await dueReminders(new Date(now.getTime() + 5 * 60000))).some(
+        (d) => d.schedule_id === doseId
+      )
+    ).toBe(true);
     await pool.execute("UPDATE medication_schedules SET status='taken' WHERE id=?", [doseId]);
-    expect((await dueReminders(new Date(now.getTime() + 10 * 60000))).some((d) => d.schedule_id === doseId)).toBe(false);
+    expect(
+      (await dueReminders(new Date(now.getTime() + 10 * 60000))).some(
+        (d) => d.schedule_id === doseId
+      )
+    ).toBe(false);
   });
 
   test('a PRN slot is never reminded (no fixed time)', async () => {

@@ -27,8 +27,8 @@ async function addDoses(ownerId, doses, medicineName = 'Dashboard Medicine') {
   const medicationId = uuidv4();
   await pool.execute(
     `INSERT INTO medications
-       (id, patient_id, drug_name_raw, source, dosage_instruction, status)
-     VALUES (?, ?, ?, 'OTC_SELF', 'Take one tablet', 'active')`,
+       (id, patient_id, drug_name_raw, source, dosage_instruction, schedule_status, status)
+     VALUES (?, ?, ?, 'OTC_SELF', 'Take one tablet', 'APPROVED', 'active')`,
     [medicationId, ownerId, medicineName]
   );
   for (const dose of doses) {
@@ -92,21 +92,24 @@ describe('GET /api/patient/dashboard access and empty state', () => {
 describe('dashboard calculations and dose ordering', () => {
   beforeAll(async () => {
     const now = Date.now();
+    const manilaNow = new Date(now + 8 * 60 * 60 * 1000);
+    const nextManilaMidnight =
+      Date.UTC(manilaNow.getUTCFullYear(), manilaNow.getUTCMonth(), manilaNow.getUTCDate() + 1) -
+      8 * 60 * 60 * 1000;
+    const remaining = nextManilaMidnight - now;
+    const future = [0.2, 0.4, 0.6, 0.8].map((part) => new Date(now + remaining * part));
     await addDoses(patientId, [
       { time: new Date(now - 3 * 60 * 60 * 1000), status: 'missed' },
       { time: new Date(now - 2 * 60 * 60 * 1000), status: 'taken' },
       { time: new Date(now - 1 * 60 * 60 * 1000), status: 'taken_late' },
-      { time: new Date(now + 4 * 60 * 60 * 1000), status: 'scheduled' },
-      { time: new Date(now + 1 * 60 * 60 * 1000), status: 'scheduled' },
-      { time: new Date(now + 3 * 60 * 60 * 1000), status: 'scheduled' },
-      { time: new Date(now + 2 * 60 * 60 * 1000), status: 'scheduled' },
+      ...future.map((time) => ({ time, status: 'scheduled' })),
     ]);
   });
 
   test('future doses are excluded from adherence; statuses are counted separately', async () => {
     const { body } = await request(app).get('/api/patient/dashboard').set(auth());
     expect(body.seven_days.eligible_doses).toBe(3);
-    expect(body.seven_days).toMatchObject({ taken: 1, taken_late: 1, missed: 1 });
+    expect(body.seven_days).toMatchObject({ taken: 2, taken_late: 0, missed: 1 });
     expect(body.seven_days.adherence_percentage).toBeCloseTo(66.666666, 4);
     expect(body.current_dose_streak).toBe(2);
   });
@@ -117,7 +120,7 @@ describe('dashboard calculations and dose ordering', () => {
     expect(body.next_dose).toMatchObject({
       medicine_name: 'Dashboard Medicine',
       dosage_instruction: 'Take one tablet',
-      status: 'scheduled',
+      status: 'UPCOMING',
     });
     expect(body.next_dose.scheduled_time).toBe(body.upcoming_doses[0].scheduled_time);
     expect(new Date(body.upcoming_doses[0].scheduled_time).getTime()).toBeLessThan(
@@ -179,8 +182,8 @@ describe('pure Manila window boundaries', () => {
     );
     expect(dashboard.today).toMatchObject({
       eligible_doses: 3,
-      taken: 1,
-      taken_late: 1,
+      taken: 2,
+      taken_late: 0,
       missed: 1,
     });
     expect(dashboard.today.adherence_percentage).toBeCloseTo(66.666666, 4);

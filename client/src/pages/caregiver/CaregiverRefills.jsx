@@ -69,7 +69,13 @@ function DoseSection({ status, doses, onReminder }) {
               <span
                 className={`rounded-full border px-2 py-1 text-[10px] font-bold ${style.badge}`}
               >
-                {status === 'overdue' ? 'Missed' : status === 'taken' ? 'Taken' : status === 'due' ? 'Due now' : 'Upcoming'}
+                {status === 'overdue'
+                  ? 'Missed'
+                  : status === 'taken'
+                    ? 'Taken'
+                    : status === 'due'
+                      ? 'Due now'
+                      : 'Upcoming'}
               </span>
             </div>
             {status === 'due' && (
@@ -139,7 +145,9 @@ function DoseCalendar({ timeline, onClose }) {
           {Array.from({ length: days }, (_, index) => {
             const day = index + 1;
             const today = day === now.getDate();
-            const dayDoses = timeline.filter((dose) => new Date(dose.scheduledTime).getDate() === day);
+            const dayDoses = timeline.filter(
+              (dose) => new Date(dose.scheduledTime).getDate() === day
+            );
             return (
               <button
                 className={`grid min-h-[42px] place-items-center rounded-full ${selectedDay === day ? 'bg-blue-600 text-white' : today ? 'bg-blue-100 text-blue-800' : 'text-slate-800'}`}
@@ -147,22 +155,46 @@ function DoseCalendar({ timeline, onClose }) {
                 onClick={() => setSelectedDay(day)}
                 type="button"
               >
-                {day}{dayDoses.length ? <small>•</small> : null}
+                {day}
+                {dayDoses.length ? <small>•</small> : null}
               </button>
             );
           })}
         </div>
         <div className="mt-5 rounded-xl border border-blue-100 bg-blue-50 p-4">
-          <strong className="text-sm text-slate-900">Doses for {now.toLocaleDateString([], { month: 'short' })} {selectedDay}</strong>
+          <strong className="text-sm text-slate-900">
+            Doses for {now.toLocaleDateString([], { month: 'short' })} {selectedDay}
+          </strong>
           <div className="mt-2 flex flex-wrap gap-2">
             <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-bold text-amber-800">
-              {timeline.filter((dose) => new Date(dose.scheduledTime).getDate() === selectedDay && dose.status === 'upcoming').length} Upcoming
+              {
+                timeline.filter(
+                  (dose) =>
+                    new Date(dose.scheduledTime).getDate() === selectedDay &&
+                    dose.status === 'upcoming'
+                ).length
+              }{' '}
+              Upcoming
             </span>
             <span className="rounded-full bg-rose-100 px-2.5 py-1 text-xs font-bold text-rose-800">
-              {timeline.filter((dose) => new Date(dose.scheduledTime).getDate() === selectedDay && dose.status === 'overdue').length} Missed
+              {
+                timeline.filter(
+                  (dose) =>
+                    new Date(dose.scheduledTime).getDate() === selectedDay &&
+                    dose.status === 'overdue'
+                ).length
+              }{' '}
+              Missed
             </span>
             <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-800">
-              {timeline.filter((dose) => new Date(dose.scheduledTime).getDate() === selectedDay && dose.status === 'taken').length} Taken
+              {
+                timeline.filter(
+                  (dose) =>
+                    new Date(dose.scheduledTime).getDate() === selectedDay &&
+                    dose.status === 'taken'
+                ).length
+              }{' '}
+              Taken
             </span>
           </div>
         </div>
@@ -332,16 +364,32 @@ export default function CaregiverRefills({
           </span>
         </div>
         <div className="mt-3 grid gap-2">
-          {medications.length ? medications.map((item) => (
-            <article className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3" key={item.id}>
-              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-blue-100 text-blue-700"><Pill className="h-5 w-5" /></span>
-              <div className="min-w-0">
-                <strong className="block truncate text-sm text-slate-900">{item.drug_name_raw}</strong>
-                <small className="mt-1 block text-xs font-medium text-slate-600">{item.dosage_instruction || 'Follow the saved instructions'}</small>
-                <span className="mt-1 block text-xs font-semibold text-slate-500">{item.frequency || item.schedule_type || 'Saved schedule'} · {item.schedule_status}</span>
-              </div>
-            </article>
-          )) : <p className="m-0 text-sm font-medium text-slate-600">No active medication records.</p>}
+          {medications.length ? (
+            medications.map((item) => (
+              <article
+                className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3"
+                key={item.id}
+              >
+                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-blue-100 text-blue-700">
+                  <Pill className="h-5 w-5" />
+                </span>
+                <div className="min-w-0">
+                  <strong className="block truncate text-sm text-slate-900">
+                    {item.drug_name_raw}
+                  </strong>
+                  <small className="mt-1 block text-xs font-medium text-slate-600">
+                    {item.dosage_instruction || 'Follow the saved instructions'}
+                  </small>
+                  <span className="mt-1 block text-xs font-semibold text-slate-500">
+                    {item.frequency || item.schedule_type || 'Saved schedule'} ·{' '}
+                    {item.schedule_status}
+                  </span>
+                </div>
+              </article>
+            ))
+          ) : (
+            <p className="m-0 text-sm font-medium text-slate-600">No active medication records.</p>
+          )}
         </div>
       </section>
       <section className="rounded-2xl border border-blue-200 bg-blue-50 p-4">
@@ -489,7 +537,9 @@ export default function CaregiverRefills({
         )}
       </section>
       */}
-      {calendarOpen && <DoseCalendar timeline={doseHistory} onClose={() => setCalendarOpen(false)} />}
+      {calendarOpen && (
+        <DoseCalendar timeline={doseHistory} onClose={() => setCalendarOpen(false)} />
+      )}
       {/* The medicine editor belonged to the removed Active medicines section.
       {editing && (
         <div

@@ -20,7 +20,14 @@ describe('structured medication schedule rules', () => {
     ['THREE_TIMES_DAILY', ['06:00', '12:00', '18:00', '22:00'], null],
     ['EVERY_N_HOURS', ['00:00', '06:00', '12:00', '18:00', '21:00'], 6],
   ])('rejects contradictory %s schedules', (frequencyType, scheduleTimes, intervalHours) => {
-    expect(validateMedicationSchedule({ frequencyType, scheduleTimes, intervalHours, startDate: '2026-09-07' })).toMatchObject({
+    expect(
+      validateMedicationSchedule({
+        frequencyType,
+        scheduleTimes,
+        intervalHours,
+        startDate: '2026-09-07',
+      })
+    ).toMatchObject({
       valid: false,
       code: 'FREQUENCY_TIME_COUNT_MISMATCH',
     });

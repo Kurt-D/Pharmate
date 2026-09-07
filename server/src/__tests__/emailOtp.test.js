@@ -15,12 +15,15 @@ afterAll(async () => {
 describe('registration email OTP', () => {
   test('verifies once, marks the timestamp, and isolates OTP purpose', async () => {
     const email = `verify.${Date.now()}@test.pharmate`;
-    const registered = await request(app).post('/api/auth/register').send({
-      email,
-      password,
-      role: 'patient',
-      full_name: 'Email Verification Test',
-    });
+    const registered = await request(app)
+      .post('/api/auth/register')
+      .set('x-test-email-verification', 'required')
+      .send({
+        email,
+        password,
+        role: 'patient',
+        full_name: 'Email Verification Test',
+      });
     expect(registered.status).toBe(201);
     expect(registered.body).not.toHaveProperty('accessToken');
     const verification = deliveries.at(-1);
@@ -53,12 +56,15 @@ describe('registration email OTP', () => {
 
   test('enforces the resend cooldown in the database-backed service', async () => {
     const email = `cooldown.${Date.now()}@test.pharmate`;
-    await request(app).post('/api/auth/register').send({
-      email,
-      password,
-      role: 'caregiver',
-      full_name: 'Cooldown Test',
-    });
+    await request(app)
+      .post('/api/auth/register')
+      .set('x-test-email-verification', 'required')
+      .send({
+        email,
+        password,
+        role: 'caregiver',
+        full_name: 'Cooldown Test',
+      });
     const response = await request(app).post('/api/auth/resend-verification-otp').send({ email });
     expect(response.status).toBe(429);
     expect(response.body.retryAfter).toBeGreaterThan(0);
@@ -71,19 +77,20 @@ describe('registration email OTP', () => {
       error.code = 'EMAIL_PROVIDER_ERROR';
       throw error;
     });
-    const registered = await request(app).post('/api/auth/register').send({
-      email,
-      password,
-      role: 'patient',
-      full_name: 'Delivery Failure Test',
-    });
+    const registered = await request(app)
+      .post('/api/auth/register')
+      .set('x-test-email-verification', 'required')
+      .send({
+        email,
+        password,
+        role: 'patient',
+        full_name: 'Delivery Failure Test',
+      });
     expect(registered.status).toBe(503);
     expect(registered.body.code).toBe('EMAIL_DELIVERY_FAILED');
 
     setEmailDeliveryForTests(async (message) => deliveries.push(message));
-    const resent = await request(app)
-      .post('/api/auth/resend-verification-otp')
-      .send({ email });
+    const resent = await request(app).post('/api/auth/resend-verification-otp').send({ email });
     expect(resent.status).toBe(200);
     expect(deliveries.at(-1).email).toBe(email);
   });

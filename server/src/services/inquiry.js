@@ -34,7 +34,13 @@ async function eligiblePharmacist(thread, pharmacistId, executor) {
  */
 export async function openThread(
   patientId,
-  { subject = null, branchId = null, pharmacistId = null, drugName = null, medicationDraftKey = null } = {}
+  {
+    subject = null,
+    branchId = null,
+    pharmacistId = null,
+    drugName = null,
+    medicationDraftKey = null,
+  } = {}
 ) {
   const conn = await pool.getConnection();
   try {

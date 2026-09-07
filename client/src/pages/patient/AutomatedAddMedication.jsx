@@ -68,16 +68,25 @@ const PRESET_TIMES = [
 
 function readDraft() {
   try {
-    return JSON.parse(sessionStorage.getItem(DRAFT_KEY) || localStorage.getItem(DRAFT_KEY) || 'null') || {};
+    return (
+      JSON.parse(sessionStorage.getItem(DRAFT_KEY) || localStorage.getItem(DRAFT_KEY) || 'null') ||
+      {}
+    );
   } catch {
     return {};
   }
 }
 function frequencyDetails(code) {
   const rules = {
-    QD: ['ONCE_DAILY', 1], BID: ['TWICE_DAILY', 2], TID: ['THREE_TIMES_DAILY', 3],
-    QID: ['SPECIFIC_TIMES', 4], Q4H: ['EVERY_N_HOURS', 6, 4], Q6H: ['EVERY_N_HOURS', 4, 6],
-    Q8H: ['EVERY_N_HOURS', 3, 8], Q12H: ['EVERY_N_HOURS', 2, 12], PRN: ['AS_NEEDED', 0],
+    QD: ['ONCE_DAILY', 1],
+    BID: ['TWICE_DAILY', 2],
+    TID: ['THREE_TIMES_DAILY', 3],
+    QID: ['SPECIFIC_TIMES', 4],
+    Q4H: ['EVERY_N_HOURS', 6, 4],
+    Q6H: ['EVERY_N_HOURS', 4, 6],
+    Q8H: ['EVERY_N_HOURS', 3, 8],
+    Q12H: ['EVERY_N_HOURS', 2, 12],
+    PRN: ['AS_NEEDED', 0],
   };
   const [frequencyType, count, intervalHours = null] = rules[code] || [null, null, null];
   return { frequencyType, count, intervalHours };
@@ -180,18 +189,18 @@ export default function AutomatedAddMedication() {
   useEffect(() => {
     if (saved) return;
     const serializedDraft = JSON.stringify({
-        step,
-        durationPage,
-        phase,
-        query,
-        medicine,
-        medicineList,
-        schedule,
-        source,
-        manualTimes,
-        editingMedicine,
-        medicineDates,
-      });
+      step,
+      durationPage,
+      phase,
+      query,
+      medicine,
+      medicineList,
+      schedule,
+      source,
+      manualTimes,
+      editingMedicine,
+      medicineDates,
+    });
     sessionStorage.setItem(DRAFT_KEY, serializedDraft);
     localStorage.setItem(DRAFT_KEY, serializedDraft);
   }, [
@@ -249,7 +258,11 @@ export default function AutomatedAddMedication() {
     if ('start_date' in changes || 'end_date' in changes || 'duration' in changes) {
       const key = String(medicine?._draftKey || medicine?.id || '');
       setMedicineDates((current) =>
-        Object.fromEntries(Object.entries(current).filter(([itemKey]) => itemKey !== key && itemKey !== String(medicine?.id || '')))
+        Object.fromEntries(
+          Object.entries(current).filter(
+            ([itemKey]) => itemKey !== key && itemKey !== String(medicine?.id || '')
+          )
+        )
       );
     }
     setMedicine((current) => ({ ...current, ...changes }));
@@ -1699,9 +1712,17 @@ export default function AutomatedAddMedication() {
             onClick={() => {
               const maximum = frequencyDetails(medicine.frequency_code).count;
               if (Number.isInteger(maximum) && manualTimes.length >= maximum) {
-                setError(maximum === 1
-                  ? tr('This medication is set to once daily. Only one scheduled time can be added.', 'Isang beses lang kada araw ang gamot na ito.')
-                  : tr(`This frequency allows ${maximum} scheduled times per day.`, `Hanggang ${maximum} oras lamang kada araw.`));
+                setError(
+                  maximum === 1
+                    ? tr(
+                        'This medication is set to once daily. Only one scheduled time can be added.',
+                        'Isang beses lang kada araw ang gamot na ito.'
+                      )
+                    : tr(
+                        `This frequency allows ${maximum} scheduled times per day.`,
+                        `Hanggang ${maximum} oras lamang kada araw.`
+                      )
+                );
                 return;
               }
               setManualTimes((times) => [...times, '12:00']);
@@ -1711,7 +1732,12 @@ export default function AutomatedAddMedication() {
             <Plus />
             {tr('Add another time', 'Magdagdag ng oras')}
           </button>
-          {error && <div className="pm-wizard__error" role="alert"><Info />{error}</div>}
+          {error && (
+            <div className="pm-wizard__error" role="alert">
+              <Info />
+              {error}
+            </div>
+          )}
           <div className="pm-wizard__edit-actions">
             <button
               className="cancel"
@@ -1865,11 +1891,7 @@ export default function AutomatedAddMedication() {
             source={source}
             tr={tr}
           />
-          <button
-            className="pm-wizard__secondary"
-            onClick={askPharmacist}
-            type="button"
-          >
+          <button className="pm-wizard__secondary" onClick={askPharmacist} type="button">
             <ShieldCheck />
             {tr('Ask a Pharmacist', 'Magtanong sa Parmasyutiko')}
           </button>

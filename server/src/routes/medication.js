@@ -131,7 +131,9 @@ function idsFrom(body) {
       refill_reminders_enabled: record?.refill_reminders_enabled === true,
       end_date: String(record?.end_date || '').trim(),
       first_dose_time: String(record?.first_dose_time || '').trim(),
-      frequency_source: String(record?.frequency_source || '').trim().toUpperCase(),
+      frequency_source: String(record?.frequency_source || '')
+        .trim()
+        .toUpperCase(),
       schedule_times: Array.isArray(record?.schedule_times) ? record.schedule_times : [],
       schedule_mode: String(record?.schedule_mode || '')
         .trim()
@@ -507,14 +509,20 @@ async function generateFromRequest(body, executor = pool, patientId = null) {
         status: 400,
       };
     }
-    if (['QD', 'BID', 'TID', 'QID'].includes(rule.label_frequency) &&
-        rule.frequency_source !== 'PATIENT_SELECTED' && !rule.schedule_times.length) {
+    if (
+      ['QD', 'BID', 'TID', 'QID'].includes(rule.label_frequency) &&
+      rule.frequency_source !== 'PATIENT_SELECTED' &&
+      !rule.schedule_times.length
+    ) {
       return {
         error: `${rule.generic_name} has a daily frequency without exact medication times. Save it for pharmacist review or enter the exact label times; no active reminders were created.`,
         status: 422,
       };
     }
-    if (rule.frequency_source === 'PATIENT_SELECTED' && !/^([01]\d|2[0-3]):[0-5]\d$/.test(rule.first_dose_time || '')) {
+    if (
+      rule.frequency_source === 'PATIENT_SELECTED' &&
+      !/^([01]\d|2[0-3]):[0-5]\d$/.test(rule.first_dose_time || '')
+    ) {
       return { error: `${rule.generic_name} needs a starting reminder time.`, status: 422 };
     }
     if (labelRule.interval && !/^([01]\d|2[0-3]):[0-5]\d$/.test(rule.first_dose_time || '')) {
@@ -534,7 +542,11 @@ async function generateFromRequest(body, executor = pool, patientId = null) {
       rule.frequency_source === 'PATIENT_SELECTED' && !labelRule.interval
         ? 24 / labelRule.daily
         : 0;
-    rule.min_interval_hours = Math.max(labelRule.interval, mathematicalGap, verifiedMinimumInterval);
+    rule.min_interval_hours = Math.max(
+      labelRule.interval,
+      mathematicalGap,
+      verifiedMinimumInterval
+    );
     rule.rule_kind = labelRule.prn ? 'PRN' : rule.rule_kind;
     rule.food_rule = verifiedFoodRule ? rule.food_rule : rule.label_food_instruction;
     rule.food_instruction = verifiedFoodRule
@@ -943,17 +955,28 @@ router.post('/save-reminders', async (req, res) => {
     const rulesByDrug = new Map(generated.rules.map((rule) => [rule.drug_id, rule]));
     for (const rule of generated.rules) {
       const intervalHours = LABEL_FREQUENCIES[rule.label_frequency]?.interval || null;
-      const scheduleType = {
-        QD: 'ONCE_DAILY', BID: 'TWICE_DAILY', TID: 'THREE_TIMES_DAILY',
-        QID: 'SPECIFIC_TIMES', BEDTIME: 'SPECIFIC_TIMES',
-      }[rule.label_frequency] || 'EVERY_N_HOURS';
+      const scheduleType =
+        {
+          QD: 'ONCE_DAILY',
+          BID: 'TWICE_DAILY',
+          TID: 'THREE_TIMES_DAILY',
+          QID: 'SPECIFIC_TIMES',
+          BEDTIME: 'SPECIFIC_TIMES',
+        }[rule.label_frequency] || 'EVERY_N_HOURS';
       await conn.execute(
         `UPDATE medications SET schedule_type=?, interval_hours=?,
                 interval_start_time=?, schedule_status='APPROVED', schedule_updated_by=?,
                 schedule_updated_at=NOW(3), schedule_approved_by=?, schedule_approved_at=NOW(3)
           WHERE id=? AND patient_id=?`,
-        [scheduleType, intervalHours, rule.first_dose_time, req.user.sub, req.user.sub,
-          medicationIds.get(rule.drug_id), req.user.sub]
+        [
+          scheduleType,
+          intervalHours,
+          rule.first_dose_time,
+          req.user.sub,
+          req.user.sub,
+          medicationIds.get(rule.drug_id),
+          req.user.sub,
+        ]
       );
     }
     let count = 0;

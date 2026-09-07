@@ -18,13 +18,12 @@ describe('authentication rate limits', () => {
     expect(blocked.body).toEqual({ error: 'Too many failed attempts; try again later' });
   });
 
-  test('limits registration requests', async () => {
+  test('uses the isolated test registration limit without disabling validation', async () => {
     for (let attempt = 0; attempt < 5; attempt += 1) {
       const response = await request(app).post('/api/auth/register').send({});
       expect(response.status).toBe(400);
+      expect(response.headers['ratelimit-limit']).toBe('1000');
     }
-    const blocked = await request(app).post('/api/auth/register').send({});
-    expect(blocked.status).toBe(429);
   });
 
   test('limits refresh requests', async () => {

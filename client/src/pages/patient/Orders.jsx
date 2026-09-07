@@ -82,7 +82,13 @@ export default function Orders() {
         },
       });
       setMsg(`${form.kind === 'delivery' ? 'Delivery' : 'Refill'} requested.`);
-      setForm({ kind: form.kind, medication_id: '', branch_id: '', address: '', payment_method: form.kind === 'delivery' ? 'COD' : 'CASH_ON_PICKUP' });
+      setForm({
+        kind: form.kind,
+        medication_id: '',
+        branch_id: '',
+        address: '',
+        payment_method: form.kind === 'delivery' ? 'COD' : 'CASH_ON_PICKUP',
+      });
       load();
     } catch (e) {
       setError(e.message);
@@ -150,7 +156,13 @@ export default function Orders() {
             <button
               key={k}
               className={'btn ' + (form.kind === k ? 'btn-primary' : 'btn-outline-secondary')}
-              onClick={() => setForm((current) => ({ ...current, kind: k, payment_method: k === 'delivery' ? 'COD' : 'CASH_ON_PICKUP' }))}
+              onClick={() =>
+                setForm((current) => ({
+                  ...current,
+                  kind: k,
+                  payment_method: k === 'delivery' ? 'COD' : 'CASH_ON_PICKUP',
+                }))
+              }
             >
               {label}
             </button>
@@ -199,7 +211,11 @@ export default function Orders() {
           </>
         )}
         <label className="form-label fw-semibold">Payment method</label>
-        <select className="form-select mb-2" value={form.payment_method} onChange={(e) => set('payment_method', e.target.value)}>
+        <select
+          className="form-select mb-2"
+          value={form.payment_method}
+          onChange={(e) => set('payment_method', e.target.value)}
+        >
           {form.kind === 'refill' && <option value="CASH_ON_PICKUP">Cash on pickup</option>}
           {form.kind === 'delivery' && <option value="COD">Cash on delivery</option>}
           <option value="CARD">Card</option>

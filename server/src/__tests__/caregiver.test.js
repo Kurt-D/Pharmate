@@ -108,8 +108,9 @@ describe('Caregiver medicine and schedule setup', () => {
     const scheduled = await request(app)
       .post(`/api/caregiver/patients/${patientCode}/schedule/suggested`)
       .set(auth(caregiverToken));
-    expect(scheduled.status).toBe(201);
-    expect(scheduled.body.count).toBeGreaterThan(0);
+    // "After breakfast" has no exact medication time, so the scheduler must
+    // require review instead of inventing an active reminder.
+    expect(scheduled.status).toBe(400);
     await request(app)
       .patch(`/api/patient/caregivers/${links.body[0].id}/permissions`)
       .set(auth(patientToken))

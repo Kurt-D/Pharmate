@@ -18,9 +18,12 @@ function assertEmailConfiguration() {
   if (process.env.EMAIL_ENABLED !== 'true' && process.env.PASSWORD_RESET_EMAIL_ENABLED !== 'true') {
     throw configurationError('Email delivery is disabled');
   }
-  const provider = String(process.env.EMAIL_PROVIDER || 'smtp').trim().toLowerCase();
+  const provider = String(process.env.EMAIL_PROVIDER || 'smtp')
+    .trim()
+    .toLowerCase();
   const from = process.env.EMAIL_FROM || process.env.SMTP_FROM || process.env.SMTP_SENDER;
-  if (!from || isPlaceholder(from)) throw configurationError('A verified sender address is required');
+  if (!from || isPlaceholder(from))
+    throw configurationError('A verified sender address is required');
   if (provider === 'resend') {
     if (!process.env.RESEND_API_KEY || isPlaceholder(process.env.RESEND_API_KEY)) {
       throw configurationError('Resend credentials are required');
@@ -29,7 +32,14 @@ function assertEmailConfiguration() {
   }
   const user = process.env.SMTP_USER || process.env.SMTP_USERNAME;
   const pass = process.env.SMTP_PASS || process.env.SMTP_PASSWORD;
-  if (!process.env.SMTP_HOST || !process.env.SMTP_PORT || !user || !pass || isPlaceholder(user) || isPlaceholder(pass)) {
+  if (
+    !process.env.SMTP_HOST ||
+    !process.env.SMTP_PORT ||
+    !user ||
+    !pass ||
+    isPlaceholder(user) ||
+    isPlaceholder(pass)
+  ) {
     throw configurationError('Valid SMTP credentials are required');
   }
   return { provider, from, user, pass };

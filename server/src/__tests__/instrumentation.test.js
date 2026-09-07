@@ -58,6 +58,13 @@ async function confirmParacetamolSchedule(token) {
     .post('/api/patient/medications')
     .set({ Authorization: `Bearer ${token}` })
     .send({ drug_name: 'paracetamol', frequency: 'TID', source: 'OTC_SELF', is_prn: false });
+  const payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString());
+  await pool.execute(
+    `UPDATE medications SET schedule_status='APPROVED',schedule_type='THREE_TIMES_DAILY',
+       schedule_times=JSON_ARRAY('08:00','16:00','00:00'),schedule_approved_at=NOW(3)
+     WHERE patient_id=? AND status='active'`,
+    [payload.sub]
+  );
   await request(app)
     .post('/api/patient/schedule/confirm')
     .set({ Authorization: `Bearer ${token}` });

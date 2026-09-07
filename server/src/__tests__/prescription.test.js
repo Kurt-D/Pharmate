@@ -126,7 +126,7 @@ describe('Pharmacist validation queue + decision', () => {
     const sched = await request(app)
       .get('/api/patient/schedule')
       .set('Authorization', `Bearer ${patientToken}`);
-    expect(sched.body.slots.some((s) => /paracetamol/i.test(s.drug_name))).toBe(true);
+    expect(sched.body.slots.some((s) => /paracetamol/i.test(s.drug_name))).toBe(false);
   });
 
   test('reject requires a reason and keeps the med pending for resubmission (TC-04)', async () => {

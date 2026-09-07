@@ -111,16 +111,18 @@ export default function OrdersRedesign() {
           ...(response.data.refills || []).map((item) => ({ ...item, fulfillment: 'pickup' })),
         ];
         setServerOrders(
-          combined.map((order) => ({
-            ...order,
-            type: order.rx_class === 'RX' || order.source === 'RX_VALIDATED' ? 'rx' : 'otc',
-            created_at: order.requested_at,
-            items: [{ name: order.drug || 'Pharmacy order', quantity: 1 }],
-            payment: order.payment_method,
-            contact: 'Saved patient contact',
-            address: order.fulfillment === 'pickup' ? order.branch : 'Saved delivery address',
-            total: null,
-          })).sort((a, b) => new Date(b.requested_at) - new Date(a.requested_at))
+          combined
+            .map((order) => ({
+              ...order,
+              type: order.rx_class === 'RX' || order.source === 'RX_VALIDATED' ? 'rx' : 'otc',
+              created_at: order.requested_at,
+              items: [{ name: order.drug || 'Pharmacy order', quantity: 1 }],
+              payment: order.payment_method,
+              contact: 'Saved patient contact',
+              address: order.fulfillment === 'pickup' ? order.branch : 'Saved delivery address',
+              total: null,
+            }))
+            .sort((a, b) => new Date(b.requested_at) - new Date(a.requested_at))
         );
       })
       .catch(() => setServerOrders([]));

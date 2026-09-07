@@ -43,8 +43,12 @@ function treatmentDateKeys(startDate, endDate, maximumDays = 366) {
 
 function treatmentDatesForMedicine(medicine) {
   const dates = treatmentDateKeys(medicine?.startDate, medicine?.endDate);
-  if (!['SPECIFIC_DAYS', 'WEEKLY'].includes(medicine?.scheduleType) || !medicine.scheduleDays?.length) return dates;
-  const names = ['SUNDAY','MONDAY','TUESDAY','WEDNESDAY','THURSDAY','FRIDAY','SATURDAY'];
+  if (
+    !['SPECIFIC_DAYS', 'WEEKLY'].includes(medicine?.scheduleType) ||
+    !medicine.scheduleDays?.length
+  )
+    return dates;
+  const names = ['SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'];
   const allowed = new Set(medicine.scheduleDays.map((day) => String(day).toUpperCase()));
   return dates.filter((date) => {
     const weekday = new Date(`${date}T00:00:00Z`).getUTCDay();
@@ -131,7 +135,11 @@ export async function loadEngineInput(patientId) {
     const foodInstruction = m.meal_instruction || m.food_instruction || null;
     const jsonArray = (value) => {
       if (Array.isArray(value)) return value;
-      try { return JSON.parse(value || '[]'); } catch { return []; }
+      try {
+        return JSON.parse(value || '[]');
+      } catch {
+        return [];
+      }
     };
     return {
       id: m.id,
@@ -363,9 +371,10 @@ export async function proposeForPrescription(patientId, medicationId) {
     id: m.id,
     drugId: m.drug_id,
     drugName: m.drug_name_raw,
-    frequencyCode: m.schedule_type === 'EVERY_N_HOURS' && m.interval_hours && m.interval_start_time
-      ? `q${Number(m.interval_hours)}h`
-      : 'CONSULT',
+    frequencyCode:
+      m.schedule_type === 'EVERY_N_HOURS' && m.interval_hours && m.interval_start_time
+        ? `q${Number(m.interval_hours)}h`
+        : 'CONSULT',
     isPrn: !!m.is_prn,
     minIntervalHours: m.min_interval_hours != null ? Number(m.min_interval_hours) : null,
     maxDailyDoses: m.max_daily_doses != null ? Number(m.max_daily_doses) : null,
@@ -376,7 +385,9 @@ export async function proposeForPrescription(patientId, medicationId) {
     exactTimes = Array.isArray(target?.schedule_times)
       ? target.schedule_times
       : JSON.parse(target?.schedule_times || '[]');
-  } catch { exactTimes = []; }
+  } catch {
+    exactTimes = [];
+  }
   if (target?.schedule_type === 'SPECIFIC_TIMES' && exactTimes.length) {
     const generationDate = manilaToday();
     return {
@@ -384,17 +395,31 @@ export async function proposeForPrescription(patientId, medicationId) {
       slots: exactTimes.map((time) => ({
         medication_id: medicationId,
         drug_name: target.drug_name_raw,
-        scheduled_time: wallClock(generationDate, Number(String(time).slice(0, 2)) * 60 + Number(String(time).slice(3, 5))),
+        scheduled_time: wallClock(
+          generationDate,
+          Number(String(time).slice(0, 2)) * 60 + Number(String(time).slice(3, 5))
+        ),
         generated_reason: 'Exact time from prescription or authorized entry',
       })),
       unresolved: [],
     };
   }
-  if (!target || target.schedule_type !== 'EVERY_N_HOURS' || !target.interval_hours || !target.interval_start_time) {
+  if (
+    !target ||
+    target.schedule_type !== 'EVERY_N_HOURS' ||
+    !target.interval_hours ||
+    !target.interval_start_time
+  ) {
     return {
       generation_date: manilaToday(),
       slots: [],
-      unresolved: [{ medication_id: medicationId, drug_name: target?.drug_name_raw, reason: 'Exact medication timing requires pharmacist review.' }],
+      unresolved: [
+        {
+          medication_id: medicationId,
+          drug_name: target?.drug_name_raw,
+          reason: 'Exact medication timing requires pharmacist review.',
+        },
+      ],
     };
   }
   anchors.wake = toClock(target.interval_start_time);
@@ -459,12 +484,17 @@ export async function proposeForPatient(patientId, targetMedicationIds = []) {
   const generationInput = { ...input, medications };
   // Only an explicit interval enters the mathematical engine. Broad words such
   // as BID/TID remain visible definitions but never become invented clock times.
-  const intervalMedicines = medications.filter(
-    (medicine) => medicine.scheduleType === 'EVERY_N_HOURS' && medicine.intervalHours && medicine.intervalStartTime
-  ).map((medicine) => ({
-    ...medicine,
-    frequencyCode: `q${medicine.intervalHours}h`,
-  }));
+  const intervalMedicines = medications
+    .filter(
+      (medicine) =>
+        medicine.scheduleType === 'EVERY_N_HOURS' &&
+        medicine.intervalHours &&
+        medicine.intervalStartTime
+    )
+    .map((medicine) => ({
+      ...medicine,
+      frequencyCode: `q${medicine.intervalHours}h`,
+    }));
   const intervalResults = intervalMedicines.map((medicine) =>
     generateSchedule({
       ...generationInput,
@@ -475,8 +505,13 @@ export async function proposeForPatient(patientId, targetMedicationIds = []) {
   );
   const result = {
     slots: intervalResults.flatMap((item) => item.slots),
-    prn: medications.filter((medicine) => medicine.isPrn || medicine.scheduleType === 'AS_NEEDED')
-      .map((medicine) => ({ medicationId: medicine.id, drugName: medicine.drugName, reason: 'As needed; no automatic reminder time' })),
+    prn: medications
+      .filter((medicine) => medicine.isPrn || medicine.scheduleType === 'AS_NEEDED')
+      .map((medicine) => ({
+        medicationId: medicine.id,
+        drugName: medicine.drugName,
+        reason: 'As needed; no automatic reminder time',
+      })),
     unresolved: intervalResults.flatMap((item) => item.unresolved),
     solver: intervalResults.some((item) => item.solver === 'csp') ? 'csp' : 'direct',
   };
@@ -780,7 +815,10 @@ export async function confirmForPatient(
       const medicine = byId.get(slot.medication_id);
       return treatmentDatesForMedicine(medicine).map((date) => ({
         ...slot,
-        scheduled_time: wallClock(date, Number(slot.time.slice(0, 2)) * 60 + Number(slot.time.slice(3, 5))),
+        scheduled_time: wallClock(
+          date,
+          Number(slot.time.slice(0, 2)) * 60 + Number(slot.time.slice(3, 5))
+        ),
       }));
     });
   }
@@ -818,9 +856,14 @@ export async function confirmForPatient(
           `INSERT INTO medication_schedule_audit
              (id, medication_id, patient_id, actor_id, actor_role, before_info, after_info)
            VALUES (?, ?, ?, ?, ?, NULL, ?)`,
-          [uuidv4(), medicationId, patientId, options.actorId || patientId,
+          [
+            uuidv4(),
+            medicationId,
+            patientId,
+            options.actorId || patientId,
             options.actorRole || (options.actorId ? 'caregiver' : 'patient'),
-            JSON.stringify({ schedule_status: 'APPROVED', schedule_version: version })]
+            JSON.stringify({ schedule_status: 'APPROVED', schedule_version: version }),
+          ]
         );
       }
     }
@@ -868,7 +911,12 @@ export async function confirmForPatient(
     });
 
     await conn.commit();
-    return { version, count: slots.length, generation_date: generationDate, schedule_status: 'APPROVED' };
+    return {
+      version,
+      count: slots.length,
+      generation_date: generationDate,
+      schedule_status: 'APPROVED',
+    };
   } catch (err) {
     await conn.rollback();
     throw err;

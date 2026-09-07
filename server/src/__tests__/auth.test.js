@@ -138,12 +138,15 @@ describe('Auth — register and login', () => {
 
   test('caregiver can register publicly and receives a caregiver profile', async () => {
     const email = `caregiver.register.${Date.now()}@test.pharmate`;
-    const res = await request(app).post('/api/auth/register').send({
-      email,
-      password: PASSWORD,
-      role: 'caregiver',
-      full_name: 'Caregiver Test',
-    });
+    const res = await request(app)
+      .post('/api/auth/register')
+      .set('x-test-email-verification', 'required')
+      .send({
+        email,
+        password: PASSWORD,
+        role: 'caregiver',
+        full_name: 'Caregiver Test',
+      });
 
     expect(res.status).toBe(201);
     expect(res.body.verificationRequired).toBe(true);

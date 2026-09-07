@@ -29,6 +29,12 @@ beforeAll(async () => {
     .post('/api/patient/medications')
     .set(auth())
     .send({ drug_name: 'paracetamol', frequency: 'TID', source: 'OTC_SELF', is_prn: false });
+  await pool.execute(
+    `UPDATE medications SET schedule_status='APPROVED',schedule_type='THREE_TIMES_DAILY',
+       schedule_times=JSON_ARRAY('08:00','16:00','00:00'),schedule_approved_at=NOW(3)
+     WHERE patient_id=? AND status='active'`,
+    [patientId]
+  );
   await request(app).post('/api/patient/schedule/confirm').set(auth());
 });
 
@@ -46,7 +52,7 @@ describe('GET /api/patient/doses/today', () => {
     expect(doses.length).toBe(3); // paracetamol TID
     doses.forEach((d) => {
       expect(d.schedule_id).toBeTruthy();
-      expect(d.status).toBe('scheduled');
+      expect(['UPCOMING', 'DUE', 'MISSED']).toContain(d.status);
     });
   });
 
@@ -79,8 +85,7 @@ describe('GET /api/patient/doses/today', () => {
     expect(
       currentDoses.some(
         (item) =>
-          item.medication_id === dose.medication_id &&
-          ['scheduled', 'snoozed'].includes(item.status)
+          item.medication_id === dose.medication_id && ['UPCOMING', 'DUE'].includes(item.status)
       )
     ).toBe(false);
 
@@ -105,7 +110,7 @@ describe('Dose logging — the 30-min / 2-hour rule (D-C)', () => {
       .set(auth())
       .send({ logged_at: dose.scheduled_time, method: 'manual' });
     expect(res.status).toBe(201);
-    expect(res.body.status).toBe('taken');
+    expect(res.body.status).toBe('TAKEN');
 
     // Confirmation method is recorded as manual (TC-03).
     const [[log]] = await pool.execute(
@@ -117,7 +122,7 @@ describe('Dose logging — the 30-min / 2-hour rule (D-C)', () => {
 
   test('calendar can show only taken doses for the selected day', async () => {
     const doses = await today();
-    const takenDose = doses.find((item) => item.status === 'taken');
+    const takenDose = doses.find((item) => item.status === 'TAKEN');
     const day = new Date(new Date(takenDose.scheduled_time).getTime() + 8 * 3600000)
       .toISOString()
       .slice(0, 10);
@@ -126,12 +131,12 @@ describe('Dose logging — the 30-min / 2-hour rule (D-C)', () => {
       .set(auth())
       .expect(200);
     expect(res.body.length).toBeGreaterThan(0);
-    expect(res.body.every((item) => ['taken', 'taken_late'].includes(item.status))).toBe(true);
+    expect(res.body.every((item) => item.status === 'TAKEN')).toBe(true);
     expect(res.body[0].logged_at).toBeTruthy();
   });
 
   test('taken doses are read-only and have no edit endpoint', async () => {
-    const dose = (await today()).find((item) => item.status === 'taken');
+    const dose = (await today()).find((item) => item.status === 'TAKEN');
     await request(app)
       .patch(`/api/patient/doses/${dose.schedule_id}/taken`)
       .set(auth())
@@ -147,7 +152,7 @@ describe('Dose logging — the 30-min / 2-hour rule (D-C)', () => {
       .post(`/api/patient/doses/${dose.schedule_id}/log`)
       .set(auth())
       .send({ logged_at: late, method: 'manual' });
-    expect(res.body.status).toBe('taken_late');
+    expect(res.body.status).toBe('TAKEN');
     // Interval drug → reflow of the rest of the day is suggested (ENG §8).
     expect(res.body.reflow).toBeTruthy();
     expect(Array.isArray(res.body.reflow.kept)).toBe(true);
@@ -161,29 +166,40 @@ describe('Dose logging — the 30-min / 2-hour rule (D-C)', () => {
       .post(`/api/patient/doses/${dose.schedule_id}/log`)
       .set(auth())
       .send({ logged_at: veryLate, method: 'manual' });
-    expect(res.body.status).toBe('missed');
-    expect(res.body.status).not.toBe('taken');
+    expect(res.body.status).toBe('MISSED');
+    expect(res.body.status).not.toBe('TAKEN');
   });
 });
 
 describe('Missed sweep — the 30-minute rule', () => {
   test('a dose unconfirmed 31 min past its time is marked missed', async () => {
     // Fresh med + schedule so we have a still-scheduled dose to sweep.
-    await request(app)
+    const medication = await request(app)
       .post('/api/patient/medications')
       .set(auth())
       .send({ drug_name: 'amoxicillin', frequency: 'BID', source: 'OTC_SELF', is_prn: false });
-    await request(app).post('/api/patient/schedule/confirm').set(auth());
-
-    const doses = await today();
-    const scheduled = doses.find((d) => d.status === 'scheduled');
+    await pool.execute(
+      `UPDATE medications SET schedule_status='APPROVED',schedule_type='TWICE_DAILY',
+         schedule_times=JSON_ARRAY('08:00','20:00'),schedule_approved_at=NOW(3) WHERE id=?`,
+      [medication.body.id]
+    );
+    const scheduled = {
+      schedule_id: `sweep-${Date.now()}`.slice(0, 36),
+      scheduled_time: new Date(),
+    };
+    await pool.execute(
+      `INSERT INTO medication_schedules
+       (id,medication_id,patient_id,scheduled_time,generated_reason,is_confirmed,schedule_version,status)
+       VALUES (?,?,?,?,'missed sweep test',1,101,'scheduled')`,
+      [scheduled.schedule_id, medication.body.id, patientId, scheduled.scheduled_time]
+    );
     // Run the sweep as if it were 31 minutes after that dose.
     const when = new Date(new Date(scheduled.scheduled_time).getTime() + 31 * 60000);
     const n = await sweepMissed(when);
     expect(n).toBeGreaterThanOrEqual(1);
 
     const after = await today();
-    expect(after.find((d) => d.schedule_id === scheduled.schedule_id).status).toBe('missed');
+    expect(after.find((d) => d.schedule_id === scheduled.schedule_id).status).toBe('MISSED');
   });
 });
 
@@ -267,7 +283,7 @@ describe('Dose-limit enforcement', () => {
       .post(`/api/patient/doses/${firstId}/log`)
       .set(auth())
       .send({ logged_at: firstTime.toISOString(), method: 'manual', log_id: `repeat-${suffix}` });
-    expect(repeated.status).toBe(409);
-    expect(repeated.body.error).toMatch(/already has a recorded dose/i);
+    expect(repeated.status).toBe(201);
+    expect(repeated.body.duplicate).toBe(true);
   });
 });

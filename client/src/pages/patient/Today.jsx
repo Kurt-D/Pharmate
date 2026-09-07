@@ -407,7 +407,8 @@ export default function Today() {
       setNotice('Saved offline. It will sync when you are connected again.');
       setDoses((items) => {
         const completedAll =
-          items.length > 0 && items.every((item) => ['TAKEN', 'TAKEN_LATE'].includes(doseStatus(item)));
+          items.length > 0 &&
+          items.every((item) => ['TAKEN', 'TAKEN_LATE'].includes(doseStatus(item)));
         if (action === 'take' && completedAll) {
           setStreak((current) => recordStreakDay(current, loggedAt));
         }
@@ -505,7 +506,9 @@ export default function Today() {
     const items = doses || [];
     return {
       taken: items.filter((dose) => ['TAKEN', 'TAKEN_LATE'].includes(doseStatus(dose))).length,
-      upcoming: items.filter((dose) => ['UPCOMING', 'DUE', 'SCHEDULED', 'SNOOZED'].includes(doseStatus(dose))).length,
+      upcoming: items.filter((dose) =>
+        ['UPCOMING', 'DUE', 'SCHEDULED', 'SNOOZED'].includes(doseStatus(dose))
+      ).length,
       missed: items.filter((dose) => doseStatus(dose) === 'MISSED').length,
     };
   }, [doses]);
@@ -513,7 +516,8 @@ export default function Today() {
     () =>
       (doses || []).filter((dose) => {
         if (summaryFilter === 'taken') return ['TAKEN', 'TAKEN_LATE'].includes(doseStatus(dose));
-        if (summaryFilter === 'upcoming') return ['UPCOMING', 'DUE', 'SCHEDULED', 'SNOOZED'].includes(doseStatus(dose));
+        if (summaryFilter === 'upcoming')
+          return ['UPCOMING', 'DUE', 'SCHEDULED', 'SNOOZED'].includes(doseStatus(dose));
         return doseStatus(dose) === 'MISSED';
       }),
     [doses, summaryFilter]
@@ -529,18 +533,27 @@ export default function Today() {
     if (calendarFilter === 'taken')
       return items.filter((dose) => ['TAKEN', 'TAKEN_LATE'].includes(doseStatus(dose)));
     if (calendarFilter === 'missed') return items.filter((dose) => doseStatus(dose) === 'MISSED');
-    return items.filter((dose) => ['UPCOMING', 'DUE', 'SCHEDULED', 'SNOOZED'].includes(doseStatus(dose)));
+    return items.filter((dose) =>
+      ['UPCOMING', 'DUE', 'SCHEDULED', 'SNOOZED'].includes(doseStatus(dose))
+    );
   }, [calendarFilter, calendarRows, doses, isCalendarToday]);
   const nextDose = useMemo(
     () =>
       (doses || [])
         .filter((dose) => ['UPCOMING', 'DUE', 'SCHEDULED', 'SNOOZED'].includes(doseStatus(dose)))
-        .sort((a, b) => new Date(a.scheduled_at || a.scheduled_time) - new Date(b.scheduled_at || b.scheduled_time))[0],
+        .sort(
+          (a, b) =>
+            new Date(a.scheduled_at || a.scheduled_time) -
+            new Date(b.scheduled_at || b.scheduled_time)
+        )[0],
     [doses]
   );
 
-  const dueDelay = nextDose ? clockNow - new Date(nextDose.scheduled_at || nextDose.scheduled_time).getTime() : null;
-  const dueNow = nextDose && (doseStatus(nextDose) === 'DUE' || (dueDelay >= 0 && dueDelay <= 30 * 60 * 1000));
+  const dueDelay = nextDose
+    ? clockNow - new Date(nextDose.scheduled_at || nextDose.scheduled_time).getTime()
+    : null;
+  const dueNow =
+    nextDose && (doseStatus(nextDose) === 'DUE' || (dueDelay >= 0 && dueDelay <= 30 * 60 * 1000));
   const reminderText = nextDose
     ? tr(
         `It's time to take your ${nextDose.drug_name}.`,

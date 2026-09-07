@@ -7,10 +7,7 @@ const DUE_WINDOW_MIN = 30;
 const REPEAT_MIN = 5;
 const GENERIC_PHRASE = 'It is time for your medicine.';
 
-export async function dueReminders(
-  now = new Date(),
-  { dueWindowMin = DUE_WINDOW_MIN } = {}
-) {
+export async function dueReminders(now = new Date(), { dueWindowMin = DUE_WINDOW_MIN } = {}) {
   const from = new Date(now.getTime() - dueWindowMin * 60000);
   const to = now;
   const [rows] = await pool.execute(
@@ -78,10 +75,10 @@ export function buildReminderPayload(reminder) {
 }
 
 async function markReminded(scheduleId, at) {
-  await pool.execute(
-    `UPDATE medication_schedules SET reminder_sent_at = ? WHERE id = ?`,
-    [at, scheduleId]
-  );
+  await pool.execute(`UPDATE medication_schedules SET reminder_sent_at = ? WHERE id = ?`, [
+    at,
+    scheduleId,
+  ]);
 }
 
 async function clearStaleToken(patientId, token) {

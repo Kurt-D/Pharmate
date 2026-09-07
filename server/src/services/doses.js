@@ -219,7 +219,12 @@ export async function logDose(patientId, scheduleId, opts = {}) {
     logged_at: loggedAt.toISOString(),
   });
   await emitDoseActivity(patientId, scheduleId, status, loggedAt);
-  return { status: status === 'missed' ? 'MISSED' : 'TAKEN', adherence_status: status, log_id: logId, reflow };
+  return {
+    status: status === 'missed' ? 'MISSED' : 'TAKEN',
+    adherence_status: status,
+    log_id: logId,
+    reflow,
+  };
 }
 
 /**

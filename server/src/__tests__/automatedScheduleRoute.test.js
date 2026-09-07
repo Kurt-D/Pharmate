@@ -257,9 +257,7 @@ test('medicine search tolerates a minor spelling mistake and separates catalog a
   const email = `catalog.search.${Date.now()}@test.pharmate`;
   const patientId = await createPatientTestUser({ email, password: PASSWORD });
   const token = await createAccessToken(patientId);
-  const response = await request(app)
-    .get('/api/medications/search?q=paracetmol')
-    .set(auth(token));
+  const response = await request(app).get('/api/medications/search?q=paracetmol').set(auth(token));
   expect(response.status).toBe(200);
   expect(
     response.body.some((medicine) => medicine.generic_name.toLowerCase() === 'paracetamol')
@@ -392,7 +390,16 @@ test('a sourced OTC reference rule requires review while manual label scheduling
   const labelBased = await request(app)
     .post('/api/medications/generate-schedule')
     .set(auth(token))
-    .send({ medications: [{ ...medicine, label_frequency: 'QD', frequency_source: 'PATIENT_SELECTED', first_dose_time: '08:00' }] });
+    .send({
+      medications: [
+        {
+          ...medicine,
+          label_frequency: 'QD',
+          frequency_source: 'PATIENT_SELECTED',
+          first_dose_time: '08:00',
+        },
+      ],
+    });
   expect(labelBased.status).toBe(200);
   expect(labelBased.body.schedule_basis).toBe('PATIENT_LABEL');
   expect(labelBased.body.schedule).toHaveLength(1);

@@ -42,10 +42,17 @@ describe('GET /api/patient/schedule', () => {
   test('paracetamol TID → 08:00, 16:00, 00:00 with audit reasons', async () => {
     // Paracetamol is a PRN-default analgesic (is_prn_default=1); a prescribed
     // fixed schedule overrides that per-patient (ENG §3.3) with is_prn:false.
-    await request(app)
+    const medication = await request(app)
       .post('/api/patient/medications')
       .set(auth())
       .send({ drug_name: 'paracetamol', frequency: 'TID', source: 'OTC_SELF', is_prn: false });
+    await pool.execute(
+      `UPDATE medications
+       SET schedule_status='APPROVED', schedule_type='THREE_TIMES_DAILY',
+           schedule_times=JSON_ARRAY('08:00','16:00','00:00'), schedule_approved_at=NOW(3)
+       WHERE id=?`,
+      [medication.body.id]
+    );
 
     const res = await request(app).get('/api/patient/schedule').set(auth());
     expect(res.status).toBe(200);
@@ -54,11 +61,12 @@ describe('GET /api/patient/schedule', () => {
     expect(times).toEqual(['08:00', '16:00', '00:00']);
     // Every dose carries a generated_reason and an absolute wall-clock time (ENG §9).
     res.body.slots.forEach((s) => {
-      expect(s.generated_reason).toMatch(/TID \(q8h\)/);
+      expect(s.generated_reason).toMatch(/exact medication time/i);
       expect(s.scheduled_time).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/);
     });
-    // The 00:00 dose is flagged as next-day.
-    expect(res.body.slots[2].day_offset).toBe(1);
+    // Exact daily times stay attached to the selected calendar day; interval
+    // schedules are the variant that carry explicit next-day rollover.
+    expect(res.body.slots[2].day_offset).toBe(0);
   });
 
   test('PRN medication is listed, never placed on the timetable (ENG §7)', async () => {
@@ -93,9 +101,7 @@ describe('POST /api/patient/schedule/confirm', () => {
   test('deleting all selected reminders remains deleted when doses are fetched again', async () => {
     await request(app).post('/api/patient/schedule/confirm').set(auth());
     const before = await request(app).get('/api/patient/doses/today').set(auth());
-    const scheduleIds = before.body
-      .filter((dose) => dose.status === 'scheduled')
-      .map((dose) => dose.schedule_id);
+    const scheduleIds = before.body.map((dose) => dose.schedule_id);
 
     expect(scheduleIds.length).toBeGreaterThan(0);
     const removed = await request(app)
@@ -215,6 +221,14 @@ describe('new-medicine schedule scope', () => {
       .set(scopedAuth)
       .send({ drug_name: 'cetirizine', frequency: 'OD', source: 'OTC_SELF', is_prn: false });
 
+    await pool.execute(
+      `UPDATE medications
+       SET schedule_status='APPROVED', schedule_type='ONCE_DAILY',
+           schedule_times=JSON_ARRAY('08:00'), schedule_approved_at=NOW(3)
+       WHERE id IN (?, ?)`,
+      [paracetamol.body.id, cetirizine.body.id]
+    );
+
     await request(app)
       .post('/api/patient/schedule/confirm')
       .set(scopedAuth)
@@ -238,9 +252,7 @@ describe('new-medicine schedule scope', () => {
       .expect(201);
 
     const doses = await request(app).get('/api/patient/doses/today').set(scopedAuth).expect(200);
-    const scheduledMedicineIds = new Set(
-      doses.body.filter((dose) => dose.status === 'scheduled').map((dose) => dose.medication_id)
-    );
+    const scheduledMedicineIds = new Set(doses.body.map((dose) => dose.medication_id));
     expect(scheduledMedicineIds.has(paracetamol.body.id)).toBe(true);
     expect(scheduledMedicineIds.has(cetirizine.body.id)).toBe(true);
   });

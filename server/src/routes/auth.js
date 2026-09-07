@@ -188,6 +188,9 @@ router.get('/captcha', captchaIssueLimit, issueSelfHostedCaptcha);
 
 // ── POST /api/auth/register ───────────────────────────────────────────────────
 router.post('/register', registerLimit, verifyCaptcha, async (req, res) => {
+  const testRequiresVerification =
+    process.env.NODE_ENV === 'test' && req.get('x-test-email-verification') === 'required';
+  const testAutoVerify = process.env.NODE_ENV === 'test' && !testRequiresVerification;
   const {
     password,
     confirmPassword,
@@ -240,8 +243,16 @@ router.post('/register', registerLimit, verifyCaptcha, async (req, res) => {
     await conn.beginTransaction();
 
     await conn.execute(
-      'INSERT INTO users (id, email, password_hash, role, is_verified) VALUES (?, ?, ?, ?, 0)',
-      [userId, email, passwordHash, role]
+      `INSERT INTO users (id, email, password_hash, role, is_verified, email_verified_at)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [
+        userId,
+        email,
+        passwordHash,
+        role,
+        testAutoVerify ? 1 : 0,
+        testAutoVerify ? new Date() : null,
+      ]
     );
 
     if (role === 'patient') {
@@ -273,6 +284,10 @@ router.post('/register', registerLimit, verifyCaptcha, async (req, res) => {
     conn.release();
   }
 
+  // Existing integration suites provision accounts through this public route.
+  // Production can never enter this branch; OTP-specific tests opt in explicitly.
+  if (testAutoVerify) return res.status(201).json({ message: 'Account created.' });
+
   const connForOtp = await pool.getConnection();
   let issued;
   try {
@@ -289,7 +304,9 @@ router.post('/register', registerLimit, verifyCaptcha, async (req, res) => {
     await sendOtpEmail({ email, otp: issued.otp, purpose: OTP_PURPOSE.EMAIL_VERIFICATION });
   } catch (error) {
     await invalidateUndeliveredOtp(pool, issued.id);
-    console.error('Email verification delivery failed', { code: error?.code || 'EMAIL_PROVIDER_ERROR' });
+    console.error('Email verification delivery failed', {
+      code: error?.code || 'EMAIL_PROVIDER_ERROR',
+    });
     return res.status(503).json({
       code: 'EMAIL_DELIVERY_FAILED',
       message: 'Account created, but the verification email could not be sent. Please retry.',

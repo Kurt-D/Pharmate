@@ -25,7 +25,9 @@ function startOfManilaDay(instant) {
 function summarize(rows) {
   const eligibleDoses = rows.length;
   const taken = rows.filter((dose) => String(dose.status).toUpperCase() === 'TAKEN').length;
-  const takenLate = rows.filter((dose) => String(dose.status).toLowerCase() === 'taken_late').length;
+  const takenLate = rows.filter(
+    (dose) => String(dose.status).toLowerCase() === 'taken_late'
+  ).length;
   const missed = rows.filter((dose) => String(dose.status).toUpperCase() === 'MISSED').length;
 
   return {
@@ -50,7 +52,9 @@ export function calculatePatientDashboard(rows, now = new Date()) {
   const sevenDayStart = todayStart - 6 * DAY_MS;
 
   const normalized = rows.map((dose) => ({ ...dose, status: normalizedStatus(dose, nowMs) }));
-  const arrived = normalized.filter((dose) => new Date(dose.scheduled_at || dose.scheduled_time).getTime() <= nowMs);
+  const arrived = normalized.filter(
+    (dose) => new Date(dose.scheduled_at || dose.scheduled_time).getTime() <= nowMs
+  );
   const todayRows = arrived.filter((dose) => {
     const time = new Date(dose.scheduled_time).getTime();
     return time >= todayStart && time < tomorrowStart;
@@ -60,11 +64,7 @@ export function calculatePatientDashboard(rows, now = new Date()) {
     return time >= sevenDayStart && time < tomorrowStart;
   });
   const future = normalized
-    .filter(
-      (dose) =>
-        new Date(dose.scheduled_time).getTime() > nowMs &&
-        dose.status === 'UPCOMING'
-    )
+    .filter((dose) => new Date(dose.scheduled_time).getTime() > nowMs && dose.status === 'UPCOMING')
     .sort((a, b) => new Date(a.scheduled_time).getTime() - new Date(b.scheduled_time).getTime());
 
   const newestFirst = [...arrived].sort(
@@ -96,5 +96,9 @@ export function calculatePatientDashboard(rows, now = new Date()) {
 export async function getPatientDashboard(patientId, options = {}) {
   const now = options.now ? new Date(options.now) : new Date();
   const schedule = await getPatientMedicationSchedule(patientId, { now, date: options.date });
-  return { ...calculatePatientDashboard(schedule.doses, now), date: schedule.start_date, timezone: schedule.timezone };
+  return {
+    ...calculatePatientDashboard(schedule.doses, now),
+    date: schedule.start_date,
+    timezone: schedule.timezone,
+  };
 }

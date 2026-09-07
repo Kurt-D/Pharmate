@@ -23,11 +23,25 @@ function zonedMidnight(date, timeZone) {
   const offsetAt = (instant) => {
     const parts = new Intl.DateTimeFormat('en-US', {
       timeZone,
-      year: 'numeric', month: '2-digit', day: '2-digit',
-      hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hourCycle: 'h23',
     }).formatToParts(new Date(instant));
     const get = (type) => Number(parts.find((part) => part.type === type)?.value);
-    return Date.UTC(get('year'), get('month') - 1, get('day'), get('hour'), get('minute'), get('second')) - instant;
+    return (
+      Date.UTC(
+        get('year'),
+        get('month') - 1,
+        get('day'),
+        get('hour'),
+        get('minute'),
+        get('second')
+      ) - instant
+    );
   };
   let result = nominalUtc - offsetAt(nominalUtc);
   result = nominalUtc - offsetAt(result);
@@ -42,7 +56,11 @@ export function dateRangeBounds(startDate, endDate, timeZone = DEFAULT_TIMEZONE)
   return { start, end };
 }
 
-export function computeDoseStatus(row, now = new Date(), dueWindowMinutes = DEFAULT_DUE_WINDOW_MINUTES) {
+export function computeDoseStatus(
+  row,
+  now = new Date(),
+  dueWindowMinutes = DEFAULT_DUE_WINDOW_MINUTES
+) {
   if (row.taken_at || TERMINAL_TAKEN.has(String(row.stored_status).toLowerCase())) return 'TAKEN';
   if (String(row.stored_status).toLowerCase() === 'missed') return 'MISSED';
   const scheduled = new Date(row.scheduled_at).getTime();

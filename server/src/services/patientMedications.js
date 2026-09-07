@@ -225,23 +225,37 @@ export function validateMedicationPatch(body) {
     value.is_prn = body.is_prn ? 1 : 0;
   }
   if ('schedule_type' in body) {
-    const allowed = new Set(['SPECIFIC_TIMES','EVERY_N_HOURS','ONCE_DAILY','TWICE_DAILY','THREE_TIMES_DAILY','SPECIFIC_DAYS','WEEKLY','AS_NEEDED']);
+    const allowed = new Set([
+      'SPECIFIC_TIMES',
+      'EVERY_N_HOURS',
+      'ONCE_DAILY',
+      'TWICE_DAILY',
+      'THREE_TIMES_DAILY',
+      'SPECIFIC_DAYS',
+      'WEEKLY',
+      'AS_NEEDED',
+    ]);
     if (!allowed.has(body.schedule_type)) return fail(400, 'Unsupported schedule_type');
     value.schedule_type = body.schedule_type;
   }
   if ('schedule_times' in body) {
-    if (!Array.isArray(body.schedule_times) || body.schedule_times.some((time) => !/^([01]\d|2[0-3]):[0-5]\d$/.test(String(time)))) {
+    if (
+      !Array.isArray(body.schedule_times) ||
+      body.schedule_times.some((time) => !/^([01]\d|2[0-3]):[0-5]\d$/.test(String(time)))
+    ) {
       return fail(400, 'schedule_times must contain HH:MM values');
     }
     value.schedule_times = JSON.stringify([...new Set(body.schedule_times)].sort());
   }
   if ('interval_hours' in body) {
     const hours = Number(body.interval_hours);
-    if (!Number.isInteger(hours) || hours < 1 || hours > 24) return fail(400, 'interval_hours must be between 1 and 24');
+    if (!Number.isInteger(hours) || hours < 1 || hours > 24)
+      return fail(400, 'interval_hours must be between 1 and 24');
     value.interval_hours = hours;
   }
   if ('interval_start_time' in body) {
-    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(String(body.interval_start_time))) return fail(400, 'interval_start_time must be HH:MM');
+    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(String(body.interval_start_time)))
+      return fail(400, 'interval_start_time must be HH:MM');
     value.interval_start_time = body.interval_start_time;
   }
   if ('schedule_days' in body) {
@@ -304,18 +318,36 @@ export async function updateMedication(patientId, medicationId, parsed) {
       await conn.rollback();
       return fail(400, 'end_date must not be before start_date');
     }
-    const timingChanged = ['frequency', 'is_prn', 'start_date', 'end_date', 'schedule_type',
-      'schedule_times', 'interval_hours', 'interval_start_time', 'schedule_days',
-      'dosage_instruction', 'label_direction', 'timing_note'].some(
-      (key) => key in parsed.value
-    );
+    const timingChanged = [
+      'frequency',
+      'is_prn',
+      'start_date',
+      'end_date',
+      'schedule_type',
+      'schedule_times',
+      'interval_hours',
+      'interval_start_time',
+      'schedule_days',
+      'dosage_instruction',
+      'label_direction',
+      'timing_note',
+    ].some((key) => key in parsed.value);
     const before = auditSnapshot(row);
     const entries = Object.entries(parsed.value);
     await conn.execute(
       `UPDATE medications SET ${entries.map(([key]) => `${key}=?`).join(', ')},
         schedule_status=?, schedule_updated_by=?, schedule_updated_at=NOW(3),
         schedule_approved_by=NULL, schedule_approved_at=NULL, updated_at=NOW(3) WHERE id=?`,
-      [...entries.map(([, value]) => value), timingChanged ? (row.schedule_status === 'APPROVED' ? 'MODIFIED' : 'NEEDS_REVIEW') : row.schedule_status, patientId, row.id]
+      [
+        ...entries.map(([, value]) => value),
+        timingChanged
+          ? row.schedule_status === 'APPROVED'
+            ? 'MODIFIED'
+            : 'NEEDS_REVIEW'
+          : row.schedule_status,
+        patientId,
+        row.id,
+      ]
     );
     const invalidated = timingChanged ? await invalidateFuture(conn, row) : 0;
     const [[updated]] = await conn.execute(`${SELECT} WHERE m.id=? AND m.patient_id=?`, [
@@ -328,7 +360,14 @@ export async function updateMedication(patientId, medicationId, parsed) {
         `INSERT INTO medication_schedule_audit
            (id, medication_id, patient_id, actor_id, actor_role, before_info, after_info)
          VALUES (?, ?, ?, ?, 'patient', ?, ?)`,
-        [uuidv4(), row.id, patientId, patientId, JSON.stringify(before), JSON.stringify(auditSnapshot(updated))]
+        [
+          uuidv4(),
+          row.id,
+          patientId,
+          patientId,
+          JSON.stringify(before),
+          JSON.stringify(auditSnapshot(updated)),
+        ]
       );
     }
     if (timingChanged)
