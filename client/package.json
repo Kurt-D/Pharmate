@@ -9,15 +9,18 @@
     "build:device": "vite build --mode lantest",
     "preview": "vite preview",
     "lint": "oxlint",
+    "test:ocr": "node --test src/lib/mlKitOcr.test.js",
     "cap:sync": "npx cap sync",
     "cap:open": "npx cap open android"
   },
   "dependencies": {
-    "@capacitor/android": "^7.4.2",
-    "@capacitor/app": "^7.0.1",
-    "@capacitor/core": "^7.4.2",
-    "@capacitor/local-notifications": "^7.0.1",
-    "@capacitor/push-notifications": "^7.0.7",
+    "@capacitor-mlkit/text-recognition": "8.2.0",
+    "@capacitor/android": "8.5.1",
+    "@capacitor/app": "8.1.1",
+    "@capacitor/camera": "8.2.4",
+    "@capacitor/core": "8.5.1",
+    "@capacitor/local-notifications": "8.3.1",
+    "@capacitor/push-notifications": "8.1.2",
     "@marsidev/react-turnstile": "^1.6.1",
     "@react-oauth/google": "^0.13.5",
     "axios": "^1.20.0",
@@ -26,11 +29,10 @@
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "react-router-dom": "^7.7.0",
-    "socket.io-client": "^4.8.3",
-    "tesseract.js": "^7.0.0"
+    "socket.io-client": "^4.8.3"
   },
   "devDependencies": {
-    "@capacitor/cli": "^7.4.2",
+    "@capacitor/cli": "8.5.1",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.3",
@@ -39,8 +41,5 @@
     "postcss": "^8.5.26",
     "tailwindcss": "^3.4.17",
     "vite": "^8.1.1"
-  },
-  "allowScripts": {
-    "tesseract.js@7.0.0": true
   }
 }

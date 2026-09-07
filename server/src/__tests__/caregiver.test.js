@@ -10,6 +10,7 @@ import request from 'supertest';
 import app from '../index.js';
 import { pool } from '../db/connection.js';
 import { createPrivilegedTestUser } from './helpers/testUsers.js';
+import { INQUIRY_PRIVACY_VERSION } from '../../../shared/inquiryPrivacy.mjs';
 
 const PASSWORD = 'TestPass@123';
 const stamp = Date.now();
@@ -206,6 +207,11 @@ describe('UC-09 — refill / delivery on the patient’s behalf', () => {
 
 describe('UC-09 — medication inquiry on the patient’s behalf', () => {
   test('caregiver opens an inquiry for the linked patient', async () => {
+    const consent = await request(app)
+      .post('/api/patient/inquiry-consent')
+      .set(auth(patientToken))
+      .send({ accepted: true, policy_version: INQUIRY_PRIVACY_VERSION });
+    expect(consent.status).toBe(200);
     const res = await request(app)
       .post(`/api/caregiver/patients/${patientCode}/inquiries`)
       .set(auth(caregiverToken))

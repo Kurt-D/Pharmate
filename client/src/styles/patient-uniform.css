@@ -1217,13 +1217,30 @@ body.pm-a11y-reduce-motion .pm-home .pm-voice-card .pm-action-button {
 .pm-caregiver-voice-card {
   border: 1px solid #cfe0f7 !important;
   border-left: 3px solid #4c8ce4 !important;
+  box-sizing: border-box;
   box-shadow: 0 8px 24px rgba(64, 96, 147, 0.1) !important;
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .pm-caregiver-voice-card__tools {
   align-items: center;
   display: flex;
   gap: 0.4rem;
+  flex: 0 0 auto;
+}
+
+.pm-caregiver-voice-card .pm-section-heading {
+  align-items: center;
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.pm-caregiver-voice-card .pm-section-heading h2 {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .pm-caregiver-voice-card__tools > button {
@@ -1315,6 +1332,19 @@ body.pm-a11y-reduce-motion .pm-home .pm-voice-card .pm-action-button {
 }
 
 @media (max-width: 360px) {
+  .pm-caregiver-voice-card .pm-section-heading {
+    align-items: start;
+  }
+
+  .pm-caregiver-voice-card__tools {
+    gap: 0.2rem;
+  }
+
+  .pm-caregiver-voice-card__tools .pm-active-pill {
+    font-size: 0.65rem;
+    padding-inline: 0.4rem;
+  }
+
   .pm-home .pm-caregiver-voice-card .pm-reminder {
     gap: 0.7rem;
     grid-template-columns: 64px minmax(0, 1fr);
@@ -1408,4 +1438,100 @@ body.pm-a11y-tts-off .pm-home .pm-caregiver-voice-card .pm-wave,
 
 .pm-phone.pm-a11y-dark-mode .pm-caregiver-voice-card .pm-reminder__copy h3 {
   color: #f8fafc;
+}
+
+/* Filipino/mobile containment: translated labels must stay inside the phone canvas. */
+.pm-home > *,
+.pm-home .pm-dashboard-card,
+.pm-home .pm-week-calendar {
+  box-sizing: border-box;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.pm-home {
+  box-sizing: border-box;
+  min-width: 0;
+  overflow-x: clip;
+}
+
+.pm-home__header h1 {
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.pm-home .pm-caregiver-voice-card {
+  width: 100%;
+}
+
+.pm-home .pm-caregiver-voice-card .pm-section-heading h2,
+.pm-home .pm-caregiver-voice-card .pm-action-button,
+.pm-home .pm-caregiver-voice-card__snooze {
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.pm-home .pm-simple-dose-calendar .pm-week-calendar__header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.pm-home .pm-simple-dose-calendar__jump--header {
+  max-width: 132px;
+  min-width: 0;
+}
+
+.pm-home .pm-simple-dose-calendar__jump--header > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pm-home .pm-simple-dose-calendar__filters {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.pm-home .pm-simple-dose-calendar__filters button {
+  min-width: 0;
+  overflow: hidden;
+  padding-inline: 0.3rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 390px) {
+  .pm-home__header h1 {
+    font-size: 1.15rem;
+  }
+
+  .pm-home .pm-caregiver-voice-card .pm-section-heading {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .pm-home .pm-caregiver-voice-card .pm-section-heading h2 {
+    font-size: 0.78rem;
+  }
+
+  .pm-home .pm-caregiver-voice-card__tools .pm-active-pill {
+    display: none;
+  }
+
+  .pm-home .pm-simple-dose-calendar__jump--header {
+    max-width: 112px;
+  }
+}
+
+/* Keep the floating patient actions on the same edge as the narrower page
+   gutter used by the redesigned dashboard and sibling patient pages. */
+@media (max-width: 380px) {
+  .pm-global-patient-actions {
+    right: 1.2rem;
+  }
+}
+
+@media (max-width: 370px) {
+  .pm-global-patient-actions {
+    right: 0.75rem;
+  }
 }

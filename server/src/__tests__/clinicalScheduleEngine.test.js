@@ -57,6 +57,31 @@ describe('automated clinical schedule engine', () => {
     expect(result.schedule.flatMap((slot) => slot.medicines)).toHaveLength(4);
   });
 
+  test('does not try to solve avoid or monitoring interactions with time spacing', () => {
+    const second = rule({
+      drug_id: '00000000-0000-4000-8000-000000000002',
+      generic_name: 'Second medicine',
+    });
+    for (const interaction_type of ['AVOID', 'MONITOR']) {
+      const result = generateClinicalSchedule(
+        [rule(), second],
+        [
+          {
+            drug_a_id: rule().drug_id,
+            drug_b_id: second.drug_id,
+            interaction_type,
+            severity: 'moderate',
+            min_gap_hours: null,
+          },
+        ]
+      );
+      expect(result.can_save).toBe(false);
+      expect(result.warnings).toEqual(
+        expect.arrayContaining([expect.objectContaining({ code: 'NO_CONFLICT_FREE_SOLUTION' })])
+      );
+    }
+  });
+
   test('uses evenly spaced times when BID requires a 12-hour minimum gap', () => {
     const result = generateClinicalSchedule([
       rule({
@@ -102,5 +127,44 @@ describe('automated clinical schedule engine', () => {
       })
     );
     expect(result.warnings[0].message).not.toMatch(/layout|interval rule/i);
+  });
+
+  test('keeps PRN medicine out of recurring slots and creates a directions-only tracker', () => {
+    const result = generateClinicalSchedule([
+      rule({
+        standard_frequency: 'PRN',
+        rule_kind: 'PRN',
+        dosage_instruction: 'Take 1 tablet',
+        label_direction: 'Take 1 tablet as needed; do not exceed 4 tablets in 24 hours',
+        min_interval_hours: 6,
+        max_daily_doses: 4,
+      }),
+    ]);
+
+    expect(result.can_save).toBe(true);
+    expect(result.schedule).toEqual([]);
+    expect(result.prn_trackers).toEqual([
+      expect.objectContaining({ recurring_reminders: false, min_interval_hours: 6 }),
+    ]);
+    expect(result.warnings).toEqual(
+      expect.arrayContaining([expect.objectContaining({ code: 'PRN_TRACKER_ONLY' })])
+    );
+  });
+
+  test('does not create a PRN tracker without a reviewed interval and 24-hour limit', () => {
+    const result = generateClinicalSchedule([
+      rule({
+        standard_frequency: 'PRN',
+        rule_kind: 'PRN',
+        dosage_instruction: 'Take 1 tablet as needed',
+        label_direction: 'Take as needed',
+        min_interval_hours: 0,
+        max_daily_doses: 0,
+      }),
+    ]);
+    expect(result.can_save).toBe(false);
+    expect(result.warnings[0]).toEqual(
+      expect.objectContaining({ code: 'PRN_DIRECTIONS_REQUIRED', severity: 'blocking' })
+    );
   });
 });

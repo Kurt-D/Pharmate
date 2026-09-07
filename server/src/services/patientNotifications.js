@@ -13,6 +13,8 @@ export const NOTIFICATION_TYPES = [
   'streak_reset',
   'reward_earned',
   'caregiver_update',
+  'appointment_update',
+  'counseling_summary_ready',
 ];
 
 const DEFAULT_LIMIT = 20;
@@ -181,6 +183,11 @@ export async function createPatientNotification({
     streak_reset: ['Streak reset', "Complete all of today's doses to begin Day 1 again."],
     reward_earned: ['Priority Token earned', 'A streak reward was added to your balance.'],
     caregiver_update: ['Caregiver update', 'Your caregiver sent a new update.'],
+    appointment_update: ['Counseling appointment updated', 'Your appointment has a new update.'],
+    counseling_summary_ready: [
+      'Counseling summary ready',
+      'Your pharmacist-reviewed counseling summary is ready.',
+    ],
   }[type];
   const safeMetadata = Object.fromEntries(
     Object.entries(metadata).filter(

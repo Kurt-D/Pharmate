@@ -84,54 +84,131 @@ export async function doseHistory(patientId, startDate, endDate) {
  */
 export async function logDose(patientId, scheduleId, opts = {}) {
   const { logged_at, method = 'manual', notes = null, log_id, action = 'take' } = opts;
-
-  const [rows] = await pool.execute(
-    `SELECT ms.id, ms.medication_id, ms.scheduled_time, ms.status, m.frequency_code,
-            m.schedule_status
-     FROM medication_schedules ms
-     JOIN medications m ON m.id = ms.medication_id
-     WHERE ms.id = ? AND ms.patient_id = ?`,
-    [scheduleId, patientId]
-  );
-  const sched = rows[0];
-  if (!sched) return { error: 'not_found' };
-  if (sched.schedule_status !== 'APPROVED') return { error: 'schedule_not_approved' };
-  if (['taken', 'taken_late'].includes(sched.status)) {
-    const [[existing]] = await pool.execute(
-      `SELECT id, status FROM dose_logs WHERE schedule_id = ? AND status IN ('taken','taken_late')
-       ORDER BY created_at ASC LIMIT 1`,
-      [scheduleId]
-    );
-    return { status: 'TAKEN', log_id: existing?.id ?? null, duplicate: true, reflow: null };
-  }
-
   const loggedAt = logged_at ? new Date(logged_at) : new Date();
-  let status;
-  if (action === 'snooze') {
-    status = 'snoozed';
-  } else {
-    const delayMin = (loggedAt.getTime() - new Date(sched.scheduled_time).getTime()) / 60000;
-    status = classifyByDelay(delayMin); // taken | taken_late | missed
-  }
-
+  if (Number.isNaN(loggedAt.getTime())) return { error: 'invalid_logged_at' };
+  if (!['take', 'snooze'].includes(action)) return { error: 'invalid_action' };
   const confirmationMethod = VALID_METHODS.includes(method) ? method : 'manual';
   const logId = log_id || uuidv4();
-
-  // Append-only; a re-sent log id is a no-op (idempotent offline flush).
-  await pool.execute(
-    `INSERT INTO dose_logs
-       (id, schedule_id, patient_id, logged_at, confirmation_method, status, notes, synced)
-     VALUES (?, ?, ?, ?, ?, ?, ?, 1)
-     ON DUPLICATE KEY UPDATE id = id`,
-    [logId, scheduleId, patientId, loggedAt, confirmationMethod, status, notes]
-  );
-
-  // Reflect on the schedule row. 'snoozed' is not terminal; timing statuses are.
-  await pool.execute(`UPDATE medication_schedules SET status = ? WHERE id = ?`, [
-    status,
-    scheduleId,
-  ]);
-
+  let sched;
+  let status;
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const [[existingLog]] = await conn.execute(
+      'SELECT id,status FROM dose_logs WHERE id=? LIMIT 1',
+      [logId]
+    );
+    if (existingLog) {
+      await conn.commit();
+      return { status: existingLog.status, log_id: logId, duplicate: true, reflow: null };
+    }
+    const [rows] = await conn.execute(
+      `SELECT ms.id,ms.medication_id,ms.scheduled_time,ms.status,m.frequency_code,m.schedule_status,
+              COALESCE(m.max_daily_doses_snapshot,drug.max_daily_doses) AS max_daily_doses,
+              COALESCE(m.min_interval_hours_snapshot,drug.min_interval_hours,
+                       drug.default_interval_hours) AS min_interval_hours
+       FROM medication_schedules ms
+       JOIN medications m ON m.id=ms.medication_id
+       LEFT JOIN drug_reference drug ON drug.id=m.drug_id
+       WHERE ms.id=? AND ms.patient_id=? FOR UPDATE`,
+      [scheduleId, patientId]
+    );
+    sched = rows[0];
+    if (!sched) {
+      await conn.rollback();
+      return { error: 'not_found' };
+    }
+    if (sched.schedule_status !== 'APPROVED') {
+      await conn.rollback();
+      return { error: 'schedule_not_approved' };
+    }
+    if (action === 'take' && ['taken', 'taken_late'].includes(sched.status)) {
+      const [[existing]] = await conn.execute(
+        `SELECT id FROM dose_logs WHERE schedule_id=? AND status IN ('taken','taken_late')
+         ORDER BY created_at ASC LIMIT 1`,
+        [scheduleId]
+      );
+      await conn.commit();
+      return { status: 'TAKEN', log_id: existing?.id || null, duplicate: true, reflow: null };
+    }
+    if (action === 'snooze') {
+      status = 'snoozed';
+    } else {
+      const delayMin = (loggedAt.getTime() - new Date(sched.scheduled_time).getTime()) / 60000;
+      status = classifyByDelay(delayMin); // taken | taken_late | missed
+    }
+    if (['taken', 'taken_late'].includes(status)) {
+      const maximum = Number(sched.max_daily_doses);
+      if (!Number.isInteger(maximum) || maximum <= 0) {
+        await conn.rollback();
+        return { error: 'dose_limit_unavailable' };
+      }
+      const [recentLogs] = await conn.execute(
+        `SELECT DISTINCT dose_log.schedule_id,dose_log.logged_at
+         FROM dose_logs dose_log
+         JOIN medication_schedules other_schedule ON other_schedule.id=dose_log.schedule_id
+         WHERE dose_log.patient_id=? AND other_schedule.medication_id=?
+           AND dose_log.status IN ('taken','taken_late')
+           AND dose_log.logged_at BETWEEN DATE_SUB(?,INTERVAL 24 HOUR)
+                                      AND DATE_ADD(?,INTERVAL 24 HOUR)
+         `,
+        [patientId, sched.medication_id, loggedAt, loggedAt]
+      );
+      const candidateTime = loggedAt.getTime();
+      const events = [
+        ...recentLogs.map((row) => ({ time: new Date(row.logged_at).getTime(), candidate: false })),
+        { time: candidateTime, candidate: true },
+      ].sort(
+        (left, right) => left.time - right.time || Number(left.candidate) - Number(right.candidate)
+      );
+      const dayMs = 24 * 60 * 60 * 1000;
+      let exceedsMaximum = false;
+      for (let left = 0; left < events.length; left += 1) {
+        for (let right = left; right < events.length; right += 1) {
+          if (events[right].time - events[left].time > dayMs) break;
+          const window = events.slice(left, right + 1);
+          if (window.some((event) => event.candidate) && window.length > maximum) {
+            exceedsMaximum = true;
+            break;
+          }
+        }
+        if (exceedsMaximum) break;
+      }
+      if (exceedsMaximum) {
+        await conn.rollback();
+        return { error: 'max_daily_doses_exceeded', max_daily_doses: maximum };
+      }
+      const minimumInterval = Number(sched.min_interval_hours || 0);
+      if (minimumInterval > 0) {
+        const conflicting = recentLogs.find(
+          (row) =>
+            Math.abs(new Date(row.logged_at).getTime() - candidateTime) <
+            minimumInterval * 60 * 60 * 1000
+        );
+        if (conflicting) {
+          await conn.rollback();
+          return {
+            error: 'minimum_dose_interval_not_met',
+            min_interval_hours: minimumInterval,
+            nearest_logged_at: conflicting.logged_at,
+          };
+        }
+      }
+    }
+    await conn.execute(
+      `INSERT INTO dose_logs
+         (id,schedule_id,patient_id,logged_at,confirmation_method,status,notes,synced)
+       VALUES (?,?,?,?,?,?,?,1)`,
+      [logId, scheduleId, patientId, loggedAt, confirmationMethod, status, notes]
+    );
+    await conn.execute('UPDATE medication_schedules SET status=? WHERE id=?', [status, scheduleId]);
+    await conn.commit();
+  } catch (error) {
+    await conn.rollback();
+    throw error;
+  } finally {
+    conn.release();
+  }
   let reflow = null;
   if (status === 'taken_late') {
     reflow = await reflowSuggestion(patientId, sched.frequency_code, loggedAt);
@@ -241,6 +318,8 @@ export async function sweepMissed(now = new Date()) {
 export async function syncLogs(patientId, logs) {
   let applied = 0;
   let duplicates = 0;
+  let rejected = 0;
+  const errors = [];
   for (const log of logs) {
     if (!log.log_id || !log.schedule_id) continue;
     const [existing] = await pool.execute(`SELECT id FROM dose_logs WHERE id = ?`, [log.log_id]);
@@ -253,6 +332,10 @@ export async function syncLogs(patientId, logs) {
       method: log.method || 'local',
     });
     if (!r.error) applied++;
+    else {
+      rejected++;
+      errors.push({ log_id: log.log_id, schedule_id: log.schedule_id, error: r.error });
+    }
   }
-  return { applied, duplicates };
+  return { applied, duplicates, rejected, errors };
 }

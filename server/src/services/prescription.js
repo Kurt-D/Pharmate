@@ -267,9 +267,18 @@ export async function decideValidation(pharmacistId, photoId, action, reason, op
       action
     ];
     await conn.execute(
-      `UPDATE prescription_photos SET status=?, decision_reason=?, pharmacist_id=?, decision_at=NOW(3),
+      `UPDATE prescription_photos SET status=?, decision_reason=?, pharmacist_id=?,
+       reviewer_license_number=?,reviewer_license_jurisdiction=?,decision_at=NOW(3),
        purge_at=DATE_ADD(NOW(3), INTERVAL ? DAY), claimed_by=NULL, claim_expires_at=NULL WHERE id=?`,
-      [status, parsed.value.reason, pharmacistId, PURGE_DAYS, photoId]
+      [
+        status,
+        parsed.value.reason,
+        pharmacistId,
+        options.credential?.license_number || null,
+        options.credential?.license_jurisdiction || null,
+        PURGE_DAYS,
+        photoId,
+      ]
     );
     if (action === 'approve') {
       await conn.execute(

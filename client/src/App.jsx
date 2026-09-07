@@ -5,6 +5,7 @@ import { AccessibilityProvider } from './context/AccessibilityContext.jsx';
 import Login from './pages/LoginRedesign.jsx';
 import ForgotPassword from './pages/ForgotPassword.jsx';
 import Signup from './pages/SignupRedesign.jsx';
+import PrivacyPolicy from './pages/PrivacyPolicy.jsx';
 import IdentifyUser from './pages/IdentifyUser.jsx';
 import AnchorOnboarding from './pages/AnchorOnboarding.jsx';
 import PatientLayout from './pages/patient/PatientLayout.jsx';
@@ -19,6 +20,7 @@ import Orders from './pages/patient/OrdersRedesign.jsx';
 import Shop from './pages/patient/Shop.jsx';
 import Profile from './pages/patient/ProfileRedesign.jsx';
 import AccessibilitySettings from './pages/patient/AccessibilitySettings.jsx';
+import Appointments from './pages/patient/Appointments.jsx';
 import { HelpCenterPage } from './components/TutorialCenterScreen.jsx';
 import PharmacistLayout from './pages/pharmacist/PharmacistLayout.jsx';
 import DrugCuration from './pages/pharmacist/DrugCuration.jsx';
@@ -28,13 +30,16 @@ import OrdersQueue from './pages/pharmacist/OrdersQueue.jsx';
 import Patients from './pages/pharmacist/PatientsRedesign.jsx';
 import PharmacistDashboard from './pages/pharmacist/PharmacistDashboard.jsx';
 import PharmacistAlerts from './pages/pharmacist/Alerts.jsx';
+import PharmacistCounseling from './pages/pharmacist/Counseling.jsx';
 import AdminLayout from './pages/admin/AdminLayout.jsx';
 import AdminDashboard from './pages/admin/DashboardRedesign.jsx';
 import AdminUsers from './pages/admin/UsersRedesign.jsx';
 import AdminMedicines from './pages/admin/Medicines.jsx';
+import AdminRuleGovernance from './pages/admin/RuleGovernance.jsx';
 import AdminOrders from './pages/admin/Orders.jsx';
 import AdminAlerts from './pages/admin/Alerts.jsx';
 import AdminAccessibility from './pages/admin/Accessibility.jsx';
+import AdminOcrValidation from './pages/admin/OcrValidation.jsx';
 import CaregiverPortal from './pages/caregiver/CaregiverPortal.jsx';
 import ProtectedRoute from './components/ProtectedRoute.jsx';
 import './App.css';
@@ -52,6 +57,7 @@ export default function App() {
                 <Route path="/forgot-password" element={<ForgotPassword />} />
                 <Route path="/reset-password" element={<ForgotPassword />} />
                 <Route path="/signup" element={<Signup />} />
+                <Route path="/privacy" element={<PrivacyPolicy />} />
                 <Route path="/identify" element={<IdentifyUser />} />
 
                 <Route
@@ -81,6 +87,7 @@ export default function App() {
                   <Route path="schedule" element={<Schedule />} />
                   <Route path="medications/:id/prescription" element={<PrescriptionUpload />} />
                   <Route path="ask" element={<Ask />} />
+                  <Route path="appointments" element={<Appointments />} />
                   <Route path="orders" element={<Orders />} />
                   <Route path="shop" element={<Shop />} />
                   <Route path="profile" element={<Profile />} />
@@ -108,6 +115,7 @@ export default function App() {
                   <Route path="queue" element={<OrdersQueue />} />
                   <Route path="patients" element={<Patients />} />
                   <Route path="alerts" element={<PharmacistAlerts />} />
+                  <Route path="appointments" element={<PharmacistCounseling />} />
                 </Route>
                 <Route
                   path="/admin"
@@ -121,6 +129,8 @@ export default function App() {
                   <Route path="dashboard" element={<AdminDashboard />} />
                   <Route path="users" element={<AdminUsers />} />
                   <Route path="medicines" element={<AdminMedicines />} />
+                  <Route path="rules" element={<AdminRuleGovernance />} />
+                  <Route path="ocr-validation" element={<AdminOcrValidation />} />
                   <Route path="orders" element={<AdminOrders />} />
                   <Route path="priority" element={<Navigate to="/admin/dashboard" replace />} />
                   <Route path="alerts" element={<AdminAlerts />} />

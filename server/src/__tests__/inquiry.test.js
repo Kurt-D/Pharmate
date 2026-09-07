@@ -7,6 +7,7 @@ import request from 'supertest';
 import app from '../index.js';
 import { pool } from '../db/connection.js';
 import { createPrivilegedTestUser } from './helpers/testUsers.js';
+import { INQUIRY_PRIVACY_VERSION } from '../../../shared/inquiryPrivacy.mjs';
 
 const PASSWORD = 'TestPass@123';
 const stamp = Date.now();
@@ -33,13 +34,21 @@ async function register(role, extra = {}) {
     });
   }
   const login = await request(app).post('/api/auth/login').send({ email, password: PASSWORD });
+  if (role === 'patient') {
+    const consent = await request(app)
+      .post('/api/patient/inquiry-consent')
+      .set({ Authorization: `Bearer ${login.body.accessToken}` })
+      .send({ accepted: true, policy_version: INQUIRY_PRIVACY_VERSION });
+    expect(consent.status).toBe(200);
+  }
   return { token: login.body.accessToken, id: login.body.user.id };
 }
 
 beforeAll(async () => {
   const p = await register('patient', { full_name: PATIENT_PII });
   patientToken = p.token;
-  pharmToken = (await register('pharmacist', { full_name: 'Dr S8' })).token;
+  const pharmacist = await register('pharmacist', { full_name: 'Dr S8' });
+  pharmToken = pharmacist.token;
   otherPatientToken = (await register('patient', { full_name: 'Other Patient S8' })).token;
   otherPharmToken = (await register('pharmacist', { full_name: 'Dr Other S8' })).token;
 
@@ -49,6 +58,7 @@ beforeAll(async () => {
      VALUES (?, 'PharMate Test Branch', '123 Test Ave', 'Test City proper')`,
     [branchId]
   );
+  await pool.execute('UPDATE pharmacists SET branch_id=? WHERE id=?', [branchId, pharmacist.id]);
 });
 
 afterAll(async () => {

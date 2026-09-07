@@ -1,7 +1,9 @@
 # Testing PharMate on an Android phone (debug APK)
 
-The web client is wrapped as a Capacitor Android app (`android/`). Everything is
-pre-wired except the actual compile, which needs the Android SDK on this machine.
+The web client is wrapped as a Capacitor 8 Android app (`android/`). The native
+build includes the Google ML Kit Text Recognition v2 model used by medicine and
+prescription scanning. Compilation needs Node.js 22+, Android Studio Otter
+2025.2.1 or newer, and Android SDK 36.
 
 > **This is a local device-testing profile, not the pilot build.** The APK here
 > talks to a dev PC over plain HTTP on the LAN. The production/pilot build
@@ -74,6 +76,16 @@ The IP is compiled into the bundle, so re-point and rebuild:
 - **Offline dose reminders** — Capacitor local notifications from the confirmed
   plan; fire with no network.
 - **Voice prompt** — speaks the medicine name when a reminder arrives.
+- **Offline Google ML Kit OCR** — label and prescription text stays on-device;
+  the bundled Latin-script model works in airplane mode.
+
+## OCR device validation
+
+Follow [`docs/OCR_VALIDATION_PROTOCOL.md`](../docs/OCR_VALIDATION_PROTOCOL.md).
+For an offline run, install and open the app once, enable airplane mode, fully
+close and reopen PharMate, then scan the physical package. Confirm all detected
+fields against the package. When connectivity returns, the queued field-level
+measurement appears under **Admin → OCR Validation**.
 
 **Not yet:** online FCM push (layer 1). That needs a Firebase project +
 `google-services.json` + the push-notifications plugin — a follow-up. Until then

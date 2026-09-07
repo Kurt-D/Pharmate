@@ -10,13 +10,15 @@ const med = (id, drugId, drugName) => ({
 });
 
 describe('deterministic medication schedule safety classification', () => {
-  test('returns SAFE_SCHEDULE when no verified conflict or spacing rule exists', () => {
+  test('reports completed rule checks without claiming medical safety', () => {
     const result = classifyScheduleSafety(
       { medications: [med('m1', 'd1', 'Medicine A')], interactions: [] },
       { slots: [], unresolved: [] }
     );
-    expect(result.classification).toBe('SAFE_SCHEDULE');
+    expect(result.classification).toBe('RULE_CHECKS_COMPLETED');
     expect(result.can_save).toBe(true);
+    expect(result.findings[0].title).toBe('Rule checks completed');
+    expect(result.findings[0].message).toMatch(/not a medical guarantee/i);
   });
 
   test('does not add duplicate medicine rows to the schedule safety message', () => {
@@ -27,7 +29,7 @@ describe('deterministic medication schedule safety classification', () => {
       },
       { slots: [], unresolved: [] }
     );
-    expect(result.classification).toBe('SAFE_SCHEDULE');
+    expect(result.classification).toBe('RULE_CHECKS_COMPLETED');
     expect(result.findings.some((item) => item.code === 'DUPLICATE_MEDICINE')).toBe(false);
   });
 

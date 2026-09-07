@@ -67,7 +67,11 @@ app.use((_req, res) => {
 // The unused _next arg is required for Express to treat this as an error handler.
 app.use((err, _req, res, _next) => {
   const status = err.status || err.statusCode || 500;
-  if (status >= 500 && (process.env.NODE_ENV !== 'test' || process.env.DEBUG_ERRORS === 'true')) {
+  if (
+    status >= 500 &&
+    process.env.NODE_ENV !== 'test' &&
+    (process.env.NODE_ENV !== 'production' || process.env.LOG_SERVER_ERRORS === 'true')
+  ) {
     console.error(err);
   }
   const message = status >= 500 ? 'Internal server error' : err.message;

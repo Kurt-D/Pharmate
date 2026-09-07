@@ -20,7 +20,7 @@ ALTER TABLE medication_rule_variants
   ADD COLUMN release_type ENUM('IMMEDIATE_RELEASE','EXTENDED_RELEASE','DELAYED_RELEASE','NOT_APPLICABLE','UNKNOWN')
     NULL AFTER administration_route,
   ADD COLUMN supported_frequency_codes JSON NULL AFTER release_type,
-  ADD COLUMN frequency_code VARCHAR(20) NULL AFTER supported_frequency_codes,
+  ADD COLUMN frequency_code VARCHAR(100) NULL AFTER supported_frequency_codes,
   ADD COLUMN daily_dose_count TINYINT UNSIGNED NULL AFTER frequency_code,
   ADD COLUMN min_interval_hours DECIMAL(5,2) NULL AFTER daily_dose_count,
   ADD COLUMN max_daily_doses TINYINT UNSIGNED NULL AFTER min_interval_hours,

@@ -1,18 +1,26 @@
 import { BellRing, CheckCircle2, Clock3, ScanLine, Volume2, X } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { speak } from '../../lib/notifications.js';
+import { useLanguage } from '../../context/LanguageContext.jsx';
 
 export default function PatientVoiceAlert({ alert, dose, onTake, onScan, onSnooze, onDismiss }) {
+  const { language } = useLanguage();
+  const tr = (en, fil) => (language === 'fil' ? fil : en);
   const [speaking, setSpeaking] = useState(false);
+  const medicine = dose?.drug_name || alert?.medicine || tr('your medicine', 'iyong gamot');
+  const reminderText = tr(
+    `It’s time to take your ${medicine}.`,
+    `Oras nang inumin ang ${medicine}.`
+  );
 
   const playReminder = useCallback(() => {
-    if (!alert?.message) return;
-    speak(alert.message, {
+    if (!alert) return;
+    speak(reminderText, {
       onStart: () => setSpeaking(true),
       onEnd: () => setSpeaking(false),
       onError: () => setSpeaking(false),
     });
-  }, [alert?.message]);
+  }, [alert, reminderText]);
 
   useEffect(() => {
     playReminder();
@@ -20,31 +28,38 @@ export default function PatientVoiceAlert({ alert, dose, onTake, onScan, onSnooz
   }, [playReminder]);
 
   if (!alert) return null;
-  const medicine = dose?.drug_name || alert.medicine || 'your scheduled medicine';
 
   return (
     <section
-      aria-labelledby="caregiver-voice-reminder-title"
+      aria-labelledby="medicine-voice-reminder-title"
       className="pm-dashboard-card pm-voice-card pm-caregiver-voice-card"
       role="status"
     >
       <div className="pm-section-heading">
-        <h2 id="caregiver-voice-reminder-title">
+        <h2 id="medicine-voice-reminder-title">
           <span>
             <BellRing />
           </span>{' '}
-          Caregiver Voice Reminder
+          {tr('Medicine Voice Reminder', 'Paalalang may Boses')}
         </h2>
         <div className="pm-caregiver-voice-card__tools">
-          <span className="pm-active-pill">Active</span>
-          <button aria-label="Dismiss caregiver reminder" onClick={onDismiss} type="button">
+          <span className="pm-active-pill">{tr('Active', 'Aktibo')}</span>
+          <button
+            aria-label={tr('Dismiss voice reminder', 'Isara ang paalala')}
+            onClick={onDismiss}
+            type="button"
+          >
             <X />
           </button>
         </div>
       </div>
       <div className="pm-reminder">
         <button
-          aria-label={speaking ? 'Voice reminder is playing' : 'Play caregiver voice reminder'}
+          aria-label={
+            speaking
+              ? tr('Voice reminder is playing', 'Pinapatugtog ang paalala')
+              : tr('Play medicine voice reminder', 'Patugtugin ang paalala')
+          }
           className={`pm-mic ${speaking ? 'speaking' : ''}`}
           onClick={playReminder}
           type="button"
@@ -52,9 +67,14 @@ export default function PatientVoiceAlert({ alert, dose, onTake, onScan, onSnooz
           <Volume2 />
         </button>
         <div className="pm-reminder__copy">
-          <small>Reminder from {alert.caregiverName || 'your caregiver'}</small>
-          <h3>“It’s time to take your {medicine}.”</h3>
-          <p>{alert.message}</p>
+          <small>{tr('Scheduled medicine reminder', 'Naka-iskedyul na paalala')}</small>
+          <h3>“{reminderText}”</h3>
+          <p>
+            {tr(
+              'Please check your medicine before taking it.',
+              'Suriin muna ang gamot bago ito inumin.'
+            )}
+          </p>
         </div>
       </div>
       <div className={`pm-wave ${speaking ? 'speaking' : ''}`} aria-hidden="true">
@@ -63,14 +83,16 @@ export default function PatientVoiceAlert({ alert, dose, onTake, onScan, onSnooz
         ))}
       </div>
       <button className="pm-action-button pm-action-button--outline" onClick={onTake} type="button">
-        <CheckCircle2 /> Mark as Taken
+        <CheckCircle2 /> {tr('Mark as Taken', 'Markahan bilang Nainom')}
       </button>
       <button className="pm-action-button" onClick={onScan} type="button">
-        <ScanLine /> Scan Medicine
+        <ScanLine /> {tr('Scan Medicine', 'I-scan ang Gamot')}
       </button>
-      <small className="pm-scan-hint">Scan the medicine for a more accurate adherence log.</small>
+      <small className="pm-scan-hint">
+        {tr('Scan for a more accurate record.', 'I-scan para sa mas tumpak na tala.')}
+      </small>
       <button className="pm-caregiver-voice-card__snooze" onClick={onSnooze} type="button">
-        <Clock3 /> Snooze reminder for 15 minutes
+        <Clock3 /> {tr('Snooze for 15 minutes', 'Ipagpaliban nang 15 minuto')}
       </button>
     </section>
   );

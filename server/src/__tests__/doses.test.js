@@ -12,6 +12,7 @@ import { sweepMissed } from '../services/doses.js';
 const EMAIL = `patient.s6.${Date.now()}@test.pharmate`;
 const PASSWORD = 'TestPass@123';
 let token;
+let patientId;
 const auth = () => ({ Authorization: `Bearer ${token}` });
 
 beforeAll(async () => {
@@ -20,6 +21,8 @@ beforeAll(async () => {
     .send({ email: EMAIL, password: PASSWORD, role: 'patient', full_name: 'S6 Tester' });
   token = (await request(app).post('/api/auth/login').send({ email: EMAIL, password: PASSWORD }))
     .body.accessToken;
+  const [[patient]] = await pool.execute('SELECT id FROM users WHERE email=?', [EMAIL]);
+  patientId = patient.id;
 
   // A curated, active, interval-dosed medication → confirmable schedule.
   await request(app)
@@ -61,6 +64,36 @@ describe('GET /api/patient/doses/today', () => {
     const result = await today();
     expect(result.some((item) => item.schedule_id === futureId)).toBe(false);
     await pool.execute('DELETE FROM medication_schedules WHERE id=?', [futureId]);
+  });
+
+  test('keeps active medicines and upcoming reminders in sync', async () => {
+    const [dose] = await today();
+    await pool.execute("UPDATE medications SET status='completed' WHERE id=?", [
+      dose.medication_id,
+    ]);
+
+    const medicineList = await request(app).get('/api/patient/medications').set(auth()).expect(200);
+    expect(medicineList.body.some((medicine) => medicine.id === dose.medication_id)).toBe(false);
+
+    const currentDoses = await today();
+    expect(
+      currentDoses.some(
+        (item) =>
+          item.medication_id === dose.medication_id &&
+          ['scheduled', 'snoozed'].includes(item.status)
+      )
+    ).toBe(false);
+
+    const day = new Date(new Date(dose.scheduled_time).getTime() + 8 * 3600000)
+      .toISOString()
+      .slice(0, 10);
+    const calendar = await request(app)
+      .get(`/api/patient/doses/calendar?date=${day}&status=upcoming`)
+      .set(auth())
+      .expect(200);
+    expect(calendar.body.some((item) => item.medication_id === dose.medication_id)).toBe(false);
+
+    await pool.execute("UPDATE medications SET status='active' WHERE id=?", [dose.medication_id]);
   });
 });
 
@@ -155,29 +188,86 @@ describe('Missed sweep — the 30-minute rule', () => {
 });
 
 describe('Offline outbox sync (D-F)', () => {
-  test('20 offline logs apply once, re-sync is all duplicates', async () => {
-    await request(app)
-      .post('/api/patient/medications')
-      .set(auth())
-      .send({ drug_name: 'losartan', frequency: 'QD', source: 'OTC_SELF', is_prn: false });
-    await request(app).post('/api/patient/schedule/confirm').set(auth());
-    const doses = await today();
-    const scheduleIds = doses.map((d) => d.schedule_id);
-
-    // 20 logs with distinct client ids, cycling across the available doses.
-    const logs = Array.from({ length: 20 }, (_, i) => ({
-      log_id: `s6-outbox-${Date.now()}-${i}`,
-      schedule_id: scheduleIds[i % scheduleIds.length],
-      logged_at: doses[i % doses.length].scheduled_time,
-      method: 'local',
-    }));
+  test('one offline dose applies once and re-sync is idempotent', async () => {
+    const suffix = Date.now();
+    const medicationId = `sync-med-${suffix}`.slice(0, 36);
+    const scheduleId = `sync-dose-${suffix}`.slice(0, 36);
+    const scheduledTime = new Date();
+    await pool.execute(
+      `INSERT INTO medications
+       (id,patient_id,drug_name_raw,source,is_prn,frequency,frequency_code,status,
+        max_daily_doses_snapshot,min_interval_hours_snapshot,dose_limit_basis)
+       VALUES (?,?,'Offline sync test','OTC_SELF',0,'twice daily','BID','active',2,1,'PATIENT_LABEL')`,
+      [medicationId, patientId]
+    );
+    await pool.execute(
+      `INSERT INTO medication_schedules
+       (id,medication_id,patient_id,scheduled_time,generated_reason,is_confirmed,
+        schedule_version,status)
+       VALUES (?,?,?,?,'offline sync test',1,98,'scheduled')`,
+      [scheduleId, medicationId, patientId, scheduledTime]
+    );
+    const logs = [
+      {
+        log_id: `s6-outbox-${Date.now()}`,
+        schedule_id: scheduleId,
+        logged_at: scheduledTime.toISOString(),
+        method: 'local',
+      },
+    ];
 
     const first = await request(app).post('/api/patient/doses/sync').set(auth()).send({ logs });
-    expect(first.body.applied).toBe(20);
+    expect(first.body.applied).toBe(1);
     expect(first.body.duplicates).toBe(0);
+    expect(first.body.rejected).toBe(0);
 
     const second = await request(app).post('/api/patient/doses/sync').set(auth()).send({ logs });
     expect(second.body.applied).toBe(0);
-    expect(second.body.duplicates).toBe(20);
+    expect(second.body.duplicates).toBe(1);
+  });
+});
+
+describe('Dose-limit enforcement', () => {
+  test('blocks a second taken event when it would exceed the 24-hour maximum', async () => {
+    const suffix = Date.now();
+    const medicationId = `limit-med-${suffix}`.slice(0, 36);
+    const firstId = `limit-dose-a-${suffix}`.slice(0, 36);
+    const secondId = `limit-dose-b-${suffix}`.slice(0, 36);
+    const firstTime = new Date();
+    const secondTime = new Date(firstTime.getTime() + 12 * 3600000);
+    await pool.execute(
+      `INSERT INTO medications
+       (id,patient_id,drug_name_raw,source,is_prn,frequency,frequency_code,status,
+        max_daily_doses_snapshot,min_interval_hours_snapshot,dose_limit_basis)
+       VALUES (?,?,'Dose limit test','OTC_SELF',0,'once daily','QD','active',1,1,'PATIENT_LABEL')`,
+      [medicationId, patientId]
+    );
+    await pool.execute(
+      `INSERT INTO medication_schedules
+       (id,medication_id,patient_id,scheduled_time,generated_reason,is_confirmed,
+        schedule_version,status)
+       VALUES (?, ?, ?, ?, 'dose limit test',1,99,'scheduled'),
+              (?, ?, ?, ?, 'dose limit test',1,99,'scheduled')`,
+      [firstId, medicationId, patientId, firstTime, secondId, medicationId, patientId, secondTime]
+    );
+
+    await request(app)
+      .post(`/api/patient/doses/${firstId}/log`)
+      .set(auth())
+      .send({ logged_at: firstTime.toISOString(), method: 'manual' })
+      .expect(201);
+    const blocked = await request(app)
+      .post(`/api/patient/doses/${secondId}/log`)
+      .set(auth())
+      .send({ logged_at: secondTime.toISOString(), method: 'manual' });
+    expect(blocked.status).toBe(409);
+    expect(blocked.body.max_daily_doses).toBe(1);
+
+    const repeated = await request(app)
+      .post(`/api/patient/doses/${firstId}/log`)
+      .set(auth())
+      .send({ logged_at: firstTime.toISOString(), method: 'manual', log_id: `repeat-${suffix}` });
+    expect(repeated.status).toBe(409);
+    expect(repeated.body.error).toMatch(/already has a recorded dose/i);
   });
 });

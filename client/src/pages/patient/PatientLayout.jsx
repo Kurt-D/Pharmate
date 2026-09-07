@@ -35,6 +35,12 @@ function PatientIcon({ name, size = 23 }) {
         <path d="M8 9h8M8 13h5" />
       </>
     ),
+    calendar: (
+      <>
+        <rect x="3" y="5" width="18" height="16" rx="2" />
+        <path d="M16 3v4M8 3v4M3 10h18M8 14h3M13 14h3M8 18h3" />
+      </>
+    ),
     delivery: (
       <>
         <path d="M3 6h11v11H3Z" />
@@ -100,6 +106,7 @@ const NAV = [
   { to: '/patient/today', icon: 'home', label: 'nav.home' },
   { to: '/patient/medications', icon: 'medication', label: 'nav.medications' },
   { to: '/patient/ask', icon: 'message', label: 'nav.ask' },
+  { to: '/patient/appointments', icon: 'calendar', label: 'nav.appointments' },
   { to: '/patient/shop', icon: 'delivery', label: 'nav.orders' },
   { to: '/patient/profile', icon: 'profile', label: 'nav.profile' },
 ];
@@ -177,7 +184,7 @@ export default function PatientLayout() {
     }
   }
 
-  const realtimeStatus = useRealtime((event, payload) => {
+  useRealtime((event, payload) => {
     if (event === 'streak-updated') {
       setStreakStatus(payload);
       localStorage.setItem(
@@ -207,6 +214,8 @@ export default function PatientLayout() {
         'INQUIRY_UPDATED',
         'PRESCRIPTION_STATUS_CHANGED',
         'CAREGIVER_LINK_UPDATED',
+        'COUNSELING_APPOINTMENT_UPDATED',
+        'COUNSELING_SUMMARY_PUBLISHED',
       ].includes(event)
     ) {
       window.dispatchEvent(new CustomEvent('pm-domain-updated', { detail: { event, payload } }));
@@ -322,18 +331,6 @@ export default function PatientLayout() {
   return (
     <div className={accessibilityClasses}>
       <div className="pm-phone__scroll" ref={pageContentRef}>
-        <div
-          className={`pm-realtime-indicator is-${realtimeStatus}`}
-          role="status"
-          title={tr('Real-time system connection', 'Real-time system connection')}
-        >
-          <i />
-          {realtimeStatus === 'live'
-            ? tr('Live', 'Live')
-            : realtimeStatus === 'offline'
-              ? tr('Offline', 'Offline')
-              : tr('Connecting', 'Kumokonekta')}
-        </div>
         {![
           '/patient/streak',
           '/patient/schedule',

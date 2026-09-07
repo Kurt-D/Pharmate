@@ -77,7 +77,9 @@ export async function orderChanged({ patientId, kind, orderId, status, created =
 export async function inquiryChanged({ patientId, threadId, action, recipientRole = null }) {
   const payload = { inquiry_id: threadId, action };
   publishUser(patientId, 'INQUIRY_UPDATED', payload);
-  publishRole('pharmacist', 'INQUIRY_UPDATED', { patient_id: patientId, ...payload });
+  // Queue retrieval applies assignment/branch access. A role-wide invalidation
+  // must never expose which patient or conversation changed to unrelated staff.
+  publishRole('pharmacist', 'INQUIRY_UPDATED', { refresh: true });
   if (recipientRole === 'patient') {
     await createPortalNotification({
       userId: patientId,

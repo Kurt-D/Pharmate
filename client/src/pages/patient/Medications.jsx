@@ -3,6 +3,12 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { api } from '../../api.js';
 import { speak } from '../../lib/notifications.js';
 import { newLogId } from '../../lib/doseOutbox.js';
+import {
+  captureOcrImage,
+  OCR_CONFIDENCE_THRESHOLD,
+  recognizeMedicineImage,
+} from '../../lib/mlKitOcr.js';
+import { recordOcrEvaluation } from '../../lib/ocrTelemetry.js';
 import { useLanguage } from '../../context/LanguageContext.jsx';
 import { FriendlyTimePicker } from './AutomatedAddMedication.jsx';
 
@@ -315,6 +321,10 @@ export default function Medications() {
   const [scanOpen, setScanOpen] = useState(false);
   const [scanPhoto, setScanPhoto] = useState(null);
   const [scanName, setScanName] = useState('');
+  const [scanStrength, setScanStrength] = useState('');
+  const [scanFormulation, setScanFormulation] = useState('');
+  const [scanOcr, setScanOcr] = useState(null);
+  const [scanReviewed, setScanReviewed] = useState(false);
   const [scanResult, setScanResult] = useState(null);
   const [scanBusy, setScanBusy] = useState(false);
   const [doseLogBusy, setDoseLogBusy] = useState(false);
@@ -328,13 +338,10 @@ export default function Medications() {
   const [scheduleBusy, setScheduleBusy] = useState(false);
   const [scheduleTargetIds, setScheduleTargetIds] = useState([]);
   const [scheduleReviewConfirmed, setScheduleReviewConfirmed] = useState(false);
-  const [scanProgress, setScanProgress] = useState(0);
   const [scanConfidence, setScanConfidence] = useState(0);
   const [tourAddMode, setTourAddMode] = useState(false);
   const [loadRevision, setLoadRevision] = useState(0);
   const viewBeforeTourRef = useRef(null);
-  const cameraInputRef = useRef(null);
-  const galleryInputRef = useRef(null);
   const [form, setForm] = useState({
     entries: [manualEntryFromMedicine(null, 'manual-entry-1')],
     start: new Date().toISOString().slice(0, 10),
@@ -528,13 +535,6 @@ export default function Medications() {
       document.removeEventListener('visibilitychange', refreshWhenVisible);
     };
   }, []);
-
-  useEffect(
-    () => () => {
-      if (scanPhoto?.url) URL.revokeObjectURL(scanPhoto.url);
-    },
-    [scanPhoto]
-  );
 
   const upcoming = useMemo(
     () =>
@@ -892,60 +892,71 @@ export default function Medications() {
     return response.data;
   }
 
-  async function readMedicineLabel(file) {
+  async function readMedicineLabel(media) {
     setScanBusy(true);
-    setScanProgress(0);
     try {
-      const { createWorker } = await import('tesseract.js');
-      const worker = await createWorker('eng', 1, {
-        logger: (message) => {
-          if (message.status === 'recognizing text')
-            setScanProgress(Math.round(message.progress * 100));
-        },
-      });
-      const recognized = await worker.recognize(file, { rotateAuto: true });
-      await worker.terminate();
-      const confidence = Math.round(Number(recognized.data.confidence || 0));
-      const guess = guessMedicineName(recognized.data.text, meds || []);
-      setScanConfidence(confidence);
+      const scan = await recognizeMedicineImage(media);
+      scan.purpose = 'MEDICINE_LABEL';
+      const guess = scan.fields.name || guessMedicineName(scan.text, meds || []);
+      setScanOcr(scan);
+      setScanConfidence(Math.round(Number(scan.field_confidence || 0) * 100));
       setScanName(guess);
-      if (guess) await verifyLabelValue(guess);
-      else
-        setScanResult({
-          match: false,
-          message: tr(
-            'We could not read the medicine name. Type it below instead.',
-            'Hindi mabasa ang pangalan ng gamot. I-type na lang ito sa ibaba.'
-          ),
-        });
-    } catch {
+      setScanStrength(scan.fields.strength);
+      setScanFormulation(scan.fields.formulation);
+      setScanReviewed(false);
+      setScanResult({ match: false, message: scan.message });
+      if (scan.outcome === 'RECAPTURE_REQUIRED') await recordOcrEvaluation(scan);
+    } catch (error) {
       setScanResult({
         match: false,
-        message: tr(
-          'Automatic scanning could not finish. Type the medicine name below.',
-          'Hindi natapos ang awtomatikong pag-scan. I-type ang pangalan ng gamot sa ibaba.'
-        ),
+        message:
+          error?.message ||
+          tr(
+            'Google ML Kit could not finish. Type the label details below.',
+            'Hindi natapos ng Google ML Kit. I-type ang detalye ng label sa ibaba.'
+          ),
       });
     } finally {
       setScanBusy(false);
     }
   }
 
-  async function chooseScanPhoto(event) {
-    const file = event.target.files?.[0];
-    event.target.value = '';
-    if (!file) return;
-    setScanPhoto({ file, url: URL.createObjectURL(file) });
-    setScanName('');
-    setScanResult(null);
-    setScanConfidence(0);
-    await readMedicineLabel(file);
+  async function chooseScanPhoto(source) {
+    setScanBusy(true);
+    try {
+      const media = await captureOcrImage(source);
+      if (!media) return;
+      const url =
+        media.webPath || (media.thumbnail ? `data:image/jpeg;base64,${media.thumbnail}` : '');
+      if (!url) throw new Error('The selected image could not be opened.');
+      setScanPhoto({ url });
+      setScanName('');
+      setScanStrength('');
+      setScanFormulation('');
+      setScanOcr(null);
+      setScanReviewed(false);
+      setScanResult(null);
+      setScanConfidence(0);
+      await readMedicineLabel(media);
+    } catch (error) {
+      setScanResult({ match: false, message: error.message });
+    } finally {
+      setScanBusy(false);
+    }
   }
 
   async function verifyTypedLabel(event) {
     event.preventDefault();
+    if (!scanReviewed || scanOcr?.outcome === 'RECAPTURE_REQUIRED') return;
     setScanBusy(true);
     try {
+      if (scanOcr?.id) {
+        await recordOcrEvaluation(scanOcr, {
+          name: scanName,
+          strength: scanStrength,
+          formulation: scanFormulation,
+        });
+      }
       await verifyLabelValue(scanName);
     } catch (scanError) {
       setScanResult({ match: false, message: scanError.message });
@@ -958,8 +969,11 @@ export default function Medications() {
     setScanOpen(false);
     setScanPhoto(null);
     setScanName('');
+    setScanStrength('');
+    setScanFormulation('');
+    setScanOcr(null);
+    setScanReviewed(false);
     setScanResult(null);
-    setScanProgress(0);
     setScanConfidence(0);
   }
 
@@ -1241,7 +1255,7 @@ export default function Medications() {
             action={tr('Add Medicine', 'Magdagdag ng Gamot')}
             onAction={addMedicineFromSuggested}
           />
-          {scheduleBusy && <div className="pm-med-loading">Checking verified safety rules…</div>}
+          {scheduleBusy && <div className="pm-med-loading">Checking recorded clinical rules…</div>}
           <SuggestedScheduleCards
             rows={suggestions}
             safety={scheduleSafety}
@@ -1253,6 +1267,11 @@ export default function Medications() {
             onRemove={removeSuggestedMedicine}
             tr={tr}
           />
+          {scheduleSafety?.disclaimer && (
+            <Info title={tr('Reminder support only', 'Paalala lamang')}>
+              {scheduleSafety.disclaimer}
+            </Info>
+          )}
           <label className="pm-schedule-review-confirm">
             <input
               checked={scheduleReviewConfirmed}
@@ -1405,25 +1424,41 @@ export default function Medications() {
       {scanOpen && (
         <MedicineScanner
           busy={scanBusy}
-          cameraInputRef={cameraInputRef}
           confidence={scanConfidence}
-          galleryInputRef={galleryInputRef}
+          formulation={scanFormulation}
           name={scanName}
-          onChangeName={setScanName}
+          ocr={scanOcr}
+          onChangeFormulation={(value) => {
+            setScanFormulation(value);
+            setScanReviewed(false);
+          }}
+          onChangeName={(value) => {
+            setScanName(value);
+            setScanReviewed(false);
+          }}
+          onChangeStrength={(value) => {
+            setScanStrength(value);
+            setScanReviewed(false);
+          }}
           onChoosePhoto={chooseScanPhoto}
           onClose={closeScan}
           onConfirm={confirmScannedDose}
           onRetake={() => {
             setScanPhoto(null);
             setScanName('');
+            setScanStrength('');
+            setScanFormulation('');
+            setScanOcr(null);
+            setScanReviewed(false);
             setScanResult(null);
-            setScanProgress(0);
             setScanConfidence(0);
           }}
+          onReviewed={setScanReviewed}
           onVerify={verifyTypedLabel}
           photo={scanPhoto}
-          progress={scanProgress}
+          reviewed={scanReviewed}
           result={scanResult}
+          strength={scanStrength}
           tr={tr}
         />
       )}
@@ -2271,19 +2306,23 @@ function VoiceReminder({ dose: next, logBusy, onMark, onScan, onSnooze, tr }) {
 
 function MedicineScanner({
   busy,
-  cameraInputRef,
   confidence,
-  galleryInputRef,
+  formulation,
   name,
+  ocr,
+  onChangeFormulation,
   onChangeName,
+  onChangeStrength,
   onChoosePhoto,
   onClose,
   onConfirm,
   onRetake,
+  onReviewed,
   onVerify,
   photo,
-  progress,
+  reviewed,
   result,
+  strength,
   tr,
 }) {
   return (
@@ -2317,26 +2356,18 @@ function MedicineScanner({
           </button>
         </header>
 
-        <input
-          accept="image/*"
-          capture="environment"
-          hidden
-          onChange={onChoosePhoto}
-          ref={cameraInputRef}
-          type="file"
-        />
-        <input accept="image/*" hidden onChange={onChoosePhoto} ref={galleryInputRef} type="file" />
-
         {!photo && (
           <div className="pm-scan-choices">
-            <button onClick={() => cameraInputRef.current?.click()} type="button">
+            <button disabled={busy} onClick={() => onChoosePhoto('camera')} type="button">
               <span>
                 <Icon name="camera" />
               </span>
               <strong>{tr('Open Camera', 'Buksan ang Camera')}</strong>
-              <small>{tr('Take a clear photo of the label', 'Kunan nang malinaw ang label')}</small>
+              <small>
+                {tr('Read locally with Google ML Kit', 'Basahin sa device gamit ang Google ML Kit')}
+              </small>
             </button>
-            <button onClick={() => galleryInputRef.current?.click()} type="button">
+            <button disabled={busy} onClick={() => onChoosePhoto('gallery')} type="button">
               <span>
                 <Icon name="gallery" />
               </span>
@@ -2367,10 +2398,33 @@ function MedicineScanner({
               <i />
               {busy && (
                 <span className="pm-med-scan-reading">
-                  {tr('Reading label', 'Binabasa ang label')}… {progress ? `${progress}%` : ''}
+                  {tr('Reading label on this device', 'Binabasa ang label sa device')}…
                 </span>
               )}
             </div>
+
+            {ocr && (
+              <div
+                className={ocr.outcome === 'ACCEPTED' ? 'pm-med-scan-match' : 'pm-med-scan-warning'}
+                role="status"
+              >
+                <Icon name={ocr.outcome === 'ACCEPTED' ? 'check' : 'info'} />
+                <span>
+                  <strong>
+                    {ocr.outcome === 'RECAPTURE_REQUIRED'
+                      ? tr('Retake required', 'Kailangang ulitin ang larawan')
+                      : tr('Review detected details', 'Suriin ang nakitang detalye')}
+                  </strong>
+                  <small>{ocr.message}</small>
+                  {Number.isFinite(ocr.field_confidence) && (
+                    <small>
+                      {confidence}% {tr('field confidence', 'field confidence')} ·{' '}
+                      {Math.round(OCR_CONFIDENCE_THRESHOLD * 100)}% threshold
+                    </small>
+                  )}
+                </span>
+              </div>
+            )}
 
             {result?.match && (
               <div className="pm-med-scan-match" role="status">
@@ -2385,7 +2439,7 @@ function MedicineScanner({
                   </em>
                 </div>
                 <small>
-                  {tr('Confidence', 'Kumpiyansa')}: {confidence || 99}%
+                  {tr('Field confidence', 'Kumpiyansa sa fields')}: {confidence}%
                 </small>
               </div>
             )}
@@ -2457,7 +2511,42 @@ function MedicineScanner({
                   placeholder={tr('e.g., Paracetamol', 'hal., Paracetamol')}
                   value={name}
                 />
-                <button disabled={busy || !name.trim()} type="submit">
+                <label htmlFor="scanned-medicine-strength">{tr('Strength', 'Lakas')}</label>
+                <input
+                  disabled={busy}
+                  id="scanned-medicine-strength"
+                  onChange={(event) => onChangeStrength(event.target.value)}
+                  placeholder={tr('e.g., 500 mg', 'hal., 500 mg')}
+                  value={strength}
+                />
+                <label htmlFor="scanned-medicine-formulation">{tr('Formulation', 'Porma')}</label>
+                <input
+                  disabled={busy}
+                  id="scanned-medicine-formulation"
+                  onChange={(event) => onChangeFormulation(event.target.value)}
+                  placeholder={tr('e.g., Tablet', 'hal., Tablet')}
+                  value={formulation}
+                />
+                <label className="pm-scan-confirmation">
+                  <input
+                    checked={reviewed}
+                    disabled={busy || ocr?.outcome === 'RECAPTURE_REQUIRED'}
+                    onChange={(event) => onReviewed(event.target.checked)}
+                    type="checkbox"
+                  />
+                  <span>
+                    {tr(
+                      'I checked the name, strength, and formulation against the package.',
+                      'Sinuri ko ang pangalan, lakas, at porma ayon sa pakete.'
+                    )}
+                  </span>
+                </label>
+                <button
+                  disabled={
+                    busy || !name.trim() || !reviewed || ocr?.outcome === 'RECAPTURE_REQUIRED'
+                  }
+                  type="submit"
+                >
                   {busy
                     ? tr('Checking…', 'Sinusuri…')
                     : tr('Verify Medicine', 'I-verify ang Gamot')}
@@ -2473,7 +2562,10 @@ function MedicineScanner({
 
         <p className="pm-med-scan-privacy">
           <Icon name="shield" size={16} />{' '}
-          {tr('Your information is safe and private.', 'Ligtas at pribado ang iyong impormasyon.')}
+          {tr(
+            'The photo and OCR stay on this device. Confirmed fields and field-level quality measurements sync later.',
+            'Nananatili sa device ang larawan at OCR. Ang kinumpirmang fields at anonymous na sukat lamang ang isi-sync.'
+          )}
         </p>
       </section>
     </div>

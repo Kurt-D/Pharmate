@@ -6,6 +6,12 @@ import { useLanguage } from '../../context/LanguageContext.jsx';
 import { useAccessibility } from '../../context/AccessibilityContext.jsx';
 import { enqueue, flushOutbox, newLogId } from '../../lib/doseOutbox.js';
 import { scheduleDoseReminders, initReminderVoice, speak } from '../../lib/notifications.js';
+import {
+  captureOcrImage,
+  OCR_CONFIDENCE_THRESHOLD,
+  recognizeMedicineImage,
+} from '../../lib/mlKitOcr.js';
+import { recordOcrEvaluation } from '../../lib/ocrTelemetry.js';
 import PatientVoiceAlert from './PatientVoiceAlert.jsx';
 
 function HomeIcon({ name, size = 22 }) {
@@ -13,6 +19,12 @@ function HomeIcon({ name, size = 22 }) {
     bell: (
       <>
         <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" />
+      </>
+    ),
+    alert: (
+      <>
+        <path d="M10.3 4.3 2.8 17.2A2 2 0 0 0 4.5 20h15a2 2 0 0 0 1.7-2.8L13.7 4.3a2 2 0 0 0-3.4 0Z" />
+        <path d="M12 9v4M12 17h.01" />
       </>
     ),
     calendar: (
@@ -166,8 +178,13 @@ export default function Today() {
   });
   const [scanPhoto, setScanPhoto] = useState(null);
   const [scanName, setScanName] = useState('');
+  const [scanStrength, setScanStrength] = useState('');
+  const [scanFormulation, setScanFormulation] = useState('');
+  const [scanOcr, setScanOcr] = useState(null);
+  const [scanReviewed, setScanReviewed] = useState(false);
   const [scanResult, setScanResult] = useState(null);
   const [scanBusy, setScanBusy] = useState(false);
+  const [scanCapturing, setScanCapturing] = useState(false);
   const [calendarDate, setCalendarDate] = useState(() => new Date());
   const [calendarFilter, setCalendarFilter] = useState('upcoming');
   const [showAllCalendarDoses, setShowAllCalendarDoses] = useState(false);
@@ -182,8 +199,6 @@ export default function Today() {
   const [clockNow, setClockNow] = useState(() => Date.now());
   const [caregiverVoiceAlert, setCaregiverVoiceAlert] = useState(null);
   const [tourReminderStep, setTourReminderStep] = useState(null);
-  const cameraInputRef = useRef(null);
-  const galleryInputRef = useRef(null);
   const seenVoiceAlerts = useRef(new Set());
   const announcedDoseKeys = useRef(new Set());
 
@@ -356,13 +371,6 @@ export default function Today() {
     };
   }, []);
 
-  useEffect(
-    () => () => {
-      if (scanPhoto?.url) URL.revokeObjectURL(scanPhoto.url);
-    },
-    [scanPhoto]
-  );
-
   async function log(dose, action) {
     const loggedAt = new Date();
     const body = {
@@ -415,19 +423,47 @@ export default function Today() {
     }
   }
 
-  function chooseScanPhoto(event) {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    if (scanPhoto?.url) URL.revokeObjectURL(scanPhoto.url);
-    setScanPhoto({ file, url: URL.createObjectURL(file) });
+  async function chooseScanPhoto(source) {
+    setScanCapturing(true);
     setScanResult(null);
+    setScanReviewed(false);
+    try {
+      const media = await captureOcrImage(source);
+      if (!media) return;
+      const url =
+        media.webPath || (media.thumbnail ? `data:image/jpeg;base64,${media.thumbnail}` : '');
+      if (!url) throw new Error('The selected image could not be opened.');
+      setScanPhoto({ url });
+      const scan = await recognizeMedicineImage(media);
+      setScanOcr(scan);
+      setScanName(scan.fields.name);
+      setScanStrength(scan.fields.strength);
+      setScanFormulation(scan.fields.formulation);
+      if (scan.outcome === 'RECAPTURE_REQUIRED') {
+        await recordOcrEvaluation(scan);
+      }
+    } catch (error) {
+      setScanOcr({
+        outcome: 'UNAVAILABLE',
+        message: error?.message || 'The label could not be scanned. Enter the details manually.',
+      });
+    } finally {
+      setScanCapturing(false);
+    }
   }
 
   async function verifyScan() {
-    if (!scanName.trim()) return;
+    if (!scanName.trim() || !scanReviewed) return;
     setScanBusy(true);
     setScanResult(null);
     try {
+      if (scanOcr?.id) {
+        await recordOcrEvaluation(scanOcr, {
+          name: scanName,
+          strength: scanStrength,
+          formulation: scanFormulation,
+        });
+      }
       const response = await api('/api/patient/label/verify', {
         method: 'POST',
         body: { scanned_name: scanName.trim() },
@@ -455,10 +491,13 @@ export default function Today() {
   }
 
   function closeScan() {
-    if (scanPhoto?.url) URL.revokeObjectURL(scanPhoto.url);
     setScanOpen(false);
     setScanPhoto(null);
     setScanName('');
+    setScanStrength('');
+    setScanFormulation('');
+    setScanOcr(null);
+    setScanReviewed(false);
     setScanResult(null);
   }
 
@@ -503,10 +542,13 @@ export default function Today() {
   const dueDelay = nextDose ? clockNow - new Date(nextDose.scheduled_at || nextDose.scheduled_time).getTime() : null;
   const dueNow = nextDose && (doseStatus(nextDose) === 'DUE' || (dueDelay >= 0 && dueDelay <= 30 * 60 * 1000));
   const reminderText = nextDose
-    ? `It's time to take your ${nextDose.drug_name}`
+    ? tr(
+        `It's time to take your ${nextDose.drug_name}.`,
+        `Oras nang inumin ang ${nextDose.drug_name}.`
+      )
     : tourReminderStep
-      ? "It's time to take your scheduled medicine"
-      : 'You have no medicine due right now';
+      ? tr("It's time to take your scheduled medicine.", 'Oras nang inumin ang iyong gamot.')
+      : tr('You have no medicine due right now.', 'Wala kang gamot na kailangang inumin ngayon.');
   useEffect(() => {
     if (!dueNow || !nextDose || caregiverVoiceAlert) return;
     const doseKey = `${nextDose.schedule_id || nextDose.medication_id}:${nextDose.scheduled_time}`;
@@ -587,7 +629,7 @@ export default function Today() {
       </header>
 
       <PatientVoiceAlert
-        alert={caregiverVoiceAlert}
+        alert={caregiverAlertDose ? caregiverVoiceAlert : null}
         dose={caregiverAlertDose}
         onDismiss={closeCaregiverAlert}
         onScan={() => setScanOpen(true)}
@@ -643,7 +685,7 @@ export default function Today() {
               disabled={!nextDose}
               onClick={markDueDoseTaken}
             >
-              <HomeIcon name="check" size={18} /> {tr('Mark as Taken', 'Markahang Nainom')}
+              <HomeIcon name="check" size={18} /> {tr('Mark as Taken', 'Markahan bilang Nainom')}
             </button>
             <button
               type="button"
@@ -678,7 +720,7 @@ export default function Today() {
             type="button"
           >
             <HomeIcon name="calendar" size={17} />
-            <span>{tr('View Calendar', 'Tingnan ang Kalendaryo')}</span>
+            <span>{tr('View Calendar', 'Kalendaryo')}</span>
           </button>
         </header>
 
@@ -699,9 +741,9 @@ export default function Today() {
                 type="button"
               >
                 <small>
-                  {date.toLocaleDateString(language === 'fil' ? 'fil-PH' : 'en-PH', {
-                    weekday: 'narrow',
-                  })}
+                  {language === 'fil'
+                    ? ['LIN', 'LUN', 'MAR', 'MIY', 'HUW', 'BIY', 'SAB'][date.getDay()]
+                    : date.toLocaleDateString('en-PH', { weekday: 'narrow' })}
                 </small>
                 <strong>{date.getDate()}</strong>
               </button>
@@ -712,9 +754,9 @@ export default function Today() {
             className="pm-simple-dose-calendar__filters"
           >
             {[
-              ['upcoming', tr('Upcoming', 'Paparating')],
+              ['upcoming', tr('Upcoming', 'Susunod')],
               ['taken', tr('Taken', 'Nainom')],
-              ['missed', tr('Missed', 'Hindi nainom')],
+              ['missed', tr('Missed', 'Napalampas')],
             ].map(([value, label]) => (
               <button
                 aria-pressed={calendarFilter === value}
@@ -816,7 +858,7 @@ export default function Today() {
       {streakStatus?.state === 'at_risk' && (
         <section className="pm-streak-alert pm-streak-alert--risk" role="alert">
           <span>
-            <HomeIcon name="bell" size={22} />
+            <HomeIcon name="alert" size={24} />
           </span>
           <div>
             <strong>
@@ -1082,31 +1124,24 @@ export default function Today() {
 
             {!scanPhoto ? (
               <div className="pm-scan-choices">
-                <button type="button" onClick={() => cameraInputRef.current?.click()}>
+                <button
+                  type="button"
+                  disabled={scanCapturing}
+                  onClick={() => chooseScanPhoto('camera')}
+                >
                   <span aria-hidden="true">📷</span>
                   <strong>Take a Photo</strong>
-                  <small>Use your phone camera</small>
+                  <small>{scanCapturing ? 'Opening…' : 'Use on-device Google ML Kit'}</small>
                 </button>
-                <button type="button" onClick={() => galleryInputRef.current?.click()}>
+                <button
+                  type="button"
+                  disabled={scanCapturing}
+                  onClick={() => chooseScanPhoto('gallery')}
+                >
                   <span aria-hidden="true">▣</span>
                   <strong>Choose a Photo</strong>
-                  <small>Upload from your files</small>
+                  <small>Read a saved label on this device</small>
                 </button>
-                <input
-                  ref={cameraInputRef}
-                  type="file"
-                  accept="image/*"
-                  capture="environment"
-                  hidden
-                  onChange={chooseScanPhoto}
-                />
-                <input
-                  ref={galleryInputRef}
-                  type="file"
-                  accept="image/*"
-                  hidden
-                  onChange={chooseScanPhoto}
-                />
               </div>
             ) : (
               <div className="pm-scan-review">
@@ -1117,29 +1152,91 @@ export default function Today() {
                   onClick={() => {
                     setScanPhoto(null);
                     setScanName('');
+                    setScanStrength('');
+                    setScanFormulation('');
+                    setScanOcr(null);
+                    setScanReviewed(false);
                     setScanResult(null);
                   }}
                 >
                   Choose a different photo
                 </button>
+                {scanOcr && (
+                  <div
+                    className={`pm-scan-result ${scanOcr.outcome === 'ACCEPTED' ? 'pm-scan-result--success' : 'pm-scan-result--warn'}`}
+                  >
+                    <strong>
+                      {scanOcr.available === false
+                        ? 'Native scanner unavailable'
+                        : scanOcr.outcome === 'RECAPTURE_REQUIRED'
+                          ? 'Retake required'
+                          : 'Review the detected details'}
+                    </strong>
+                    <span>{scanOcr.message}</span>
+                    {Number.isFinite(scanOcr.field_confidence) && (
+                      <small>
+                        {Math.round(scanOcr.field_confidence * 100)}% field confidence ·{' '}
+                        {Math.round(OCR_CONFIDENCE_THRESHOLD * 100)}% threshold
+                      </small>
+                    )}
+                  </div>
+                )}
                 <label htmlFor="scan-medicine-name">Medicine name shown on the label</label>
                 <input
                   id="scan-medicine-name"
                   value={scanName}
                   onChange={(event) => {
                     setScanName(event.target.value);
+                    setScanReviewed(false);
                     setScanResult(null);
                   }}
                   placeholder="Example: Paracetamol"
                   autoComplete="off"
                 />
+                <label htmlFor="scan-medicine-strength">Strength</label>
+                <input
+                  id="scan-medicine-strength"
+                  value={scanStrength}
+                  onChange={(event) => {
+                    setScanStrength(event.target.value);
+                    setScanReviewed(false);
+                  }}
+                  placeholder="Example: 500 mg or 250 mg/5 mL"
+                />
+                <label htmlFor="scan-medicine-formulation">Formulation</label>
+                <input
+                  id="scan-medicine-formulation"
+                  value={scanFormulation}
+                  onChange={(event) => {
+                    setScanFormulation(event.target.value);
+                    setScanReviewed(false);
+                  }}
+                  placeholder="Example: Tablet or Oral Suspension"
+                />
+                <label className="pm-scan-confirmation">
+                  <input
+                    type="checkbox"
+                    checked={scanReviewed}
+                    disabled={scanOcr?.outcome === 'RECAPTURE_REQUIRED'}
+                    onChange={(event) => setScanReviewed(event.target.checked)}
+                  />
+                  <span>
+                    I checked the medicine name, strength, and formulation against the package.
+                  </span>
+                </label>
                 <p className="pm-scan-privacy">
-                  The photo stays on this device. Only the medicine name is checked.
+                  The photo and Google ML Kit recognition stay on this device. Confirmed fields and
+                  field-level quality measurements sync when internet is available.
                 </p>
                 <button
                   type="button"
                   className="pm-action-button"
-                  disabled={!scanName.trim() || scanBusy}
+                  disabled={
+                    !scanName.trim() ||
+                    !scanReviewed ||
+                    scanBusy ||
+                    scanOcr?.outcome === 'RECAPTURE_REQUIRED'
+                  }
                   onClick={verifyScan}
                 >
                   {scanBusy ? 'Checking…' : 'Check Medicine'}

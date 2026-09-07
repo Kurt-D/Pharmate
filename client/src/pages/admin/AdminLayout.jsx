@@ -13,6 +13,8 @@ const MENU = [
   { to: '/admin/dashboard', label: 'Dashboard', icon: 'dashboard' },
   { to: '/admin/users', label: 'User Management', icon: 'users' },
   { to: '/admin/medicines', label: 'Medications', icon: 'medicine' },
+  { to: '/admin/rules', label: 'Rule Governance', icon: 'shield' },
+  { to: '/admin/ocr-validation', label: 'OCR Validation', icon: 'ocr' },
   { to: '/admin/orders', label: 'Orders', icon: 'orders' },
   { to: '/admin/alerts', label: 'System Alerts', icon: 'alert' },
   { to: '/admin/settings', label: 'Accessibility', icon: 'settings' },
@@ -35,6 +37,12 @@ function AdminIcon({ name, size = 19 }) {
       </>
     ),
     alert: <path d="M12 3 2.7 20h18.6L12 3Zm0 6v5m0 3h.01" />,
+    shield: (
+      <path d="M12 3 4.5 6v5.5c0 4.7 3.2 8 7.5 9.5 4.3-1.5 7.5-4.8 7.5-9.5V6L12 3Zm-3 9 2 2 4-5" />
+    ),
+    ocr: (
+      <path d="M8 3H5a2 2 0 0 0-2 2v3m13-5h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3m13 5h3a2 2 0 0 0 2-2v-3M7 12h10" />
+    ),
     settings: (
       <>
         <circle cx="12" cy="12" r="3" />
@@ -97,6 +105,8 @@ export default function AdminLayout() {
     Dashboard: 'Validated system activity from the Pharmate database',
     'User Management': 'Manage role-based accounts without exposing patient names',
     Medications: 'Manage the verified medicine formulary and availability',
+    'Rule Governance': 'Prepare rule evidence, safety coverage, and versioned pharmacist review',
+    'OCR Validation': 'Measure on-device ML Kit results from Philippine medicine packaging',
     Orders: 'Track refill and delivery requests',
     'System Alerts': 'Monitor adherence, inventory, orders, prescriptions, and accounts',
     Accessibility: 'Adjust text, contrast, motion, and visual comfort across the admin portal',

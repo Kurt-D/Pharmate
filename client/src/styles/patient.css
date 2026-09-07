@@ -6021,7 +6021,8 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 }
 .pm-home__header h1 {
   font-size: clamp(1.55rem, 7vw, 2rem);
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 .pm-home__header p {
   max-width: none;
@@ -10747,12 +10748,65 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   min-height: 54px;
   width: 100%;
 }
+.pm-rx-upload-actions {
+  display: grid;
+  gap: 0.6rem;
+}
+.pm-rx-upload-button.secondary {
+  background: #fff;
+  border: 2px solid #1769f5;
+  color: #1558c9;
+}
 .pm-rx-upload-card > small {
   color: #64748b;
   display: block;
   font-size: 0.68rem;
   margin-top: 0.4rem;
   text-align: center;
+}
+.pm-rx-photo-review {
+  background: #f7fbff;
+  border: 2px solid #8db7fb;
+  border-radius: 0.8rem;
+  margin: 0.8rem 0;
+  overflow: hidden;
+  padding: 0.65rem;
+}
+.pm-rx-photo-review figcaption {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  margin-bottom: 0.55rem;
+}
+.pm-rx-photo-review figcaption strong {
+  color: #0f4fad;
+  font-size: 0.9rem;
+}
+.pm-rx-photo-review figcaption span {
+  color: #536176;
+  font-size: 0.72rem;
+  line-height: 1.4;
+}
+.pm-rx-photo-review > a {
+  color: #1558c9;
+  display: block;
+  font-size: 0.7rem;
+  font-weight: 800;
+  text-align: center;
+  text-decoration: none;
+}
+.pm-rx-photo-review img {
+  background: #eef4fb;
+  border: 1px solid #d7e0ec;
+  border-radius: 0.55rem;
+  display: block;
+  max-height: 320px;
+  object-fit: contain;
+  width: 100%;
+}
+.pm-rx-photo-review > a span {
+  display: block;
+  margin-top: 0.4rem;
 }
 .pm-rx-file-preview {
   align-items: center;
@@ -11908,110 +11962,142 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
     box-shadow: 0 0 0 14px #cfe0fb;
   }
 }
-.pm-realtime-indicator {
-  align-items: center;
-  background: #fff;
-  border: 1px solid #cbd5e1;
-  border-radius: 999px;
-  color: #52627a;
-  display: inline-flex;
-  font-size: 0.68rem;
-  font-weight: 800;
-  gap: 0.35rem;
-  left: 0.75rem;
-  padding: 0.28rem 0.55rem;
-  position: absolute;
-  top: 0.7rem;
-  z-index: 22;
-}
-.pm-realtime-indicator i {
-  background: #f59e0b;
-  border-radius: 50%;
-  height: 0.48rem;
-  width: 0.48rem;
-}
-.pm-realtime-indicator.is-live {
-  border-color: #b9dfaa;
-  color: #1b4d08;
-}
-.pm-realtime-indicator.is-live i {
-  animation: pm-realtime-pulse 1.8s ease-in-out infinite;
-  background: #35a61d;
-}
-.pm-realtime-indicator.is-offline {
-  border-color: #fecaca;
-  color: #b91c1c;
-}
-.pm-realtime-indicator.is-offline i {
-  background: #dc2626;
-}
-@keyframes pm-realtime-pulse {
-  50% { box-shadow: 0 0 0 4px rgb(145 208 108 / 30%); }
-}
-.pm-phone.pm-a11y-reduce-motion .pm-realtime-indicator i { animation: none; }
-
 /* Context-aware streak lifecycle banners on the patient home screen. */
 .pm-streak-alert {
   align-items: center;
-  border: 1.5px solid;
-  border-radius: 1rem;
+  border: 1px solid;
+  border-radius: 1.15rem;
+  box-shadow: 0 8px 24px rgba(23, 105, 245, 0.08);
   display: grid;
-  gap: 0.85rem;
-  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.9rem;
+  grid-template-columns: 52px minmax(0, 1fr) auto;
   margin: 0 0 1rem;
+  overflow: hidden;
   padding: 1rem;
+  position: relative;
   text-decoration: none;
+}
+.pm-streak-alert::before {
+  background: #36b44a;
+  border-radius: 99px;
+  bottom: 0.8rem;
+  content: '';
+  left: 0;
+  position: absolute;
+  top: 0.8rem;
+  width: 4px;
 }
 .pm-streak-alert > div {
   min-width: 0;
 }
 .pm-streak-alert strong {
+  color: #123a72;
   display: block;
-  font-size: 1rem;
+  font-size: 0.98rem;
   line-height: 1.35;
 }
 .pm-streak-alert p {
-  font-size: 0.88rem;
-  line-height: 1.5;
+  color: #536b89;
+  font-size: 0.84rem;
+  line-height: 1.45;
   margin: 0.25rem 0 0;
 }
-.pm-streak-alert button,
 .pm-streak-alert > span {
   align-items: center;
-  background: #fff;
-  border: 1.5px solid currentColor;
-  border-radius: 0.75rem;
-  color: inherit;
+  background: #e8f2ff;
+  border: 0;
+  border-radius: 50%;
+  color: #1769f5;
   display: inline-flex;
-  font-size: 0.85rem;
-  font-weight: 800;
+  height: 52px;
+  justify-content: center;
+  padding: 0;
+  width: 52px;
+}
+.pm-streak-alert button {
+  align-items: center;
+  background: #1769f5;
+  border: 0;
+  border-radius: 0.75rem;
+  box-shadow: 0 5px 12px rgba(23, 105, 245, 0.2);
+  color: #fff;
+  display: inline-flex;
+  font-size: 0.82rem;
+  font-weight: 850;
   justify-content: center;
   min-height: 48px;
-  padding: 0.65rem 0.85rem;
+  padding: 0.65rem 1rem;
+  transition: background 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
   white-space: nowrap;
 }
+.pm-streak-alert button:hover {
+  background: #0f59d5;
+  box-shadow: 0 7px 16px rgba(23, 105, 245, 0.26);
+  transform: translateY(-1px);
+}
+.pm-streak-alert button:focus-visible {
+  outline: 3px solid rgba(23, 105, 245, 0.25);
+  outline-offset: 3px;
+}
 .pm-streak-alert--risk {
-  background: #fff1ed;
-  border-color: #dc2626;
-  color: #8f1717;
+  background: linear-gradient(135deg, #fff5f5 0%, #fffafa 100%);
+  border-color: #f3aaaa;
+  color: #c62828;
+}
+.pm-streak-alert--risk::before {
+  background: #dc2626;
+}
+.pm-streak-alert--risk > span {
+  background: #fee2e2;
+  color: #dc2626;
+}
+.pm-streak-alert--risk strong {
+  color: #9f1717;
+}
+.pm-streak-alert--risk p {
+  color: #8b3a3a;
+}
+.pm-streak-alert--risk button {
+  background: #dc2626;
+  box-shadow: 0 5px 12px rgba(220, 38, 38, 0.2);
+}
+.pm-streak-alert--risk button:hover {
+  background: #b91c1c;
+  box-shadow: 0 7px 16px rgba(220, 38, 38, 0.26);
+}
+.pm-streak-alert--risk button:focus-visible {
+  outline-color: rgba(220, 38, 38, 0.25);
 }
 .pm-streak-alert--reset {
   background: #f8fafc;
   border-color: #94a3b8;
   color: #1e2e4a;
-  grid-template-columns: 1fr;
+  grid-template-columns: 52px minmax(0, 1fr);
+}
+.pm-streak-alert--reset::before {
+  background: #64748b;
 }
 .pm-streak-alert--reward {
   background: #fff9bd;
   border-color: #c9a900;
   color: #2a2500;
+  grid-template-columns: 52px minmax(0, 1fr);
+}
+.pm-streak-alert--reward::before {
+  background: #c9a900;
 }
 @media (max-width: 390px) {
   .pm-streak-alert {
-    grid-template-columns: 1fr;
+    gap: 0.75rem;
+    grid-template-columns: 48px minmax(0, 1fr);
+    padding: 0.9rem;
   }
-  .pm-streak-alert button,
   .pm-streak-alert > span {
+    height: 48px;
+    width: 48px;
+  }
+  .pm-streak-alert button {
+    grid-column: 1 / -1;
     width: 100%;
   }
 }
@@ -12088,6 +12174,14 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 .pm-wizard__method > button { background: #1769f5; border: 2px solid #1769f5; border-radius: 13px; color: #fff; font-weight: 800; grid-column: 1 / -1; min-height: 58px; padding: 11px; }
 .pm-wizard__method > button:disabled { background: #d7e0ec; border-color: #d7e0ec; color: #65758b; }
 .pm-wizard__method > small { color: #655719; font-size: 16px; grid-column: 1 / -1; line-height: 1.45; }
+.pm-wizard__schedule-choice > p { color: #50627a; font-size: 17px; line-height: 1.5; }
+.pm-wizard__schedule-choice .pm-wizard__method { margin-top: 16px; }
+.pm-wizard__schedule-choice .pm-wizard__method.suggested { background: #f1fbf5; border-color: #80c99a; }
+.pm-wizard__schedule-choice .pm-wizard__method.suggested > svg { color: #16864a; }
+.pm-wizard__schedule-choice .pm-wizard__method.suggested > button { background: #16864a; border-color: #16864a; }
+.pm-wizard__schedule-choice .pm-wizard__method > button { align-items: center; display: flex; font-size: 17px; gap: 9px; justify-content: center; }
+.pm-wizard__schedule-choice .pm-wizard__method h3 { color: #172542; }
+.pm-wizard__schedule-choice .pm-wizard__method p { font-size: 16px; }
 .pm-wizard__notice,
 .pm-wizard__error,
 .pm-wizard__generation-error { align-items: flex-start; border-radius: 14px; display: flex; gap: 11px; line-height: 1.5; margin-top: 16px; padding: 15px; }
@@ -13294,6 +13388,22 @@ body.pm-a11y-reduce-motion .pm-week-calendar * {
 .pm-wizard__review-page .pm-generated-calendar__event small { font-size: 12px; }
 .pm-wizard__review-page .pm-wizard__why summary { background: #f1f6ff; }
 .pm-wizard__review-page .pm-wizard__review-actions { margin-top: 2px; }
+.pm-wizard__reference-warning {
+  background: #fff8dc !important;
+  border-color: #e5bd43 !important;
+  color: #563f00 !important;
+}
+.pm-wizard__reference-warning a {
+  color: #1558c9;
+  display: inline-block;
+  font-size: 13px;
+  font-weight: 850;
+  margin-top: 5px;
+}
+.pm-wizard__reference-confirm {
+  background: #fffaf0 !important;
+  border-color: #dfb83e !important;
+}
 
 /* Unified PharMate polish for medication editing and pharmacist conversations. */
 .pm-wizard__details-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
@@ -13453,6 +13563,14 @@ body.pm-a11y-reduce-motion .pm-week-calendar * {
 .pm-home .pm-simple-dose-calendar__jump { min-height: 44px; padding: 6px 9px; }
 .pm-home .pm-simple-dose-calendar__filters { gap: 6px; margin-top: 7px; }
 .pm-home .pm-simple-dose-calendar__filters button { font-size: 12px; min-height: 40px; }
+.pm-home > *,
+.pm-home .pm-simple-dose-calendar,
+.pm-home .pm-dashboard-card { box-sizing: border-box; max-width: 100%; min-width: 0; }
+.pm-home { box-sizing: border-box; min-width: 0; overflow-x: clip; }
+.pm-home .pm-simple-dose-calendar__filters { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.pm-home .pm-simple-dose-calendar__filters button { overflow: hidden; padding-inline: 5px; text-overflow: ellipsis; white-space: nowrap; }
+.pm-home .pm-simple-dose-calendar__jump--header { max-width: 43%; }
+.pm-home .pm-simple-dose-calendar__jump--header > span { overflow: hidden; text-overflow: ellipsis; }
 .pm-home .pm-simple-dose-calendar__date { font-size: 14px; padding-block: 8px; }
 .pm-home .pm-simple-dose-calendar__date-row { align-items: center; display: flex; justify-content: space-between; min-height: 42px; }
 .pm-home .pm-simple-dose-calendar__expand { align-items: center; background: #edf5ff; border: 1px solid #b9d2f2; border-radius: 50%; color: #1558c9; display: inline-flex; flex: 0 0 auto; height: 36px; justify-content: center; padding: 0; transition: background .2s ease, transform .2s ease; width: 36px; }

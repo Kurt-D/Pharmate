@@ -150,17 +150,14 @@ export default function AutomatedAddMedication() {
   const { language } = useLanguage();
   const tr = (en, fil) => (language === 'fil' ? fil : en);
   const initial = useMemo(readDraft, []);
-  const [step, setStep] = useState(Math.min(initial.step || 1, 7));
-  const [durationPage, setDurationPage] = useState(
-    initial.durationPage || Number(initial.step) > 7
-  );
-  const [phase, setPhase] = useState(
-    initial.phase === 'suggested-ready'
-      ? 'suggested-instructions'
-      : initial.phase === 'manual-dose'
-        ? 'manual-times'
-        : initial.phase || 'questions'
-  );
+  const restoredPhase = String(initial.phase || 'questions').startsWith('suggested-')
+    ? 'schedule-choice'
+    : initial.phase === 'manual-dose'
+      ? 'manual-times'
+      : initial.phase || 'questions';
+  const [step, setStep] = useState(Math.min(initial.step || 1, 8));
+  const [durationPage, setDurationPage] = useState(Boolean(initial.durationPage));
+  const [phase, setPhase] = useState(restoredPhase);
   const [query, setQuery] = useState(initial.query || '');
   const [results, setResults] = useState([]);
   const [medicine, setMedicine] = useState(initial.medicine || null);
@@ -175,6 +172,7 @@ export default function AutomatedAddMedication() {
   const [editingMedicine, setEditingMedicine] = useState(initial.editingMedicine || null);
   const [medicineDates, setMedicineDates] = useState(initial.medicineDates || {});
   const [confirmed, setConfirmed] = useState(false);
+  const [referenceConfirmed, setReferenceConfirmed] = useState(false);
   const [confirmation, setConfirmation] = useState(null);
   const [saved, setSaved] = useState(false);
   const saveLock = useRef(false);
@@ -238,6 +236,14 @@ export default function AutomatedAddMedication() {
     }, 300);
     return () => clearTimeout(timer);
   }, [phase, query, step]);
+  useEffect(() => {
+    if (phase !== 'success') return undefined;
+    const timer = setTimeout(
+      () => navigate('/patient/medications?created=1', { replace: true }),
+      1800
+    );
+    return () => clearTimeout(timer);
+  }, [navigate, phase]);
 
   const update = (changes) => {
     if ('start_date' in changes || 'end_date' in changes || 'duration' in changes) {
@@ -262,6 +268,7 @@ export default function AutomatedAddMedication() {
     () =>
       allMedicines.map((item) => ({
         drug_id: item.id,
+        rx_class: item.rx_class,
         draft_key: String(item._draftKey || item.id),
         medicine_name:
           item.brand_choice && !['GENERIC', 'UNKNOWN'].includes(item.brand_choice)
@@ -294,6 +301,9 @@ export default function AutomatedAddMedication() {
     intakes[0] ||
     null;
   const request = useMemo(() => ({ medications: intakes }), [intakes]);
+  const needsLabelConfirmation = Boolean(
+    schedule?.requires_label_match || schedule?.requires_prescription_match
+  );
 
   function chooseMedicine(drug) {
     const strength = String(drug.default_strength || '').match(/(\d+(?:\.\d+)?)\s*([a-zA-Z]+)/);
@@ -353,32 +363,41 @@ export default function AutomatedAddMedication() {
       return;
     }
     if (phase === 'review') {
-      setPhase(source === 'manual' ? 'manual-times' : 'suggested-instructions');
+      setPhase('schedule-choice');
       return;
     }
-    const suggested = [
-      'suggested-first',
-      'suggested-dose',
-      'suggested-food',
-      'suggested-supply',
-      'suggested-instructions',
-    ];
-    const manual = ['manual-times'];
-    if (suggested.includes(phase)) {
-      const index = suggested.indexOf(phase);
-      setPhase(index ? suggested[index - 1] : 'questions');
-      if (!index) {
-        setStep(7);
+    if (phase === 'suggested-unavailable') {
+      setPhase('schedule-choice');
+      return;
+    }
+    if (phase === 'schedule-choice') {
+      setPhase('questions');
+      setStep(3);
+      setDurationPage(false);
+      return;
+    }
+    const manualQuestions = ['manual-first', 'manual-food', 'manual-supply', 'manual-instructions'];
+    if (manualQuestions.includes(phase)) {
+      const index = manualQuestions.indexOf(phase);
+      if (index) setPhase(manualQuestions[index - 1]);
+      else {
+        setPhase('questions');
+        setStep(8);
         setDurationPage(true);
       }
       return;
     }
-    if (manual.includes(phase)) {
-      setPhase('review');
+    if (phase === 'manual-times') {
+      setPhase(schedule?.schedule?.length ? 'review' : 'manual-instructions');
       return;
     }
     if (durationPage) {
       setDurationPage(false);
+      return;
+    }
+    const firstManualDetailStep = hasBrandPage ? 4 : 5;
+    if (source === 'manual' && step === firstManualDetailStep) {
+      setPhase('schedule-choice');
       return;
     }
     if (step > 1) {
@@ -413,7 +432,7 @@ export default function AutomatedAddMedication() {
       );
     if (
       step === 6 &&
-      ['OTHER', 'UNKNOWN'].includes(medicine.frequency_code) &&
+      ['OTHER', 'UNKNOWN', 'PRN'].includes(medicine.frequency_code) &&
       !medicine.custom_frequency
     )
       return setError(
@@ -422,15 +441,18 @@ export default function AutomatedAddMedication() {
           'Isulat ang tagubilin sa label o piliin ang “Hindi ako sigurado.”'
         )
       );
-    if (step === 7 && !durationPage) {
+    if (step === 7 && (!Number.isFinite(Number(medicine.dose_amount)) || medicine.dose_amount <= 0))
+      return setError(tr('Choose a usable dose amount.', 'Pumili ng tamang dami ng dose.'));
+    if (step === 8 && !durationPage) {
       setDurationPage(true);
       return;
     }
-    if (step === 7 && durationPage && medicine.duration === 'END_DATE' && !medicine.end_date)
+    if (step === 8 && durationPage && medicine.duration === 'END_DATE' && !medicine.end_date)
       return setError(tr('Choose the treatment end date.', 'Piliin ang petsa ng pagtatapos.'));
-    if (step === 7 && durationPage) {
-      setSource('suggested');
-      setPhase('suggested-first');
+    if (step === 8 && durationPage) {
+      setMedicineList(allMedicines);
+      setConfirmed(false);
+      setPhase('manual-first');
       return;
     }
     setStep((current) => Math.min(8, current + 1));
@@ -439,33 +461,93 @@ export default function AutomatedAddMedication() {
   async function generate() {
     setWorking(true);
     setError('');
+    setSource('suggested');
     try {
+      const safetyProfile = await api('/api/patient/safety-profile');
+      if (safetyProfile.data.missing_for_safety_check?.length) {
+        setError(
+          tr(
+            'Complete the missing safety details once so PharMate can check this suggestion.',
+            'Kumpletuhin nang isang beses ang kulang na safety details para masuri ng PharMate ang mungkahi.'
+          )
+        );
+        setPhase('safety-needed');
+        return;
+      }
+      const adaptiveRequest = {
+        medications: intakes.map((item) => ({
+          ...item,
+          first_dose_time: '',
+        })),
+      };
       const response = await api('/api/medications/generate-schedule', {
         method: 'POST',
-        body: request,
+        body: { ...adaptiveRequest, schedule_mode: 'SUGGESTED' },
       });
-      const dateMap = { ...medicineDates };
-      for (const item of allMedicines)
-        if (!dateMap[String(item.id)])
-          dateMap[String(item.id)] = treatmentDates(
-            item.start_date,
-            endDateFor(item.start_date, item.duration, item.end_date)
-          );
-      setMedicineList(allMedicines);
+      const governedDirections = new Map([
+        ...(response.data.schedule || []).flatMap((slot) =>
+          slot.medicines.map((item) => [String(item.drug_id), item])
+        ),
+        ...(response.data.prn_trackers || []).map((item) => [String(item.drug_id), item]),
+      ]);
+      const suggestedMedicines = allMedicines.map((item) => ({
+        ...item,
+        frequency_code: governedDirections.get(String(item.id))?.frequency || item.frequency_code,
+        label_direction:
+          governedDirections.get(String(item.id))?.label_direction ||
+          governedDirections.get(String(item.id))?.directions ||
+          item.label_direction,
+        start_date: item.start_date || today(),
+        duration: item.duration || 'ONGOING',
+        dose_amount: item.dose_amount || 1,
+      }));
+      const current = suggestedMedicines.find((item) => item._draftKey === medicine._draftKey);
+      const dateMap = {};
+      for (const item of suggestedMedicines)
+        dateMap[String(item.id)] = treatmentDates(
+          item.start_date,
+          endDateFor(item.start_date, item.duration, item.end_date)
+        );
+      setMedicine(current);
+      setMedicineList(suggestedMedicines);
       setMedicineDates(dateMap);
       setSchedule(response.data);
       setSource('suggested');
       setConfirmed(false);
+      setReferenceConfirmed(false);
       setPhase('review');
     } catch (requestError) {
-      setError(
-        requestError.body?.error ||
-          requestError.body?.warnings?.[0]?.message ||
-          requestError.message
-      );
+      setError(requestError.body?.error || requestError.message);
+      setPhase('suggested-unavailable');
     } finally {
       setWorking(false);
     }
+  }
+  function startManualQuestions() {
+    setMedicineList(allMedicines);
+    setSource('manual');
+    setConfirmed(false);
+    setError('');
+    setDurationPage(false);
+    setStep(hasBrandPage ? 4 : 5);
+    setPhase('questions');
+  }
+  function startManualTimeQuestions() {
+    const dateMap = { ...medicineDates };
+    for (const item of allMedicines)
+      dateMap[String(item.id)] = treatmentDates(
+        item.start_date,
+        endDateFor(item.start_date, item.duration, item.end_date)
+      );
+    setMedicineList(allMedicines);
+    setMedicineDates(dateMap);
+    setEditingMedicine({ drug_id: intake.drug_id, name: intake.medicine_name });
+    setManualTimes([medicine.first_dose_time || '08:00']);
+    setSchedule((current) => current || { schedule: [] });
+    setSource('manual');
+    setConfirmed(false);
+    setError('');
+    setPhase('manual-times');
   }
   function manualRows() {
     return [...new Set(manualTimes)].sort().map((time, index) => ({
@@ -566,6 +648,22 @@ export default function AutomatedAddMedication() {
           'Please complete the highlighted medicine details before saving.',
           'Kumpletuhin ang mga kinakailangang detalye bago i-save.'
         )
+      );
+      return;
+    }
+    if (source === 'manual') {
+      requestConfirmation(
+        tr('Save medicine changes?', 'I-save ang pagbabago sa gamot?'),
+        tr(
+          'Your selected manual reminder times will stay the same. Continue?',
+          'Mananatili ang pinili mong manwal na oras ng paalala. Magpatuloy?'
+        ),
+        () => {
+          setMedicineList(allMedicines);
+          setConfirmed(false);
+          setError('');
+          setPhase('review');
+        }
       );
       return;
     }
@@ -681,7 +779,13 @@ export default function AutomatedAddMedication() {
       if (source === 'suggested') {
         await api('/api/medications/save-reminders', {
           method: 'POST',
-          body: { ...request, review_confirmed: true },
+          body: {
+            ...request,
+            schedule_mode: 'SUGGESTED',
+            review_confirmed: true,
+            reference_review_confirmed: needsLabelConfirmation ? referenceConfirmed : undefined,
+            prescription_match_confirmed: needsLabelConfirmation ? referenceConfirmed : undefined,
+          },
         });
       } else {
         const savedIntake = await api('/api/medications/save-intake', {
@@ -752,6 +856,10 @@ export default function AutomatedAddMedication() {
     tr('Does the label show a brand or special type?', 'May brand o espesyal na uri ba sa label?'),
     tr('What are you taking this medicine for?', 'Para saan mo iniinom ang gamot na ito?'),
     tr('How often do you take this medicine?', 'Gaano kadalas mo iniinom ang gamot na ito?'),
+    tr(
+      `How many ${unitFor(medicine?.patient_form || medicine?.dosage_form, 2)} do you take at one time?`,
+      'Gaano karaming gamot ang iniinom mo sa isang inuman?'
+    ),
     durationPage
       ? tr('How long will you take it?', 'Gaano katagal mo ito iinumin?')
       : tr('When will you start taking it?', 'Kailan mo ito sisimulang inumin?'),
@@ -766,20 +874,26 @@ export default function AutomatedAddMedication() {
         <div>
           <h1>{tr('Medication Setup', 'Pag-set Up ng Gamot')}</h1>
           {phase !== 'questions' && (
-            <p>{tr('PharMate suggested schedule', 'Mungkahing iskedyul ng PharMate')}</p>
+            <p>
+              {phase === 'schedule-choice'
+                ? tr('Choose a scheduling method', 'Pumili ng paraan ng pag-iskedyul')
+                : source === 'manual'
+                  ? tr('Manual schedule', 'Manwal na iskedyul')
+                  : tr('PharMate suggested schedule', 'Mungkahing iskedyul ng PharMate')}
+            </p>
           )}
         </div>
       </header>
       {phase === 'questions' && (
         <div
           aria-label={tr('Medication setup progress', 'Progreso ng pag-set up ng gamot')}
-          aria-valuemax="7"
+          aria-valuemax="8"
           aria-valuemin="1"
           aria-valuenow={step}
           className="pm-wizard__progress"
           role="progressbar"
         >
-          <span style={{ width: `${step * (100 / 7)}%` }} />
+          <span style={{ width: `${step * (100 / 8)}%` }} />
         </div>
       )}
 
@@ -935,7 +1049,10 @@ export default function AutomatedAddMedication() {
                 className="pm-wizard__primary"
                 onClick={() => {
                   if (!medicine?.strength_value) return next();
-                  setStep(hasBrandPage ? 4 : 5);
+                  setMedicineList(allMedicines);
+                  setConfirmed(false);
+                  setError('');
+                  setPhase('schedule-choice');
                 }}
                 type="button"
               >
@@ -1087,11 +1204,18 @@ export default function AutomatedAddMedication() {
                   </button>
                 ))}
               </div>
-              {['OTHER', 'UNKNOWN'].includes(medicine?.frequency_code) && (
+              {['OTHER', 'UNKNOWN', 'PRN'].includes(medicine?.frequency_code) && (
                 <textarea
                   className="pm-wizard__textarea"
                   onChange={(event) => update({ custom_frequency: event.target.value })}
-                  placeholder={tr('Write the label instructions', 'Isulat ang tagubilin sa label')}
+                  placeholder={
+                    medicine?.frequency_code === 'PRN'
+                      ? tr(
+                          'Exact as-needed directions, including dose limits',
+                          'Eksaktong tagubilin kapag kailangan, kasama ang limitasyon sa dose'
+                        )
+                      : tr('Write the label instructions', 'Isulat ang tagubilin sa label')
+                  }
                   rows="3"
                   value={medicine?.custom_frequency || ''}
                 />
@@ -1101,7 +1225,45 @@ export default function AutomatedAddMedication() {
               </button>
             </>
           )}
-          {step === 7 && !durationPage && (
+          {step === 7 && (
+            <>
+              <div className="pm-wizard__counter">
+                <button
+                  aria-label={tr('Decrease amount', 'Bawasan')}
+                  onClick={() =>
+                    update({ dose_amount: Math.max(0.5, Number(medicine.dose_amount || 1) - 0.5) })
+                  }
+                  type="button"
+                >
+                  <Minus />
+                </button>
+                <strong>
+                  {Number(medicine.dose_amount || 1)}{' '}
+                  {unitFor(
+                    medicine.patient_form || medicine.dosage_form,
+                    Number(medicine.dose_amount || 1)
+                  )}
+                </strong>
+                <button
+                  aria-label={tr('Increase amount', 'Dagdagan')}
+                  onClick={() => update({ dose_amount: Number(medicine.dose_amount || 1) + 0.5 })}
+                  type="button"
+                >
+                  <Plus />
+                </button>
+              </div>
+              <p>
+                {tr(
+                  'Check your medicine label and choose the amount shown.',
+                  'Tingnan ang label ng gamot at piliin ang nakasulat na dami.'
+                )}
+              </p>
+              <button className="pm-wizard__primary" onClick={next} type="button">
+                {tr('Next', 'Susunod')} <ChevronRight />
+              </button>
+            </>
+          )}
+          {step === 8 && !durationPage && (
             <>
               <p>
                 {tr(
@@ -1137,7 +1299,7 @@ export default function AutomatedAddMedication() {
               </button>
             </>
           )}
-          {step === 7 && durationPage && (
+          {step === 8 && durationPage && (
             <>
               <p>
                 {tr(
@@ -1191,7 +1353,113 @@ export default function AutomatedAddMedication() {
         </section>
       )}
 
-      {phase === 'suggested-first' && (
+      {phase === 'schedule-choice' && (
+        <WizardPage
+          className="pm-wizard__schedule-choice"
+          title={tr(
+            'How would you like to create your schedule?',
+            'Paano mo gustong gawin ang iyong iskedyul?'
+          )}
+        >
+          <p>
+            {tr('Choose how to set your reminders.', 'Piliin kung paano itatakda ang paalala.')}
+          </p>
+          <article className="pm-wizard__method suggested">
+            <ShieldCheck />
+            <div>
+              <h3>{tr('Use PharMate Suggested Schedule', 'Gamitin ang Mungkahi ng PharMate')}</h3>
+              <p>
+                {tr(
+                  'Review suggested reminder times before saving.',
+                  'Suriin ang mungkahing oras bago i-save.'
+                )}
+              </p>
+            </div>
+            <button disabled={working} onClick={() => generate()} type="button">
+              {working ? <LoaderCircle className="spin" /> : <CalendarClock />}
+              {tr('Use Suggested Schedule', 'Gamitin ang Mungkahi')}
+            </button>
+          </article>
+          <article className="pm-wizard__method manual">
+            <Edit3 />
+            <div>
+              <h3>{tr('Create My Own Schedule', 'Gumawa ng Sarili Kong Iskedyul')}</h3>
+              <p>
+                {tr(
+                  'Answer a few questions and choose your own times.',
+                  'Sagutin ang ilang tanong at piliin ang iyong oras.'
+                )}
+              </p>
+            </div>
+            <button disabled={working} onClick={startManualQuestions} type="button">
+              <Clock3 />
+              {tr('Create Manually', 'Gumawa nang Manwal')}
+            </button>
+          </article>
+          {error && (
+            <GenerationError
+              error={error}
+              onAsk={() => navigate('/patient/ask')}
+              onCheck={() => {
+                setPhase('questions');
+                setStep(3);
+                setDurationPage(false);
+              }}
+              onEdit={startManualQuestions}
+              tr={tr}
+            />
+          )}
+        </WizardPage>
+      )}
+
+      {phase === 'suggested-unavailable' && (
+        <WizardPage
+          className="pm-wizard__suggested-unavailable"
+          title={tr('No automatic rule available', 'Walang awtomatikong rule na available')}
+        >
+          <div className="pm-wizard__generation-error" role="alert">
+            <Info />
+            <div>
+              <h3>{medicine?.generic_name || intake.medicine_name}</h3>
+              <p>
+                {tr(
+                  'This exact medicine, strength, dose, and form does not have a supported PharMate rule yet.',
+                  'Wala pang suportadong PharMate rule para sa eksaktong gamot, lakas, dose, at uri na ito.'
+                )}
+              </p>
+              <button onClick={startManualQuestions} type="button">
+                {tr('Enter Label Instructions', 'Ilagay ang Tagubilin sa Label')}
+              </button>
+              <button onClick={() => setPhase('schedule-choice')} type="button">
+                {tr('Choose Another Method', 'Pumili ng Ibang Paraan')}
+              </button>
+            </div>
+          </div>
+        </WizardPage>
+      )}
+
+      {phase === 'safety-needed' && (
+        <WizardPage
+          className="pm-wizard__suggested-unavailable"
+          title={tr('Complete your safety profile', 'Kumpletuhin ang safety profile')}
+        >
+          <div className="pm-wizard__generation-error" role="status">
+            <Info />
+            <div>
+              <h3>{tr('One-time health questions', 'Isang beses na health questions')}</h3>
+              <p>{error}</p>
+              <button onClick={() => navigate('/patient/onboarding')} type="button">
+                {tr('Complete Safety Profile', 'Kumpletuhin ang Safety Profile')}
+              </button>
+              <button onClick={() => setPhase('schedule-choice')} type="button">
+                {tr('Go Back', 'Bumalik')}
+              </button>
+            </div>
+          </div>
+        </WizardPage>
+      )}
+
+      {phase === 'manual-first' && (
         <WizardPage
           title={tr(
             'When would you like to take your first dose?',
@@ -1200,8 +1468,8 @@ export default function AutomatedAddMedication() {
         >
           <p>
             {tr(
-              'PharMate will use this as the starting point for later reminders.',
-              'Gagamitin ito ng PharMate bilang panimulang oras.'
+              'This will be your first reminder time. You can add more times before saving.',
+              'Ito ang magiging unang oras ng paalala. Maaari kang magdagdag pa bago i-save.'
             )}
           </p>
           <div className="pm-wizard__presets">
@@ -1225,18 +1493,10 @@ export default function AutomatedAddMedication() {
               value={medicine.first_dose_time}
             />
           </div>
-          <BottomNext onClick={() => setPhase('suggested-dose')} tr={tr} />
+          <BottomNext onClick={() => setPhase('manual-food')} tr={tr} />
         </WizardPage>
       )}
-      {phase === 'suggested-dose' && (
-        <DosePage
-          medicine={medicine}
-          onChange={(amount) => update({ dose_amount: amount })}
-          onNext={() => setPhase('suggested-food')}
-          tr={tr}
-        />
-      )}
-      {phase === 'suggested-food' && (
+      {phase === 'manual-food' && (
         <WizardPage
           title={tr(
             'What does the label say about food?',
@@ -1256,10 +1516,10 @@ export default function AutomatedAddMedication() {
               </button>
             ))}
           </div>
-          <BottomNext onClick={() => setPhase('suggested-supply')} tr={tr} />
+          <BottomNext onClick={() => setPhase('manual-supply')} tr={tr} />
         </WizardPage>
       )}
-      {phase === 'suggested-supply' && (
+      {phase === 'manual-supply' && (
         <WizardPage
           title={tr('Would you like refill reminders?', 'Gusto mo ba ng paalala sa refill?')}
         >
@@ -1291,10 +1551,10 @@ export default function AutomatedAddMedication() {
               />
             </label>
           )}
-          <BottomNext onClick={() => setPhase('suggested-instructions')} tr={tr} />
+          <BottomNext onClick={() => setPhase('manual-instructions')} tr={tr} />
         </WizardPage>
       )}
-      {phase === 'suggested-instructions' && (
+      {phase === 'manual-instructions' && (
         <WizardPage
           title={tr(
             'Are there other instructions on the label?',
@@ -1308,17 +1568,22 @@ export default function AutomatedAddMedication() {
             rows="5"
             value={medicine.label_direction}
           />
-          <button className="pm-wizard__skip" disabled={working} onClick={generate} type="button">
-            {tr('Skip and Generate Schedule', 'Laktawan at Gawin ang Iskedyul')}
+          <button
+            className="pm-wizard__skip"
+            disabled={working}
+            onClick={startManualTimeQuestions}
+            type="button"
+          >
+            {tr('Skip', 'Laktawan')}
           </button>
           <button
             className="pm-wizard__primary"
             disabled={working}
-            onClick={generate}
+            onClick={startManualTimeQuestions}
             type="button"
           >
-            {working ? <LoaderCircle className="spin" /> : <CalendarClock />}
-            {tr('Generate Suggested Schedule', 'Gawin ang Mungkahing Iskedyul')}
+            <Clock3 />
+            {tr('Choose Reminder Times', 'Pumili ng Oras ng Paalala')}
           </button>
           {error && (
             <GenerationError
@@ -1457,7 +1722,7 @@ export default function AutomatedAddMedication() {
                     'The changes on this page will not be applied. Continue?',
                     'Hindi ilalapat ang mga pagbabago sa pahinang ito. Magpatuloy?'
                   ),
-                  () => setPhase('review')
+                  () => setPhase(schedule?.schedule?.length ? 'review' : 'manual-instructions')
                 )
               }
               type="button"
@@ -1466,6 +1731,7 @@ export default function AutomatedAddMedication() {
             </button>
             <button
               className="apply"
+              disabled={working}
               onClick={() =>
                 requestConfirmation(
                   tr('Apply these changes?', 'Ilapat ang mga pagbabagong ito?'),
@@ -1478,7 +1744,8 @@ export default function AutomatedAddMedication() {
               }
               type="button"
             >
-              {tr('Apply Changes', 'Ilapat')} <ChevronRight />
+              {working ? <LoaderCircle className="spin" /> : <Check />}
+              {tr('Apply Changes', 'Ilapat')}
             </button>
           </div>
         </WizardPage>
@@ -1487,31 +1754,101 @@ export default function AutomatedAddMedication() {
       {phase === 'review' && (
         <WizardPage
           className="pm-wizard__review-page"
-          title={tr('Review your medicines', 'Suriin ang iyong mga gamot')}
+          title={
+            source === 'suggested'
+              ? tr('Your Suggested Schedule', 'Iyong Mungkahing Iskedyul')
+              : tr('Review your schedule', 'Suriin ang iyong iskedyul')
+          }
         >
           {source === 'suggested' && (
-            <aside className="pm-wizard__checked">
-              <ShieldCheck />
+            <aside
+              className={
+                needsLabelConfirmation
+                  ? 'pm-wizard__warning pm-wizard__reference-warning'
+                  : 'pm-wizard__checked'
+              }
+            >
+              {needsLabelConfirmation ? <Info /> : <ShieldCheck />}
               <div>
                 <strong>
-                  {tr('Times checked by PharMate', 'Sinuri ng PharMate ang mga oras')}
+                  {needsLabelConfirmation
+                    ? tr('Reference Schedule — Review Required', 'Batayang Iskedyul — Suriin Muna')
+                    : tr('Suggested by PharMate', 'Mungkahi ng PharMate')}
                 </strong>
                 <span>
-                  {tr(
-                    'Each medicine and its schedule are shown together below.',
-                    'Magkasamang ipinapakita sa ibaba ang bawat gamot at iskedyul nito.'
-                  )}
+                  {needsLabelConfirmation
+                    ? tr(
+                        'Not pharmacist verified. It must match the exact medicine label.',
+                        'Hindi ito beripikado ng parmasyutiko. Dapat tugma ito sa eksaktong label ng gamot.'
+                      )
+                    : tr('Check the times before saving.', 'Suriin ang mga oras bago i-save.')}
                 </span>
+                {needsLabelConfirmation && schedule?.rule_provenance?.[0]?.evidence_source_url && (
+                  <a
+                    href={schedule.rule_provenance[0].evidence_source_url}
+                    rel="noreferrer"
+                    target="_blank"
+                  >
+                    {tr('View official reference', 'Tingnan ang opisyal na sanggunian')}
+                  </a>
+                )}
               </div>
             </aside>
           )}
+          {source === 'suggested' && (
+            <aside className="pm-wizard__warning">
+              <Info />
+              <span>
+                {tr(
+                  schedule?.disclaimer ||
+                    'PharMate checks recorded rules and creates reminder times only. It does not guarantee that a medicine or schedule is medically safe or replace a licensed clinician or pharmacist.',
+                  'Sinusuri lamang ng PharMate ang mga naitalang tuntunin at gumagawa ng oras ng paalala. Hindi nito ginagarantiya na medikal na ligtas ang gamot o iskedyul at hindi nito pinapalitan ang lisensyadong clinician o parmasyutiko.'
+                )}
+              </span>
+            </aside>
+          )}
+          {schedule?.prn_trackers?.length > 0 && (
+            <aside className="pm-wizard__warning">
+              <Info />
+              <div>
+                <strong>
+                  {tr(
+                    'As-needed tracker — no recurring alarms',
+                    'Tracker kapag kailangan — walang paulit-ulit na alarm'
+                  )}
+                </strong>
+                {schedule.prn_trackers.map((tracker) => (
+                  <span key={tracker.drug_id}>
+                    {tracker.name}: {tracker.directions}.{' '}
+                    {tracker.min_interval_hours
+                      ? tr(
+                          `Wait at least ${tracker.min_interval_hours} hours between doses.`,
+                          `Maghintay ng hindi bababa sa ${tracker.min_interval_hours} oras sa pagitan ng dose.`
+                        )
+                      : tr(
+                          'PharMate will not calculate the next safe dose.',
+                          'Hindi kakalkulahin ng PharMate ang susunod na ligtas na dose.'
+                        )}
+                  </span>
+                ))}
+              </div>
+            </aside>
+          )}
+          {schedule?.warnings
+            ?.filter((item) => item.severity === 'warning')
+            .map((item) => (
+              <aside className="pm-wizard__warning" key={`${item.code}-${item.drug_id || ''}`}>
+                <Info />
+                <span>{item.message}</span>
+              </aside>
+            ))}
           {source === 'manual' && (
             <aside className="pm-wizard__warning">
               <Info />
               <span>
                 {tr(
-                  'You changed one or more times. Check them against the medicine label before saving.',
-                  'May binago kang oras. Ihambing ito sa label ng gamot bago i-save.'
+                  'Created by you. Check that your selected times match the medicine label or prescription. Ask your pharmacist if you are unsure.',
+                  'Ikaw ang gumawa nito. Tiyaking tugma ang napiling oras sa label o reseta. Magtanong sa parmasyutiko kung hindi sigurado.'
                 )}
               </span>
             </aside>
@@ -1544,8 +1881,36 @@ export default function AutomatedAddMedication() {
             <Plus />
             {tr('Add another medicine', 'Magdagdag ng isa pang gamot')}
           </button>
-          {schedule?.schedule?.length > 0 && (
+          <div className="pm-wizard__review-actions">
+            <button
+              onClick={() => {
+                setConfirmed(false);
+                setError('');
+                setPhase('schedule-choice');
+              }}
+              type="button"
+            >
+              <CalendarClock />
+              {tr('Change Scheduling Method', 'Palitan ang Paraan ng Pag-iskedyul')}
+            </button>
+          </div>
+          {(schedule?.schedule?.length > 0 || schedule?.prn_trackers?.length > 0) && (
             <>
+              {needsLabelConfirmation && (
+                <label className="pm-wizard__confirm pm-wizard__reference-confirm">
+                  <input
+                    checked={referenceConfirmed}
+                    onChange={(event) => setReferenceConfirmed(event.target.checked)}
+                    type="checkbox"
+                  />
+                  <span>
+                    {tr(
+                      'This matches the exact medicine label.',
+                      'Tugma ito sa eksaktong label ng gamot.'
+                    )}
+                  </span>
+                </label>
+              )}
               <label className="pm-wizard__confirm">
                 <input
                   checked={confirmed}
@@ -1553,10 +1918,7 @@ export default function AutomatedAddMedication() {
                   type="checkbox"
                 />
                 <span>
-                  {tr(
-                    'I checked every medicine and its reminder times.',
-                    'Sinuri ko ang bawat gamot at mga oras ng paalala.'
-                  )}
+                  {tr('The medicine and times are correct.', 'Tama ang gamot at mga oras.')}
                 </span>
               </label>
               {error && (
@@ -1570,12 +1932,17 @@ export default function AutomatedAddMedication() {
               )}
               <button
                 className="pm-wizard__primary"
-                disabled={!confirmed || working}
+                disabled={!confirmed || working || (needsLabelConfirmation && !referenceConfirmed)}
                 onClick={confirmAndSave}
                 type="button"
               >
                 {working ? <LoaderCircle className="spin" /> : <CheckCircle2 />}
-                {tr('Confirm Schedule', 'Kumpirmahin ang Iskedyul')}
+                {schedule?.schedule?.length
+                  ? tr('Confirm & Save Schedule', 'Kumpirmahin at I-save ang Iskedyul')
+                  : tr(
+                      'Confirm & Save As-Needed Medicine',
+                      'Kumpirmahin at I-save ang Gamot Kapag Kailangan'
+                    )}
               </button>
             </>
           )}
@@ -1585,15 +1952,13 @@ export default function AutomatedAddMedication() {
         </WizardPage>
       )}
       {phase === 'success' && (
-        <WizardPage
-          title={tr('Your medication schedule is ready', 'Handa na ang iskedyul ng iyong gamot')}
-        >
+        <WizardPage title={tr('Medication schedule saved', 'Nai-save ang iskedyul ng gamot')}>
           <div className="pm-wizard__success">
             <CheckCircle2 />
             <p>
               {tr(
-                'Your reminders have been saved. You can change them anytime from Medications.',
-                'Nai-save na ang mga paalala. Maaari mo itong baguhin sa Medications.'
+                'Your medicine and reminder times are now available on your medication dashboard.',
+                'Makikita na ang iyong gamot at mga oras ng paalala sa medication dashboard.'
               )}
             </p>
           </div>
@@ -1647,46 +2012,6 @@ function BottomNext({ onClick, tr }) {
     <button className="pm-wizard__primary" onClick={onClick} type="button">
       {tr('Next', 'Susunod')} <ChevronRight />
     </button>
-  );
-}
-function DosePage({ medicine, onChange, onNext, tr }) {
-  const amount = Number(medicine.dose_amount || 1);
-  const form = medicine.patient_form || medicine.dosage_form;
-  const units = unitFor(form, 2);
-  return (
-    <WizardPage
-      title={tr(
-        `How many ${units} do you take at one time?`,
-        'Gaano karaming gamot ang iniinom mo sa isang inuman?'
-      )}
-    >
-      <div className="pm-wizard__counter">
-        <button
-          aria-label={tr('Decrease amount', 'Bawasan')}
-          onClick={() => onChange(Math.max(0.5, amount - 0.5))}
-          type="button"
-        >
-          <Minus />
-        </button>
-        <strong>
-          {amount} {unitFor(form, amount)}
-        </strong>
-        <button
-          aria-label={tr('Increase amount', 'Dagdagan')}
-          onClick={() => onChange(amount + 0.5)}
-          type="button"
-        >
-          <Plus />
-        </button>
-      </div>
-      <p>
-        {tr(
-          'Check your medicine label and choose the amount shown.',
-          'Tingnan ang label ng gamot at piliin ang nakasulat na dami.'
-        )}
-      </p>
-      <BottomNext onClick={onNext} tr={tr} />
-    </WizardPage>
   );
 }
 function treatmentDates(startDate, endDate) {
@@ -2349,13 +2674,19 @@ function GenerationError({ error, onCheck, onEdit, onAsk, tr }) {
     <div className="pm-wizard__generation-error" role="alert">
       <Info />
       <div>
-        <h3>{tr('Please check your medicine label', 'Pakisuri ang label ng gamot')}</h3>
-        <p>{error}</p>
+        <h3>{tr('We need more information', 'Kailangan namin ng dagdag na impormasyon')}</h3>
+        <p>
+          {tr(
+            'PharMate could not create a suggested schedule from the available medicine instructions. Check the medicine label or prescription, create the schedule yourself, or ask your pharmacist.',
+            'Hindi makagawa ang PharMate ng mungkahing iskedyul mula sa available na tagubilin. Suriin ang label o reseta, gumawa ng sariling iskedyul, o magtanong sa parmasyutiko.'
+          )}
+        </p>
+        {error && <small>{error}</small>}
         <button onClick={onCheck} type="button">
-          {tr('Check My Answers', 'Suriin ang Sagot')}
+          {tr('Check Medicine Details', 'Suriin ang Detalye ng Gamot')}
         </button>
         <button onClick={onEdit} type="button">
-          {tr('Choose Reminder Times', 'Pumili ng Oras ng Paalala')}
+          {tr('Create Manual Schedule', 'Gumawa ng Manwal na Iskedyul')}
         </button>
         <button onClick={onAsk} type="button">
           {tr('Ask a Pharmacist', 'Magtanong sa Parmasyutiko')}

@@ -77,8 +77,9 @@ export default function InquiriesRedesign() {
     <>
       <h2 className="h4 fw-bold mb-1">Patient Chat Validation</h2>
       <p className="text-muted">
-        Validate and accept a request before viewing or replying. Patients are identified only by
-        patient code.
+        Accept a request to open its conversation. Subjects and messages are stored on PharMate’s
+        server, including after completion. The patient code is a pseudonym; message content may
+        identify the patient. <a href="/privacy#inquiries">Inquiry privacy policy</a>
       </p>
       {error && <div className="alert alert-warning py-2">{error}</div>}
       <div className="row g-3">

@@ -1,8 +1,8 @@
 /**
  * Ask Your Pharmacist (Sprint 8, UC objectives 5/10, D-I, B-8).
  *
- * Anonymous text inquiry: the pharmacist only ever sees patient_code. Transport
- * is polling (no realtime infra). Completed threads and their messages are kept
+ * Pseudonymous text inquiry: the queue shows patient_code, while text entered
+ * by a patient may identify them. Completed threads and their messages are kept
  * as read-only consultation history for the patient and assigned pharmacist.
  * Priority is the patient's verified chronic-condition flag (boolean,
  * PART 2), never streak-based.
@@ -14,6 +14,19 @@
 import { v4 as uuidv4 } from 'uuid';
 import { pool } from '../db/connection.js';
 import { findRestricted } from './formulary.js';
+import { getInquiryConsent, INQUIRY_CONSENT_REQUIRED } from './inquiryConsent.js';
+
+/** A selected pharmacist or a pharmacist at the requested branch may claim it. */
+async function eligiblePharmacist(thread, pharmacistId, executor) {
+  if (thread.pharmacist_id) return thread.pharmacist_id === pharmacistId;
+  if (thread.requested_pharmacist_id && thread.requested_pharmacist_id !== pharmacistId) {
+    return false;
+  }
+  const [[pharmacist]] = await executor.execute('SELECT branch_id FROM pharmacists WHERE id=?', [
+    pharmacistId,
+  ]);
+  return Boolean(pharmacist && (!thread.branch_id || pharmacist.branch_id === thread.branch_id));
+}
 
 /**
  * Open a thread. If `drugName` names a restricted substance, no thread is
@@ -23,34 +36,66 @@ export async function openThread(
   patientId,
   { subject = null, branchId = null, pharmacistId = null, drugName = null, medicationDraftKey = null } = {}
 ) {
-  if (drugName) {
-    const restricted = await findRestricted(drugName);
-    if (restricted) return { error: 'restricted', generic_name: restricted.generic_name };
-  }
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const consent = await getInquiryConsent(patientId, conn, true);
+    if (!consent.consented) {
+      await conn.rollback();
+      return INQUIRY_CONSENT_REQUIRED;
+    }
+    if (drugName) {
+      const restricted = await findRestricted(drugName);
+      if (restricted) {
+        await conn.rollback();
+        return { error: 'restricted', generic_name: restricted.generic_name };
+      }
+    }
 
-  // Priority is the patient's verified chronic-condition flag (PART 2), a
-  // boolean derived from prescription validation — never a severity tier.
-  const [[patient]] = await pool.execute('SELECT priority_flag FROM patients WHERE id = ?', [
-    patientId,
-  ]);
-  const priority = patient?.priority_flag ? 'high' : 'normal';
+    // Priority is the patient's verified chronic-condition flag (PART 2), a
+    // boolean derived from prescription validation — never a severity tier.
+    const [[patient]] = await conn.execute('SELECT priority_flag FROM patients WHERE id = ?', [
+      patientId,
+    ]);
+    const priority = patient?.priority_flag ? 'high' : 'normal';
 
-  if (pharmacistId) {
-    const [[pharmacist]] = await pool.execute(
-      'SELECT id FROM pharmacists WHERE id=? AND (? IS NULL OR branch_id=?)',
-      [pharmacistId, branchId, branchId]
+    if (pharmacistId) {
+      const [[pharmacist]] = await conn.execute(
+        'SELECT id FROM pharmacists WHERE id=? AND (? IS NULL OR branch_id=?)',
+        [pharmacistId, branchId, branchId]
+      );
+      if (!pharmacist) {
+        await conn.rollback();
+        return { error: 'pharmacist_not_found' };
+      }
+    }
+
+    const id = uuidv4();
+    await conn.execute(
+      `INSERT INTO inquiry_threads
+       (id, patient_id, branch_id, requested_pharmacist_id, status, priority, subject,
+        medication_draft_key,consent_policy_version,consent_accepted_at)
+     VALUES (?, ?, ?, ?, 'open', ?, ?, ?, ?, ?)`,
+      [
+        id,
+        patientId,
+        branchId,
+        pharmacistId,
+        priority,
+        subject,
+        medicationDraftKey,
+        consent.policy_version,
+        consent.accepted_at,
+      ]
     );
-    if (!pharmacist) return { error: 'pharmacist_not_found' };
+    await conn.commit();
+    return { thread_id: id, priority, validation_status: 'awaiting_pharmacist' };
+  } catch (error) {
+    await conn.rollback();
+    throw error;
+  } finally {
+    conn.release();
   }
-
-  const id = uuidv4();
-  await pool.execute(
-    `INSERT INTO inquiry_threads
-       (id, patient_id, branch_id, requested_pharmacist_id, status, priority, subject, medication_draft_key)
-     VALUES (?, ?, ?, ?, 'open', ?, ?, ?)`,
-    [id, patientId, branchId, pharmacistId, priority, subject, medicationDraftKey]
-  );
-  return { thread_id: id, priority, validation_status: 'awaiting_pharmacist' };
 }
 
 export async function acceptInquiry(threadId, pharmacistId) {
@@ -58,7 +103,7 @@ export async function acceptInquiry(threadId, pharmacistId) {
   try {
     await conn.beginTransaction();
     const [[thread]] = await conn.execute(
-      `SELECT id,status,pharmacist_id,requested_pharmacist_id
+      `SELECT id,status,branch_id,pharmacist_id,requested_pharmacist_id
        FROM inquiry_threads WHERE id=? FOR UPDATE`,
       [threadId]
     );
@@ -73,6 +118,10 @@ export async function acceptInquiry(threadId, pharmacistId) {
     if (thread.pharmacist_id && thread.pharmacist_id !== pharmacistId) {
       await conn.rollback();
       return { error: 'claimed' };
+    }
+    if (!(await eligiblePharmacist(thread, pharmacistId, conn))) {
+      await conn.rollback();
+      return { error: 'not_found' };
     }
     if (!thread.pharmacist_id) {
       await conn.execute('UPDATE inquiry_threads SET pharmacist_id=? WHERE id=?', [
@@ -92,11 +141,12 @@ export async function acceptInquiry(threadId, pharmacistId) {
 
 /** Append a message. Only the thread's patient (or the assigned pharmacist) may post. */
 export async function postMessage(threadId, senderRole, senderId, message) {
+  if (!['patient', 'pharmacist'].includes(senderRole)) return { error: 'not_found' };
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
     const [[thread]] = await conn.execute(
-      `SELECT patient_id, pharmacist_id, requested_pharmacist_id, status FROM inquiry_threads
+      `SELECT patient_id, branch_id, pharmacist_id, requested_pharmacist_id, status FROM inquiry_threads
        WHERE id = ? FOR UPDATE`,
       [threadId]
     );
@@ -105,11 +155,7 @@ export async function postMessage(threadId, senderRole, senderId, message) {
       return { error: 'not_found' };
     }
     if (senderRole === 'pharmacist') {
-      if (thread.requested_pharmacist_id && thread.requested_pharmacist_id !== senderId) {
-        await conn.rollback();
-        return { error: 'not_found' };
-      }
-      if (thread.pharmacist_id && thread.pharmacist_id !== senderId) {
+      if (!(await eligiblePharmacist(thread, senderId, conn))) {
         await conn.rollback();
         return { error: 'not_found' };
       }
@@ -123,6 +169,10 @@ export async function postMessage(threadId, senderRole, senderId, message) {
     if (thread.status !== 'open') {
       await conn.rollback();
       return { error: 'closed' };
+    }
+    if (!(await getInquiryConsent(thread.patient_id, conn, true)).consented) {
+      await conn.rollback();
+      return INQUIRY_CONSENT_REQUIRED;
     }
 
     const id = uuidv4();
@@ -142,11 +192,12 @@ export async function postMessage(threadId, senderRole, senderId, message) {
 
 /** Poll a thread's messages (patient or assigned pharmacist). */
 export async function getMessages(threadId, viewerRole, viewerId) {
+  if (!['patient', 'pharmacist'].includes(viewerRole)) return { error: 'not_found' };
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
     const [[thread]] = await conn.execute(
-      `SELECT patient_id, pharmacist_id, requested_pharmacist_id, status
+      `SELECT patient_id, branch_id, pharmacist_id, requested_pharmacist_id, status
        FROM inquiry_threads WHERE id = ? FOR UPDATE`,
       [threadId]
     );
@@ -155,11 +206,7 @@ export async function getMessages(threadId, viewerRole, viewerId) {
       return { error: 'not_found' };
     }
     if (viewerRole === 'pharmacist') {
-      if (thread.requested_pharmacist_id && thread.requested_pharmacist_id !== viewerId) {
-        await conn.rollback();
-        return { error: 'not_found' };
-      }
-      if (thread.pharmacist_id && thread.pharmacist_id !== viewerId) {
+      if (!(await eligiblePharmacist(thread, viewerId, conn))) {
         await conn.rollback();
         return { error: 'not_found' };
       }
@@ -193,6 +240,7 @@ export async function getMessages(threadId, viewerRole, viewerId) {
  * Complete a thread. Messages remain available as read-only consultation history.
  */
 export async function closeThread(threadId, closerRole, closerId) {
+  if (!['patient', 'pharmacist'].includes(closerRole)) return { error: 'not_found' };
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
@@ -245,15 +293,17 @@ export async function pharmacistQueue(pharmacistId) {
             (SELECT COUNT(*) FROM inquiry_messages m WHERE m.thread_id = t.id) AS message_count
      FROM inquiry_threads t
      JOIN patients p ON p.id = t.patient_id
+     JOIN pharmacists viewer ON viewer.id = ?
      WHERE (t.status = 'open' AND
               (t.pharmacist_id = ? OR
                (t.pharmacist_id IS NULL AND
-                (t.requested_pharmacist_id IS NULL OR t.requested_pharmacist_id = ?))))
+                (t.requested_pharmacist_id IS NULL OR t.requested_pharmacist_id = ?)
+                AND (t.branch_id IS NULL OR t.branch_id = viewer.branch_id))))
         OR (t.status = 'closed' AND t.pharmacist_id = ?)
      ORDER BY (t.status = 'open') DESC, (t.priority = 'high') DESC,
               CASE WHEN t.status = 'open' THEN t.opened_at END ASC,
               t.closed_at DESC`,
-    [pharmacistId, pharmacistId, pharmacistId]
+    [pharmacistId, pharmacistId, pharmacistId, pharmacistId]
   );
   return rows;
 }

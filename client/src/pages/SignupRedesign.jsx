@@ -353,9 +353,15 @@ export default function SignupRedesign() {
             />
             <span>
               I agree to the <a href="#terms">Terms of Service</a> and{' '}
-              <a href="#privacy">Privacy Policy</a>
+              <a href="/privacy#inquiries" target="_blank" rel="noreferrer">
+                Inquiry Privacy Policy
+              </a>
             </span>
           </label>
+          <p className="auth-privacy-note">
+            Pharmacist inquiries are optional. Before sending one, you will be asked separately to
+            consent to storing the conversation and its history on PharMate’s server.
+          </p>
           <CaptchaChallenge
             ref={captchaRef}
             action="register"
