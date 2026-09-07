@@ -2,7 +2,7 @@
  * Cron dispatcher (feature #4) — the long-awaited node-cron bootstrap the sweep
  * and purge jobs referenced. Starts the periodic pipeline in a running server:
  *
- *   every minute      → dispatchReminders()  push due-dose reminders (online layer)
+ *   every minute      → dispatchReminders()  repeat genuinely DUE doses at most every 5 minutes
  *   every 5 minutes   → sweepMissed()        mark >30-min-overdue doses missed (D-C)
  *   daily 03:15 Manila→ purge retained read notifications and prescription photos
  *

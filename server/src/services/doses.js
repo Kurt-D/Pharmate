@@ -20,19 +20,10 @@ import { raiseMissedAlerts } from './alerts.js';
 import { createPatientNotification } from './patientNotifications.js';
 import { publishPatientAdherence } from './caregiverEvents.js';
 import { publishDoseActivity } from './realtimeEvents.js';
+import { getPatientMedicationSchedule } from './medicationSchedule.js';
 
 const VALID_METHODS = ['fcm', 'local', 'manual', 'ocr'];
 const MANILA_OFFSET_MS = 8 * 3600 * 1000;
-
-function manilaDayKey(value = new Date()) {
-  const shifted = new Date(new Date(value).getTime() + MANILA_OFFSET_MS);
-  return shifted.toISOString().slice(0, 10);
-}
-
-function dayBounds(dayKey) {
-  const start = new Date(`${dayKey}T00:00:00+08:00`);
-  return { start, end: new Date(start.getTime() + 24 * 60 * 60 * 1000) };
-}
 
 const CALENDAR_STATUSES = {
   all: null,
@@ -40,23 +31,6 @@ const CALENDAR_STATUSES = {
   missed: ['missed'],
   taken: ['taken', 'taken_late'],
 };
-
-function serializeDose(r) {
-  return {
-    schedule_id: r.schedule_id,
-    medication_id: r.medication_id,
-    drug_name: r.drug_name_raw,
-    scheduled_time: r.scheduled_time,
-    logged_at: r.logged_at ?? null,
-    status: r.status,
-    reason: r.generated_reason,
-    dosage_instruction: r.dosage_instruction ?? null,
-    strength: r.strength_value
-      ? `${Number(r.strength_value)} ${r.strength_unit || ''}`.trim()
-      : null,
-    dosage_form: r.dosage_form_snapshot ?? null,
-  };
-}
 
 async function emitDoseActivity(patientId, scheduleId, status, loggedAt) {
   try {
@@ -77,29 +51,8 @@ function manilaMinuteOfDay(date) {
 }
 
 /** The patient's current confirmed day plan (latest version for each medicine). */
-export async function todayDoses(patientId) {
-  const { start, end } = dayBounds(manilaDayKey());
-  const [rows] = await pool.execute(
-    `SELECT ms.id AS schedule_id, ms.medication_id, ms.scheduled_time, ms.status,
-            ms.generated_reason, m.drug_name_raw, m.dosage_instruction,
-            m.strength_value, m.strength_unit, m.dosage_form_snapshot,
-            (SELECT dl.logged_at FROM dose_logs dl
-              WHERE dl.schedule_id=ms.id AND dl.status IN ('taken','taken_late')
-              ORDER BY dl.created_at DESC LIMIT 1) AS logged_at
-       FROM medication_schedules ms
-       JOIN medications m ON m.id=ms.medication_id
-      WHERE ms.patient_id=? AND (
-        (ms.status IN ('scheduled','snoozed') AND ms.scheduled_time>=?
-          AND ms.schedule_version=(SELECT COALESCE(MAX(schedule_version),0)
-            FROM medication_schedules WHERE patient_id=? AND medication_id=ms.medication_id))
-        OR
-        (ms.status IN ('taken','taken_late','missed')
-          AND ms.scheduled_time>=? AND ms.scheduled_time<?)
-      )
-      ORDER BY ms.scheduled_time ASC`,
-    [patientId, start, patientId, start, end]
-  );
-  return rows.map(serializeDose);
+export async function todayDoses(patientId, options = {}) {
+  return (await getPatientMedicationSchedule(patientId, options)).doses;
 }
 
 /** Dose history for one Manila calendar day, optionally narrowed by UI status. */
@@ -108,33 +61,20 @@ export async function dosesForDate(patientId, date, status = 'all') {
     return { error: 'invalid_date' };
   }
   if (!Object.hasOwn(CALENDAR_STATUSES, status)) return { error: 'invalid_status' };
-  const { start, end } = dayBounds(date);
-  const selectedStatuses = CALENDAR_STATUSES[status];
-  const statusClause = selectedStatuses
-    ? ` AND ms.status IN (${selectedStatuses.map(() => '?').join(',')})`
-    : '';
-  const [rows] = await pool.execute(
-    `SELECT ms.id AS schedule_id, ms.medication_id, ms.scheduled_time, ms.status,
-            ms.generated_reason, m.drug_name_raw, m.dosage_instruction,
-            m.strength_value, m.strength_unit, m.dosage_form_snapshot,
-            (SELECT dl.logged_at
-               FROM dose_logs dl
-              WHERE dl.schedule_id = ms.id AND dl.status IN ('taken','taken_late')
-              ORDER BY dl.created_at DESC LIMIT 1) AS logged_at
-     FROM medication_schedules ms
-     JOIN medications m ON m.id = ms.medication_id
-     WHERE ms.patient_id = ?
-       AND ms.scheduled_time >= ? AND ms.scheduled_time < ?
-       AND (ms.status IN ('taken','taken_late','missed') OR ms.schedule_version = (
-         SELECT COALESCE(MAX(schedule_version), 0)
-         FROM medication_schedules
-         WHERE patient_id = ? AND medication_id = ms.medication_id
-       ))
-       ${statusClause}
-     ORDER BY ms.scheduled_time ASC`,
-    [patientId, start, end, patientId, ...(selectedStatuses || [])]
+  const doses = (await getPatientMedicationSchedule(patientId, { date })).doses;
+  if (!CALENDAR_STATUSES[status]) return doses;
+  const wanted = new Set(
+    status === 'taken' ? ['TAKEN'] : status === 'missed' ? ['MISSED'] : ['UPCOMING', 'DUE']
   );
-  return rows.map(serializeDose);
+  return doses.filter((dose) => wanted.has(dose.status));
+}
+
+export async function doseHistory(patientId, startDate, endDate) {
+  if (![startDate, endDate].every((date) => /^\d{4}-\d{2}-\d{2}$/.test(String(date)))) {
+    return { error: 'invalid_date' };
+  }
+  if (startDate > endDate) return { error: 'invalid_range' };
+  return (await getPatientMedicationSchedule(patientId, { startDate, endDate })).doses;
 }
 
 /**
@@ -146,7 +86,8 @@ export async function logDose(patientId, scheduleId, opts = {}) {
   const { logged_at, method = 'manual', notes = null, log_id, action = 'take' } = opts;
 
   const [rows] = await pool.execute(
-    `SELECT ms.id, ms.medication_id, ms.scheduled_time, ms.status, m.frequency_code
+    `SELECT ms.id, ms.medication_id, ms.scheduled_time, ms.status, m.frequency_code,
+            m.schedule_status
      FROM medication_schedules ms
      JOIN medications m ON m.id = ms.medication_id
      WHERE ms.id = ? AND ms.patient_id = ?`,
@@ -154,6 +95,15 @@ export async function logDose(patientId, scheduleId, opts = {}) {
   );
   const sched = rows[0];
   if (!sched) return { error: 'not_found' };
+  if (sched.schedule_status !== 'APPROVED') return { error: 'schedule_not_approved' };
+  if (['taken', 'taken_late'].includes(sched.status)) {
+    const [[existing]] = await pool.execute(
+      `SELECT id, status FROM dose_logs WHERE schedule_id = ? AND status IN ('taken','taken_late')
+       ORDER BY created_at ASC LIMIT 1`,
+      [scheduleId]
+    );
+    return { status: 'TAKEN', log_id: existing?.id ?? null, duplicate: true, reflow: null };
+  }
 
   const loggedAt = logged_at ? new Date(logged_at) : new Date();
   let status;
@@ -192,7 +142,7 @@ export async function logDose(patientId, scheduleId, opts = {}) {
     logged_at: loggedAt.toISOString(),
   });
   await emitDoseActivity(patientId, scheduleId, status, loggedAt);
-  return { status, log_id: logId, reflow };
+  return { status: status === 'missed' ? 'MISSED' : 'TAKEN', adherence_status: status, log_id: logId, reflow };
 }
 
 /**
@@ -230,7 +180,11 @@ export async function sweepMissed(now = new Date()) {
     `SELECT ms.id, ms.patient_id, ms.scheduled_time, m.drug_name_raw
      FROM medication_schedules ms
      JOIN medications m ON m.id = ms.medication_id
-     WHERE ms.status = 'scheduled'`
+     WHERE ms.status = 'scheduled'
+       AND ms.is_confirmed = 1
+       AND m.schedule_status = 'APPROVED'
+       AND NOT EXISTS (SELECT 1 FROM dose_logs dl
+                        WHERE dl.schedule_id = ms.id AND dl.status IN ('taken','taken_late'))`
   );
   let missed = 0;
   for (const r of rows) {

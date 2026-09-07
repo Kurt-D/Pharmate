@@ -32,6 +32,9 @@ export function validateEnvironment(env = process.env) {
 
   if (env.NODE_ENV === 'production') {
     if (!env.GOOGLE_CLIENT_ID?.trim()) errors.push('GOOGLE_CLIENT_ID is required in production');
+    if (!env.OTP_SECRET?.trim() || env.OTP_SECRET.length < 64) {
+      errors.push('OTP_SECRET must be at least 64 characters in production');
+    }
   }
   const captchaProvider = String(env.CAPTCHA_PROVIDER || 'turnstile')
     .trim()
@@ -61,16 +64,35 @@ export function validateEnvironment(env = process.env) {
   if (env.RESET_TOKEN_SECRET && env.RESET_TOKEN_SECRET.length < 64) {
     errors.push('RESET_TOKEN_SECRET must be at least 64 characters');
   }
+  if (env.TRUST_PROXY_HOPS && !/^[1-9]\d*$/.test(env.TRUST_PROXY_HOPS)) {
+    errors.push('TRUST_PROXY_HOPS must be a positive integer');
+  }
+  if (env.NODE_ENV === 'production' && env.STAFF_MFA_REQUIRED === 'false') {
+    errors.push('STAFF_MFA_REQUIRED cannot be disabled in production');
+  }
 
-  if (env.PASSWORD_RESET_EMAIL_ENABLED === 'true' && env.NODE_ENV !== 'test') {
-    const smtpRequired = ['SMTP_HOST', 'SMTP_PORT'];
-    const missingSmtp = smtpRequired.filter((name) => !env[name]?.trim());
-    if (!(env.SMTP_USER || env.SMTP_USERNAME)?.trim()) missingSmtp.push('SMTP_USER');
-    if (!(env.SMTP_PASS || env.SMTP_PASSWORD)?.trim()) missingSmtp.push('SMTP_PASS');
-    if (missingSmtp.length) {
-      errors.push(`Missing password-reset email variables: ${missingSmtp.join(', ')}`);
+  if (
+    (env.EMAIL_ENABLED === 'true' || env.PASSWORD_RESET_EMAIL_ENABLED === 'true') &&
+    env.NODE_ENV !== 'test'
+  ) {
+    const emailProvider = String(env.EMAIL_PROVIDER || 'smtp').toLowerCase();
+    if (!['smtp', 'resend'].includes(emailProvider)) {
+      errors.push('EMAIL_PROVIDER must be smtp or resend');
+    } else if (emailProvider === 'resend') {
+      if (!env.RESEND_API_KEY?.trim()) errors.push('RESEND_API_KEY is required for Resend');
+    } else {
+      const smtpRequired = ['SMTP_HOST', 'SMTP_PORT'];
+      const missingSmtp = smtpRequired.filter((name) => !env[name]?.trim());
+      if (!(env.SMTP_USER || env.SMTP_USERNAME)?.trim()) missingSmtp.push('SMTP_USER');
+      if (!(env.SMTP_PASS || env.SMTP_PASSWORD)?.trim()) missingSmtp.push('SMTP_PASS');
+      if (missingSmtp.length) errors.push(`Missing email variables: ${missingSmtp.join(', ')}`);
+      if (env.SMTP_PORT && !/^\d+$/.test(env.SMTP_PORT)) {
+        errors.push('SMTP_PORT must be numeric');
+      }
     }
-    if (env.SMTP_PORT && !/^\d+$/.test(env.SMTP_PORT)) errors.push('SMTP_PORT must be numeric');
+    if (!(env.EMAIL_FROM || env.SMTP_FROM || env.SMTP_SENDER)?.trim()) {
+      errors.push('EMAIL_FROM is required when email delivery is enabled');
+    }
   }
   if (env.PASSWORD_RESET_DEV_LOG_TOKEN === 'true' && env.NODE_ENV !== 'development') {
     errors.push('PASSWORD_RESET_DEV_LOG_TOKEN is allowed only when NODE_ENV=development');
@@ -81,6 +103,10 @@ export function validateEnvironment(env = process.env) {
     error.code = 'INVALID_SERVER_CONFIGURATION';
     throw error;
   }
+}
+
+export function trustedProxyHops(env = process.env) {
+  return env.TRUST_PROXY_HOPS ? Number(env.TRUST_PROXY_HOPS) : 0;
 }
 
 export function trustedOrigins(env = process.env) {

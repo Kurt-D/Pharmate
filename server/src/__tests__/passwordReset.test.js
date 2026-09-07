@@ -1,4 +1,3 @@
-import bcrypt from 'bcryptjs';
 import request from 'supertest';
 import app from '../index.js';
 import { pool } from '../db/connection.js';
@@ -52,16 +51,17 @@ describe('PIN password recovery', () => {
     });
   });
 
-  test('stores only a bcrypt PIN hash and never returns the PIN over HTTP', async () => {
+  test('stores only a keyed OTP hash and never returns the OTP over HTTP', async () => {
     const email = `forgot.hash.${Date.now()}@test.pharmate`;
     const user = await register(email);
     const { response, pin } = await requestPin(email);
     const [rows] = await pool.execute(
-      'SELECT pin_hash FROM password_resets WHERE user_id = ? ORDER BY created_at DESC',
+      `SELECT otp_hash FROM otp_codes
+       WHERE user_id = ? AND purpose='PASSWORD_RESET' ORDER BY created_at DESC`,
       [user.id]
     );
-    expect(await bcrypt.compare(pin, rows[0].pin_hash)).toBe(true);
-    expect(rows[0].pin_hash).not.toBe(pin);
+    expect(rows[0].otp_hash).toMatch(/^[a-f0-9]{64}$/);
+    expect(rows[0].otp_hash).not.toBe(pin);
     expect(JSON.stringify(response.body)).not.toContain(pin);
   });
 
@@ -70,7 +70,8 @@ describe('PIN password recovery', () => {
     const expiredUser = await register(expiredEmail);
     const expired = await requestPin(expiredEmail);
     await pool.execute(
-      'UPDATE password_resets SET expires_at = DATE_SUB(NOW(3), INTERVAL 1 SECOND) WHERE user_id = ?',
+      `UPDATE otp_codes SET expires_at = DATE_SUB(NOW(3), INTERVAL 1 SECOND)
+       WHERE user_id = ? AND purpose='PASSWORD_RESET'`,
       [expiredUser.id]
     );
     expect((await verifyPin(expiredEmail, expired.pin)).status).toBe(400);
@@ -79,7 +80,7 @@ describe('PIN password recovery', () => {
     await register(lockedEmail);
     const current = await requestPin(lockedEmail);
     const wrongPin = current.pin === '000000' ? '111111' : '000000';
-    for (let attempt = 0; attempt < 3; attempt += 1) {
+    for (let attempt = 0; attempt < 5; attempt += 1) {
       expect((await verifyPin(lockedEmail, wrongPin)).status).toBe(400);
     }
     expect((await verifyPin(lockedEmail, current.pin)).status).toBe(400);

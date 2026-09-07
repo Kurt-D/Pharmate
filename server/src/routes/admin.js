@@ -11,7 +11,7 @@ import { pool } from '../db/connection.js';
 import { requireAuth } from '../middleware/auth.js';
 import { requireRole } from '../middleware/role.js';
 import { adherenceReport, doseLogReport, toCsv } from '../services/adherence.js';
-import { updateOrderStatus } from '../services/orders.js';
+import { updateOrderStatus, updatePaymentStatus } from '../services/orders.js';
 import { recordAudit } from '../services/audit.js';
 import { orderChanged } from '../services/domainEvents.js';
 import { publishRole, publishUser } from '../services/realtimeEvents.js';
@@ -242,7 +242,7 @@ function sendCsv(res, filename, csv) {
 }
 
 // ── GET /api/admin/export/adherence.csv ───────────────────────────────────────
-router.get('/export/adherence.csv', async (_req, res) => {
+router.get('/export/adherence.csv', async (req, res) => {
   const rows = await adherenceReport();
   const headers = [
     'patient_code',
@@ -253,11 +253,12 @@ router.get('/export/adherence.csv', async (_req, res) => {
     'adherence_pct',
     'streak',
   ];
+  await recordAudit({ actor: req.user, action: 'data_exported', entityType: 'adherence_report' });
   sendCsv(res, 'adherence.csv', toCsv(headers, rows));
 });
 
 // ── GET /api/admin/export/dose-logs.csv ───────────────────────────────────────
-router.get('/export/dose-logs.csv', async (_req, res) => {
+router.get('/export/dose-logs.csv', async (req, res) => {
   const rows = await doseLogReport();
   const headers = [
     'patient_code',
@@ -267,6 +268,7 @@ router.get('/export/dose-logs.csv', async (_req, res) => {
     'status',
     'confirmation_method',
   ];
+  await recordAudit({ actor: req.user, action: 'data_exported', entityType: 'dose_log_report' });
   sendCsv(res, 'dose-logs.csv', toCsv(headers, rows));
 });
 
@@ -277,6 +279,11 @@ router.get('/export/surveys.csv', async (req, res) => {
   const [rows] = await pool.execute(
     `SELECT id, role, responses_json, submitted_at FROM ${table} ORDER BY submitted_at ASC`
   );
+  await recordAudit({
+    actor: req.user,
+    action: 'data_exported',
+    entityType: `${instrument}_survey_report`,
+  });
   // Flatten responses_json into q-columns; union all keys for a stable header.
   const qKeys = new Set();
   const flat = rows.map((r) => {
@@ -340,22 +347,30 @@ router.put('/users/:id/active', async (req, res) => {
 // Orders management (Fig 53). No payment amount (D-4). Patient by code only.
 router.get('/orders', async (_req, res) => {
   const [refills] = await pool.execute(
-    `SELECT r.id, 'refill' AS kind, r.status, r.requested_at, r.updated_at,
-            p.patient_code, m.drug_name_raw AS drug, m.source, dr.rx_class,
-            b.name AS branch
+    `SELECT r.id, 'refill' AS kind, r.status, r.requested_at, r.updated_at, r.payment_method, r.payment_status,
+            p.patient_code, COALESCE(dr.generic_name,m.drug_name_raw) AS drug, m.source,
+            COALESCE(dr.rx_class,mdr.rx_class) AS rx_class, r.quantity,
+            placer.role AS placed_by_role, op.status AS prescription_status, b.name AS branch
      FROM refill_requests r JOIN patients p ON p.id = r.patient_id
-     JOIN medications m ON m.id = r.medication_id
-     LEFT JOIN drug_reference dr ON dr.id = m.drug_id
+     LEFT JOIN medications m ON m.id = r.medication_id
+     LEFT JOIN drug_reference mdr ON mdr.id = m.drug_id
+     LEFT JOIN drug_reference dr ON dr.id = r.drug_id
+     LEFT JOIN users placer ON placer.id=r.placed_by_user_id
+     LEFT JOIN order_prescriptions op ON op.order_kind='refill' AND op.order_id=r.id
      JOIN pharmacy_branches b ON b.id = r.branch_id
      ORDER BY r.requested_at DESC LIMIT 100`
   );
   const [deliveries] = await pool.execute(
-    `SELECT d.id, 'delivery' AS kind, d.status, d.requested_at, d.updated_at,
-            p.patient_code, m.drug_name_raw AS drug, m.source, dr.rx_class,
-            b.name AS branch
+    `SELECT d.id, 'delivery' AS kind, d.status, d.requested_at, d.updated_at, d.payment_method, d.payment_status,
+            p.patient_code, COALESCE(dr.generic_name,m.drug_name_raw) AS drug, m.source,
+            COALESCE(dr.rx_class,mdr.rx_class) AS rx_class, d.quantity,
+            placer.role AS placed_by_role, op.status AS prescription_status, b.name AS branch
      FROM delivery_requests d JOIN patients p ON p.id = d.patient_id
-     JOIN medications m ON m.id = d.medication_id
-     LEFT JOIN drug_reference dr ON dr.id = m.drug_id
+     LEFT JOIN medications m ON m.id = d.medication_id
+     LEFT JOIN drug_reference mdr ON mdr.id = m.drug_id
+     LEFT JOIN drug_reference dr ON dr.id = d.drug_id
+     LEFT JOIN users placer ON placer.id=d.placed_by_user_id
+     LEFT JOIN order_prescriptions op ON op.order_kind='delivery' AND op.order_id=d.id
      JOIN pharmacy_branches b ON b.id = d.branch_id
      ORDER BY d.requested_at DESC LIMIT 100`
   );
@@ -412,9 +427,16 @@ router.post('/orders/:kind/:id/status', async (req, res) => {
     });
   }
 
-  const result = await updateOrderStatus(kind, id, requestedStatus);
+  const result = await updateOrderStatus(kind, id, requestedStatus, {
+    id: req.user.sub,
+    role: 'admin',
+  });
   if (result.error === 'bad_status') return res.status(400).json({ error: 'Invalid status' });
   if (result.error === 'not_found') return res.status(404).json({ error: 'Order not found' });
+  if (result.error === 'invalid_transition')
+    return res
+      .status(409)
+      .json({ error: `Cannot move order from ${result.current_status} to ${requestedStatus}` });
   await recordAudit({
     actor: { id: req.user.sub, role: 'admin' },
     action: 'ORDER_STATUS_UPDATED',
@@ -424,6 +446,26 @@ router.post('/orders/:kind/:id/status', async (req, res) => {
     metadata: { from: order.status, to: requestedStatus },
   });
   await orderChanged({ patientId: order.patient_id, kind, orderId: id, status: requestedStatus });
+  res.json(result);
+});
+
+router.post('/orders/:kind/:id/payment-status', async (req, res) => {
+  const result = await updatePaymentStatus(
+    req.params.kind,
+    req.params.id,
+    req.body?.payment_status
+  );
+  if (result.error === 'bad_kind') return res.status(400).json({ error: 'Invalid order kind' });
+  if (result.error === 'not_found') return res.status(404).json({ error: 'Order not found' });
+  if (result.error)
+    return res.status(409).json({ error: `Cannot change payment from ${result.current_status}` });
+  await recordAudit({
+    actor: { id: req.user.sub, role: 'admin' },
+    action: 'ORDER_PAYMENT_STATUS_UPDATED',
+    entityType: `${req.params.kind}_order`,
+    entityId: req.params.id,
+    metadata: { payment_status: result.payment_status },
+  });
   res.json(result);
 });
 

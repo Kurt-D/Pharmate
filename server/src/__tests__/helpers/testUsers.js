@@ -17,12 +17,11 @@ export async function createPrivilegedTestUser({ email, password, role, fullName
 
   try {
     await conn.beginTransaction();
-    await conn.execute('INSERT INTO users (id, email, password_hash, role) VALUES (?, ?, ?, ?)', [
-      id,
-      email,
-      passwordHash,
-      role,
-    ]);
+    await conn.execute(
+      `INSERT INTO users (id,email,password_hash,role,is_verified,email_verified_at)
+       VALUES (?,?,?,?,1,NOW(3))`,
+      [id, email, passwordHash, role]
+    );
 
     if (role === 'pharmacist') {
       await conn.execute('INSERT INTO pharmacists (id, full_name) VALUES (?, ?)', [id, fullName]);

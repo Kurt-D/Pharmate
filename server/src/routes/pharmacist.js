@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import path from 'node:path';
 import { v4 as uuidv4 } from 'uuid';
 import { pool } from '../db/connection.js';
 import { requireAuth } from '../middleware/auth.js';
@@ -27,6 +28,10 @@ import { recordAudit } from '../services/audit.js';
 import { inquiryChanged, orderChanged, prescriptionChanged } from '../services/domainEvents.js';
 import { publishRole } from '../services/realtimeEvents.js';
 import { checkClinicalRule, verificationSummary } from '../services/clinicalRuleVerification.js';
+import { parseFrequency } from '../../engine/frequencyParser.js';
+import { deriveScheduleDefinition } from '../services/scheduleDefinition.js';
+import { proposeForPrescription } from '../services/schedule.js';
+import { UPLOADS_DIR } from '../middleware/upload.js';
 
 const router = Router();
 
@@ -320,15 +325,35 @@ router.get('/orders', async (_req, res) => {
   res.json(await orderQueue());
 });
 
+router.get('/orders/:kind/:id/prescription', async (req, res) => {
+  if (!['refill', 'delivery'].includes(req.params.kind)) {
+    return res.status(400).json({ error: 'Invalid order type' });
+  }
+  const [[record]] = await pool.execute(
+    `SELECT stored_filename FROM order_prescriptions
+     WHERE order_kind=? AND order_id=?`,
+    [req.params.kind, req.params.id]
+  );
+  if (!record) return res.status(404).json({ error: 'Prescription not found' });
+  return res.sendFile(path.join(UPLOADS_DIR, path.basename(record.stored_filename)));
+});
+
 router.post('/orders/:kind/:id/status', async (req, res) => {
   const { kind, id } = req.params;
   if (kind !== 'refill' && kind !== 'delivery') {
     return res.status(400).json({ error: 'kind must be refill or delivery' });
   }
   const patientId = await orderPatientId(kind, id);
-  const result = await updateOrderStatus(kind, id, req.body?.status);
+  const result = await updateOrderStatus(kind, id, req.body?.status, {
+    id: req.user.sub,
+    role: 'pharmacist',
+  });
   if (result.error === 'bad_status') return res.status(400).json({ error: 'Invalid status' });
   if (result.error === 'not_found') return res.status(404).json({ error: 'Order not found' });
+  if (result.error === 'invalid_transition')
+    return res
+      .status(409)
+      .json({ error: `Cannot move order from ${result.current_status} to ${req.body?.status}` });
   await recordAudit({
     actor: { id: req.user.sub, role: 'pharmacist' },
     action: 'ORDER_STATUS_UPDATED',
@@ -383,6 +408,79 @@ router.post('/validations/:id/approve-prescription', async (req, res) => {
     return res.status(409).json({ error: 'Prescription is already awaiting schedule review' });
   }
   res.json(result);
+});
+
+router.patch('/validations/:id/schedule', async (req, res) => {
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const [[row]] = await conn.execute(
+      `SELECT pp.medication_id, m.patient_id, m.frequency, m.schedule_status
+         FROM prescription_photos pp JOIN medications m ON m.id=pp.medication_id
+        WHERE pp.id=? AND pp.status='pending' AND pp.claimed_by=? FOR UPDATE`,
+      [req.params.id, req.user.sub]
+    );
+    if (!row) {
+      await conn.rollback();
+      return res
+        .status(409)
+        .json({ error: 'Claim this validation before correcting its schedule' });
+    }
+    const frequency = req.body?.frequency || row.frequency;
+    const frequencyCode = parseFrequency(frequency);
+    const definition = deriveScheduleDefinition({ ...req.body, frequency }, frequencyCode);
+    await conn.execute(
+      `UPDATE medications SET frequency=?, frequency_code=?, schedule_type=?, schedule_times=?,
+              interval_hours=?, interval_start_time=?, schedule_days=?, schedule_status=?,
+              schedule_updated_by=?, schedule_updated_at=NOW(3), schedule_approved_by=NULL,
+              schedule_approved_at=NULL, dosage_instruction=COALESCE(?,dosage_instruction),
+              label_direction=COALESCE(?,label_direction)
+        WHERE id=?`,
+      [
+        frequency,
+        frequencyCode,
+        definition.scheduleType,
+        JSON.stringify(definition.times),
+        definition.intervalHours,
+        definition.intervalStartTime,
+        JSON.stringify(definition.days),
+        definition.status,
+        req.user.sub,
+        req.body?.dosage_instruction || null,
+        req.body?.label_direction || null,
+        row.medication_id,
+      ]
+    );
+    await conn.execute(
+      `INSERT INTO medication_schedule_audit
+         (id,medication_id,patient_id,actor_id,actor_role,before_info,after_info)
+       VALUES (?,?,?,?,'pharmacist',?,?)`,
+      [
+        uuidv4(),
+        row.medication_id,
+        row.patient_id,
+        req.user.sub,
+        JSON.stringify({ schedule_status: row.schedule_status }),
+        JSON.stringify({ ...definition, frequency }),
+      ]
+    );
+    await conn.commit();
+    const draft = await proposeForPrescription(row.patient_id, row.medication_id);
+    await pool.execute(
+      'UPDATE prescription_photos SET schedule_draft_json=?, review_stage=? WHERE id=?',
+      [JSON.stringify(draft), 'schedule', req.params.id]
+    );
+    res.json({
+      medication_id: row.medication_id,
+      schedule_status: definition.status,
+      schedule: draft,
+    });
+  } catch (error) {
+    await conn.rollback();
+    throw error;
+  } finally {
+    conn.release();
+  }
 });
 
 // ── GET /api/pharmacist/validations/:id/photo ────────────────────────────────

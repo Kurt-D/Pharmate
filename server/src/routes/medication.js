@@ -8,6 +8,7 @@ import { recordAudit } from '../services/audit.js';
 import { medicationChanged, scheduleChanged } from '../services/domainEvents.js';
 import { validateIntakeRecord } from '../services/medicationIntake.js';
 import { checkClinicalRule } from '../services/clinicalRuleVerification.js';
+import { validateMedicationSchedule } from '../services/scheduleDefinition.js';
 
 const router = Router();
 router.use(requireAuth, requireRole('patient'));
@@ -35,7 +36,7 @@ function treatmentDateKeys(startDate, endDate, maximumDays = 366) {
 }
 const LABEL_FREQUENCIES = Object.freeze({
   QD: { daily: 1, interval: 0 },
-  BID: { daily: 2, interval: 12 },
+  BID: { daily: 2, interval: 0 },
   TID: { daily: 3, interval: 0 },
   QID: { daily: 4, interval: 0 },
   Q4H: { daily: 6, interval: 4 },
@@ -72,6 +73,8 @@ function idsFrom(body) {
       refill_reminders_enabled: record?.refill_reminders_enabled === true,
       end_date: String(record?.end_date || '').trim(),
       first_dose_time: String(record?.first_dose_time || '').trim(),
+      frequency_source: String(record?.frequency_source || '').trim().toUpperCase(),
+      schedule_times: Array.isArray(record?.schedule_times) ? record.schedule_times : [],
     }))
     .filter((record) => /^[0-9a-f-]{36}$/i.test(record.drug_id));
 }
@@ -109,6 +112,8 @@ async function loadRules(records, executor = pool) {
       label_frequency: request?.label_frequency,
       label_food_instruction: request?.label_food_instruction,
       first_dose_time: request?.first_dose_time,
+      frequency_source: request?.frequency_source,
+      schedule_times: request?.schedule_times || [],
     };
   });
 }
@@ -159,6 +164,22 @@ async function generateFromRequest(body, executor = pool) {
         status: 400,
       };
     }
+    if (['QD', 'BID', 'TID', 'QID'].includes(rule.label_frequency) &&
+        rule.frequency_source !== 'PATIENT_SELECTED' && !rule.schedule_times.length) {
+      return {
+        error: `${rule.generic_name} has a daily frequency without exact medication times. Save it for pharmacist review or enter the exact label times; no active reminders were created.`,
+        status: 422,
+      };
+    }
+    if (rule.frequency_source === 'PATIENT_SELECTED' && !/^([01]\d|2[0-3]):[0-5]\d$/.test(rule.first_dose_time || '')) {
+      return { error: `${rule.generic_name} needs a starting reminder time.`, status: 422 };
+    }
+    if (labelRule.interval && !/^([01]\d|2[0-3]):[0-5]\d$/.test(rule.first_dose_time || '')) {
+      return {
+        error: `${rule.generic_name} needs the first dose time before an every-${labelRule.interval}-hours schedule can be generated.`,
+        status: 422,
+      };
+    }
     const hasVerifiedClinicalRule = clinicalCheck.valid && rule.clinical_rule_status === 'VERIFIED';
     const verifiedFoodRule = hasVerifiedClinicalRule && rule.food_rule !== 'NONE';
     const verifiedMinimumInterval = hasVerifiedClinicalRule
@@ -166,7 +187,11 @@ async function generateFromRequest(body, executor = pool) {
       : 0;
     rule.standard_frequency = rule.label_frequency;
     rule.max_daily_doses = labelRule.daily;
-    rule.min_interval_hours = Math.max(labelRule.interval, verifiedMinimumInterval);
+    const mathematicalGap =
+      rule.frequency_source === 'PATIENT_SELECTED' && !labelRule.interval
+        ? 24 / labelRule.daily
+        : 0;
+    rule.min_interval_hours = Math.max(labelRule.interval, mathematicalGap, verifiedMinimumInterval);
     rule.food_rule = verifiedFoodRule ? rule.food_rule : rule.label_food_instruction;
     rule.food_instruction = verifiedFoodRule
       ? rule.food_instruction
@@ -178,6 +203,11 @@ async function generateFromRequest(body, executor = pool) {
   result.schedule_basis = 'PATIENT_LABEL';
   return { result, rules };
 }
+
+router.post('/validate-schedule', (req, res) => {
+  const result = validateMedicationSchedule(req.body || {});
+  res.status(result.valid ? 200 : 422).json(result);
+});
 
 async function intakeFromRequest(body, executor = pool) {
   const requested = idsFrom(body);
@@ -253,9 +283,17 @@ async function upsertMedicationIntakes(executor, patientId, rules) {
          SET drug_name_raw=?, brand_name_snapshot=?, strength_value=?, strength_unit=?,
              dosage_form_snapshot=?, release_type_snapshot=?, frequency=?, frequency_code=?, dosage_instruction=?,
              label_direction=?, purpose=?, food_instruction=?, quantity_on_hand=?, quantity_unit=?,
-             refill_reminders_enabled=?, entry_method=?, ocr_confidence=?, patient_confirmed=?, start_date=?, end_date=?, updated_at=NOW(3)
+             refill_reminders_enabled=?, entry_method=?, ocr_confidence=?, patient_confirmed=?, start_date=?, end_date=?,
+             schedule_status='NEEDS_REVIEW', schedule_updated_by=?, schedule_updated_at=NOW(3),
+             schedule_approved_by=NULL, schedule_approved_at=NULL, updated_at=NOW(3)
          WHERE id=? AND patient_id=?`,
-        [...values, current.id, patientId]
+        [...values, patientId, current.id, patientId]
+      );
+      await executor.execute(
+        `DELETE FROM medication_schedules
+          WHERE medication_id=? AND patient_id=? AND status IN ('scheduled','snoozed')
+            AND NOT EXISTS (SELECT 1 FROM dose_logs dl WHERE dl.schedule_id=medication_schedules.id)`,
+        [current.id, patientId]
       );
       continue;
     }
@@ -267,9 +305,10 @@ async function upsertMedicationIntakes(executor, patientId, rules) {
         (id,patient_id,drug_id,drug_name_raw,brand_name_snapshot,strength_value,
          strength_unit,dosage_form_snapshot,release_type_snapshot,source,is_prn,frequency,frequency_code,
          dosage_instruction,label_direction,purpose,food_instruction,quantity_on_hand,quantity_unit,
-         refill_reminders_enabled,entry_method,ocr_confidence,patient_confirmed,start_date,end_date,status)
-       VALUES (?,?,?,?,?,?,?,?,?,'OTC_SELF',0,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'active')`,
-      [medicationId, patientId, rule.drug_id, ...values]
+         refill_reminders_enabled,entry_method,ocr_confidence,patient_confirmed,start_date,end_date,
+         schedule_status,schedule_updated_by,schedule_updated_at,status)
+       VALUES (?,?,?,?,?,?,?,?,?,'OTC_SELF',0,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'NEEDS_REVIEW',?,NOW(3),'active')`,
+      [medicationId, patientId, rule.drug_id, ...values, patientId]
     );
   }
   return { medicationIds, createdMedicationIds };
@@ -414,7 +453,34 @@ router.post('/save-reminders', async (req, res) => {
       'SELECT COALESCE(MAX(schedule_version),0)+1 AS version FROM medication_schedules WHERE patient_id=?',
       [req.user.sub]
     );
+    const persistedIds = [...medicationIds.values()];
+    if (persistedIds.length) {
+      await conn.execute(
+        `DELETE FROM medication_schedules
+         WHERE patient_id=? AND medication_id IN (${persistedIds.map(() => '?').join(',')})
+           AND status IN ('scheduled','snoozed')
+           AND NOT EXISTS (
+             SELECT 1 FROM dose_logs dl WHERE dl.schedule_id=medication_schedules.id
+           )`,
+        [req.user.sub, ...persistedIds]
+      );
+    }
     const rulesByDrug = new Map(generated.rules.map((rule) => [rule.drug_id, rule]));
+    for (const rule of generated.rules) {
+      const intervalHours = LABEL_FREQUENCIES[rule.label_frequency]?.interval || null;
+      const scheduleType = {
+        QD: 'ONCE_DAILY', BID: 'TWICE_DAILY', TID: 'THREE_TIMES_DAILY',
+        QID: 'SPECIFIC_TIMES', BEDTIME: 'SPECIFIC_TIMES',
+      }[rule.label_frequency] || 'EVERY_N_HOURS';
+      await conn.execute(
+        `UPDATE medications SET schedule_type=?, interval_hours=?,
+                interval_start_time=?, schedule_status='APPROVED', schedule_updated_by=?,
+                schedule_updated_at=NOW(3), schedule_approved_by=?, schedule_approved_at=NOW(3)
+          WHERE id=? AND patient_id=?`,
+        [scheduleType, intervalHours, rule.first_dose_time, req.user.sub, req.user.sub,
+          medicationIds.get(rule.drug_id), req.user.sub]
+      );
+    }
     let count = 0;
     for (const group of generated.result.schedule) {
       for (const medicine of group.medicines) {

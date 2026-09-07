@@ -13,7 +13,8 @@ import {
 } from '../services/schedule.js';
 import { uploadPrescription } from '../middleware/upload.js';
 import { attachPhoto } from '../services/prescription.js';
-import { todayDoses, dosesForDate, logDose, syncLogs } from '../services/doses.js';
+import { todayDoses, dosesForDate, doseHistory, logDose, syncLogs } from '../services/doses.js';
+import { deriveScheduleDefinition } from '../services/scheduleDefinition.js';
 import {
   openThread,
   postMessage,
@@ -21,7 +22,13 @@ import {
   closeThread,
   patientThreads,
 } from '../services/inquiry.js';
-import { createRefill, createDelivery, listOrders } from '../services/orders.js';
+import {
+  createCatalogOrder,
+  createRefill,
+  createDelivery,
+  listOrders,
+  orderHistory,
+} from '../services/orders.js';
 import { verifyLabel } from '../services/labelScan.js';
 import { loyaltyFor } from '../services/adherence.js';
 import { encrypt } from '../utils/crypto.js';
@@ -102,7 +109,7 @@ router.put('/preferences', async (req, res) => {
 
 // A compact, PII-free summary for the signed-in patient's home screen.
 router.get('/dashboard', async (req, res) => {
-  res.json(await getPatientDashboard(req.user.sub));
+  res.json(await getPatientDashboard(req.user.sub, { date: req.query.date }));
 });
 
 // One server-owned streak state shared by the home banner, header icon and inbox.
@@ -514,6 +521,7 @@ router.post('/medications', async (req, res) => {
   // 2. Resolve against the curated formulary.
   const drug = await resolveDrug(drug_name);
   const frequencyCode = parseFrequency(frequency);
+  const definition = deriveScheduleDefinition(req.body, frequencyCode);
   const medId = uuidv4();
 
   const conn = await pool.getConnection();
@@ -529,15 +537,18 @@ router.post('/medications', async (req, res) => {
         : drug.rx_class === 'RX' || source === 'RX_VALIDATED'
           ? 'RX_VALIDATED'
           : 'OTC_SELF';
-      const prn = is_prn !== undefined ? (is_prn ? 1 : 0) : drug.is_prn_default;
+      const prn =
+        is_prn !== undefined ? (is_prn ? 1 : 0) : definition.scheduleType === 'AS_NEEDED' ? 1 : 0;
       const status =
         schedule_only || effectiveSource !== 'RX_VALIDATED' ? 'active' : 'pending_validation';
       await conn.execute(
         `INSERT INTO medications
            (id, patient_id, drug_id, drug_name_raw, source, is_prn, frequency,
-            frequency_code, dosage_instruction, label_direction, food_instruction,
+            frequency_code, schedule_type, schedule_times, interval_hours,
+            interval_start_time, schedule_days, schedule_status, schedule_updated_by,
+            schedule_updated_at, dosage_instruction, label_direction, food_instruction,
             timing_note, start_date, end_date, status)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(3), ?, ?, ?, ?, ?, ?, ?)`,
         [
           medId,
           req.user.sub,
@@ -547,6 +558,13 @@ router.post('/medications', async (req, res) => {
           prn,
           frequency ?? null,
           frequencyCode,
+          definition.scheduleType,
+          JSON.stringify(definition.times),
+          definition.intervalHours,
+          definition.intervalStartTime,
+          JSON.stringify(definition.days),
+          definition.status,
+          req.user.sub,
           dosage_instruction ?? null,
           label_direction ?? null,
           food_instruction ?? null,
@@ -577,6 +595,11 @@ router.post('/medications', async (req, res) => {
         schedule_only: Boolean(schedule_only),
         frequency_code: frequencyCode,
         needs_frequency_review: frequencyCode === 'CONSULT',
+        schedule_type: definition.scheduleType,
+        schedule_status: definition.status,
+        schedule_times: definition.times,
+        interval_hours: definition.intervalHours,
+        interval_start_time: definition.intervalStartTime,
         is_provisional_drug: !!drug.is_provisional,
       });
     }
@@ -586,9 +609,10 @@ router.post('/medications', async (req, res) => {
     await conn.execute(
       `INSERT INTO medications
          (id, patient_id, drug_id, drug_name_raw, source, is_prn, frequency,
-          frequency_code, dosage_instruction, label_direction, food_instruction,
+          frequency_code, schedule_status, schedule_updated_by, schedule_updated_at,
+          dosage_instruction, label_direction, food_instruction,
           timing_note, start_date, end_date, status)
-       VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending_drug')`,
+       VALUES (?, ?, NULL, ?, ?, ?, ?, ?, 'NEEDS_REVIEW', ?, NOW(3), ?, ?, ?, ?, ?, ?, 'pending_drug')`,
       [
         medId,
         req.user.sub,
@@ -597,6 +621,7 @@ router.post('/medications', async (req, res) => {
         is_prn ? 1 : 0,
         frequency ?? null,
         frequencyCode,
+        req.user.sub,
         dosage_instruction ?? null,
         label_direction ?? null,
         food_instruction ?? null,
@@ -642,6 +667,9 @@ router.get('/medications', async (req, res) => {
     `SELECT m.id, m.drug_id, m.drug_name_raw, m.brand_name_snapshot,
             m.strength_value, m.strength_unit, m.dosage_form_snapshot,
             m.source, m.is_prn, m.frequency, m.frequency_code,
+            m.schedule_type, m.schedule_times, m.interval_hours, m.interval_start_time,
+            m.schedule_days, m.schedule_status, m.schedule_updated_by, m.schedule_updated_at,
+            m.schedule_approved_by, m.schedule_approved_at,
             m.dosage_instruction, m.label_direction, m.food_instruction, m.timing_note,
             m.quantity_on_hand, m.quantity_unit, m.entry_method, m.ocr_confidence,
             m.patient_confirmed,
@@ -665,6 +693,12 @@ router.get('/medications/history', async (req, res) => {
   const parsed = parseHistoryQuery(req.query);
   if (parsed.error) return res.status(parsed.error.status).json(parsed.error);
   res.json(await listMedicationHistory(req.user.sub, parsed.value));
+});
+
+router.get('/medications/dose-history', async (req, res) => {
+  const result = await doseHistory(req.user.sub, req.query.startDate, req.query.endDate);
+  if (result.error) return res.status(400).json({ error: result.error });
+  res.json(result);
 });
 
 router.get('/medications/:id', async (req, res) => {
@@ -829,7 +863,13 @@ router.delete('/schedule/items', async (req, res) => {
 // The current confirmed day plan with each dose's status — drives the dose
 // confirmation UI and the on-device notification schedule.
 router.get('/doses/today', async (req, res) => {
-  res.json(await todayDoses(req.user.sub));
+  res.json(await todayDoses(req.user.sub, { date: req.query.date }));
+});
+
+router.get('/doses/history', async (req, res) => {
+  const result = await doseHistory(req.user.sub, req.query.startDate, req.query.endDate);
+  if (result.error) return res.status(400).json({ error: result.error });
+  res.json(result);
 });
 
 // ── GET /api/patient/doses/calendar ───────────────────────────────────────────
@@ -857,6 +897,9 @@ router.post('/doses/:scheduleId/log', async (req, res) => {
     action,
   });
   if (result.error === 'not_found') return res.status(404).json({ error: 'Dose not found' });
+  if (result.error === 'schedule_not_approved') {
+    return res.status(409).json({ error: 'Schedule must be approved before doses can be logged' });
+  }
   res.status(201).json(result);
 });
 
@@ -873,12 +916,13 @@ router.post('/doses/sync', async (req, res) => {
 
 // Open a thread. A restricted-substance subject is declined with a branch visit.
 router.post('/inquiries', async (req, res) => {
-  const { subject, branch_id, pharmacist_id, drug_name } = req.body ?? {};
+  const { subject, branch_id, pharmacist_id, drug_name, medication_draft_id } = req.body ?? {};
   const result = await openThread(req.user.sub, {
     subject,
     branchId: branch_id ?? null,
     pharmacistId: pharmacist_id ?? null,
     drugName: drug_name ?? null,
+    medicationDraftKey: medication_draft_id ? String(medication_draft_id).slice(0, 120) : null,
   });
   if (result.error === 'restricted') {
     return res.status(403).json({
@@ -932,6 +976,51 @@ router.get('/orders', async (req, res) => {
   res.json(await listOrders(req.user.sub));
 });
 
+router.post('/orders', (req, res, next) => {
+  uploadPrescription(req, res, async (uploadError) => {
+    if (uploadError) return res.status(400).json({ error: uploadError.message });
+    try {
+      const result = await createCatalogOrder(
+        req.user.sub,
+        { id: req.user.sub, role: 'patient' },
+        req.body || {},
+        req.file?.filename || null
+      );
+      const errors = {
+        invalid_quantity: [400, 'Quantity must be between 1 and 100'],
+        branch_required: [400, 'Select a pharmacy branch'],
+        drug_not_found: [404, 'Medicine is unavailable'],
+        prescription_required: [400, 'A prescription image is required for this medicine'],
+        restricted: [403, 'This medicine requires an in-person pharmacy visit'],
+        branch_not_found: [404, 'Pharmacy branch not found'],
+        no_delivery_coverage: [409, 'The selected branch does not offer delivery'],
+        invalid_fulfillment: [400, 'Choose pickup or delivery'],
+        invalid_payment_method: [400, 'Invalid payment method'],
+      };
+      if (result.error) {
+        const [status, message] = errors[result.error] || [400, 'Order could not be created'];
+        return res.status(status).json({ error: message, code: result.error });
+      }
+      await orderChanged({
+        patientId: req.user.sub,
+        kind: result.kind,
+        orderId: result.id,
+        status: result.status,
+        created: true,
+      });
+      return res.status(201).json(result);
+    } catch (error) {
+      return next(error);
+    }
+  });
+});
+router.get('/orders/:kind/:id/history', async (req, res) => {
+  const result = await orderHistory(req.user.sub, req.params.kind, req.params.id);
+  if (result.error === 'bad_kind') return res.status(400).json({ error: 'Invalid order kind' });
+  if (result.error) return res.status(404).json({ error: 'Order not found' });
+  res.json(result);
+});
+
 router.post('/refills', async (req, res) => {
   const result = await createRefill(req.user.sub, req.body ?? {});
   if (result.error === 'branch_required') {
@@ -940,6 +1029,8 @@ router.post('/refills', async (req, res) => {
   if (result.error === 'medication_not_found') {
     return res.status(404).json({ error: 'Medication not found' });
   }
+  if (result.error === 'invalid_payment_method')
+    return res.status(400).json({ error: 'Invalid payment method' });
   if (result.error === 'restricted') {
     return res.status(403).json({
       error: 'restricted_substance',
@@ -975,6 +1066,8 @@ router.post('/deliveries', async (req, res) => {
   if (result.error === 'medication_not_found') {
     return res.status(404).json({ error: 'Medication not found' });
   }
+  if (result.error === 'invalid_payment_method')
+    return res.status(400).json({ error: 'Invalid payment method' });
   if (result.error === 'branch_not_found') {
     return res.status(404).json({ error: 'Branch not found' });
   }

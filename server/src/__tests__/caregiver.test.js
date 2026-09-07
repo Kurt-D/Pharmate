@@ -28,6 +28,9 @@ async function register(role, extra = {}) {
     await request(app)
       .post('/api/auth/register')
       .send({ email, password: PASSWORD, role, ...extra });
+    await pool.execute('UPDATE users SET is_verified=1,email_verified_at=NOW(3) WHERE email=?', [
+      email,
+    ]);
   } else {
     await createPrivilegedTestUser({
       email,

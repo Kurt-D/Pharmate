@@ -1,6 +1,6 @@
 /**
  * Sprint 9 integration tests — refill/delivery, label verify, loyalty. (D-4,
- * TC-02, TC-08, no-payments guard.)
+ * TC-02, TC-08, payment-method metadata.)
  *
  * Requires the test DB migrated (001–004) and formulary seeded.
  */
@@ -13,6 +13,8 @@ const PASSWORD = 'TestPass@123';
 const stamp = Date.now();
 let token;
 let pharmToken;
+let adminToken;
+let patientId;
 let medId;
 let deliveryBranch; // offers delivery
 let pickupBranch; // does not
@@ -24,6 +26,9 @@ async function register(role) {
     await request(app)
       .post('/api/auth/register')
       .send({ email, password: PASSWORD, role, full_name: 'S9' });
+    await pool.execute('UPDATE users SET is_verified=1,email_verified_at=NOW(3) WHERE email=?', [
+      email,
+    ]);
   } else {
     await createPrivilegedTestUser({ email, password: PASSWORD, role, fullName: 'S9' });
   }
@@ -34,7 +39,9 @@ async function register(role) {
 beforeAll(async () => {
   const p = await register('patient');
   token = p.token;
+  patientId = p.id;
   pharmToken = (await register('pharmacist')).token;
+  adminToken = (await register('admin')).token;
 
   deliveryBranch = 'br-del-' + Math.random().toString(16).slice(2, 8);
   pickupBranch = 'br-pick-' + Math.random().toString(16).slice(2, 8);
@@ -58,7 +65,7 @@ afterAll(async () => {
   await pool.end();
 });
 
-describe('Refill requests (D-4 — no payments)', () => {
+describe('Refill requests and payment metadata', () => {
   test('a refill requires a branch', async () => {
     const res = await request(app)
       .post('/api/patient/refills')
@@ -76,7 +83,77 @@ describe('Refill requests (D-4 — no payments)', () => {
     expect(res.body.status).toBe('pending');
 
     const orders = await request(app).get('/api/patient/orders').set(auth());
-    expect(orders.body.refills.some((r) => r.id === res.body.id)).toBe(true);
+    expect(orders.body.refills.find((r) => r.id === res.body.id)).toMatchObject({
+      payment_method: 'CASH_ON_PICKUP',
+      payment_status: 'PENDING',
+    });
+  });
+});
+
+describe('Catalog ordering is separate from medication scheduling', () => {
+  test('creates one OTC order visible to patient, pharmacist, and admin without a schedule', async () => {
+    const [[drug]] = await pool.execute(
+      `SELECT id FROM drug_reference
+       WHERE rx_class='OTC' AND availability=1 AND is_restricted=0 LIMIT 1`
+    );
+    const [[before]] = await pool.execute(
+      'SELECT COUNT(*) count FROM medication_schedules WHERE patient_id=?',
+      [patientId]
+    );
+    const order = await request(app)
+      .post('/api/patient/orders')
+      .set(auth())
+      .field('drug_id', drug.id)
+      .field('branch_id', pickupBranch)
+      .field('quantity', '2')
+      .field('fulfillment', 'pickup');
+    expect(order.status).toBe(201);
+    expect(order.body.item.quantity).toBe(2);
+    const [[row]] = await pool.execute(
+      'SELECT medication_id,drug_id,quantity FROM refill_requests WHERE id=?',
+      [order.body.id]
+    );
+    expect(row).toMatchObject({ medication_id: null, drug_id: drug.id, quantity: 2 });
+    const [[after]] = await pool.execute(
+      'SELECT COUNT(*) count FROM medication_schedules WHERE patient_id=?',
+      [order.body.patient_id]
+    );
+    expect(Number(after.count)).toBe(Number(before.count));
+    expect(
+      (await request(app).get('/api/pharmacist/orders').set(auth(pharmToken))).body.refills
+    ).toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: order.body.id, quantity: 2 })])
+    );
+    expect((await request(app).get('/api/admin/orders').set(auth(adminToken))).body.orders).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: order.body.id, placed_by_role: 'patient' }),
+      ])
+    );
+  });
+
+  test('stores an RX order prescription and lets the pharmacist retrieve it', async () => {
+    const [[drug]] = await pool.execute(
+      `SELECT id FROM drug_reference
+       WHERE rx_class='RX' AND availability=1 AND is_restricted=0 LIMIT 1`
+    );
+    const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    const order = await request(app)
+      .post('/api/patient/orders')
+      .set(auth())
+      .field('drug_id', drug.id)
+      .field('branch_id', pickupBranch)
+      .field('quantity', '1')
+      .field('fulfillment', 'pickup')
+      .attach('photo', png, { filename: 'order-rx.png', contentType: 'image/png' });
+    expect(order.status).toBe(201);
+    const queue = await request(app).get('/api/pharmacist/orders').set(auth(pharmToken));
+    const queued = queue.body.refills.find((item) => item.id === order.body.id);
+    expect(queued).toMatchObject({ prescription_status: 'pending' });
+    const photo = await request(app)
+      .get(`/api/pharmacist/orders/refill/${order.body.id}/prescription`)
+      .set(auth(pharmToken));
+    expect(photo.status).toBe(200);
+    expect(photo.headers['content-type']).toBe('image/png');
   });
 });
 
@@ -222,12 +299,22 @@ describe('Pharmacist order queue', () => {
     const refill = queue.body.refills[0];
     expect(refill.patient_code).toMatch(/^PM-[A-Z0-9]{6}$/);
 
+    const processing = await request(app)
+      .post(`/api/pharmacist/orders/refill/${refill.id}/status`)
+      .set(auth(pharmToken))
+      .send({ status: 'processing' });
+    expect(processing.status).toBe(200);
     const upd = await request(app)
       .post(`/api/pharmacist/orders/refill/${refill.id}/status`)
       .set(auth(pharmToken))
       .send({ status: 'ready' });
     expect(upd.status).toBe(200);
     expect(upd.body.status).toBe('ready');
+    const [history] = await pool.execute(
+      `SELECT to_status FROM order_status_history WHERE order_kind='refill' AND order_id=? ORDER BY changed_at`,
+      [refill.id]
+    );
+    expect(history.map((item) => item.to_status)).toEqual(['processing', 'ready']);
   });
 });
 

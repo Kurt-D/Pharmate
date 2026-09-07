@@ -26,6 +26,7 @@ const PASSWORD = 'TestPass@123';
 
 let patientToken;
 let pharmacistToken;
+let adminToken;
 
 afterAll(async () => {
   await pool.end();
@@ -41,6 +42,9 @@ beforeAll(async () => {
       role: 'patient',
       ...TEST_PII,
     });
+  await pool.execute('UPDATE users SET is_verified=1,email_verified_at=NOW(3) WHERE email=?', [
+    PATIENT_EMAIL,
+  ]);
   const patRes = await request(app).post('/api/auth/login').send({
     email: PATIENT_EMAIL,
     password: PASSWORD,
@@ -59,6 +63,11 @@ beforeAll(async () => {
     password: PASSWORD,
   });
   pharmacistToken = pharmRes.body.accessToken;
+  const adminEmail = `admin.s2test.${Date.now()}@test.pharmate`;
+  await createPrivilegedTestUser({ email: adminEmail, password: PASSWORD, role: 'admin' });
+  adminToken = (
+    await request(app).post('/api/auth/login').send({ email: adminEmail, password: PASSWORD })
+  ).body.accessToken;
 });
 
 // ── TC-06: role-based access control ─────────────────────────────────────────
@@ -112,7 +121,7 @@ describe('PII containment — staff responses must not expose plaintext PII', ()
 
 // ── Auth happy paths ──────────────────────────────────────────────────────────
 describe('Auth — register and login', () => {
-  test.each(['pharmacist', 'caregiver', 'admin'])(
+  test.each(['pharmacist', 'admin'])(
     'public registration rejects %s self-registration without creating a user',
     async (role) => {
       const email = `${role}.self-register.${Date.now()}@test.pharmate`;
@@ -121,11 +130,61 @@ describe('Auth — register and login', () => {
         .send({ email, password: PASSWORD, role });
 
       expect(res.status).toBe(403);
-      expect(res.body.error).toMatch(/only to patients/i);
+      expect(res.body.error).toMatch(/patients and caregivers/i);
       const [users] = await pool.execute('SELECT id FROM users WHERE email = ?', [email]);
       expect(users).toHaveLength(0);
     }
   );
+
+  test('caregiver can register publicly and receives a caregiver profile', async () => {
+    const email = `caregiver.register.${Date.now()}@test.pharmate`;
+    const res = await request(app).post('/api/auth/register').send({
+      email,
+      password: PASSWORD,
+      role: 'caregiver',
+      full_name: 'Caregiver Test',
+    });
+
+    expect(res.status).toBe(201);
+    expect(res.body.verificationRequired).toBe(true);
+    const [profiles] = await pool.execute(
+      `SELECT c.id, cp.caregiver_id
+       FROM caregivers c
+       JOIN caregiver_profiles cp ON cp.caregiver_id = c.id
+       WHERE c.id = ?`,
+      [(await pool.execute('SELECT id FROM users WHERE email=?', [email]))[0][0].id]
+    );
+    expect(profiles).toHaveLength(1);
+  });
+
+  test('a newly registered patient is visible through pharmacist and admin database APIs', async () => {
+    const email = `visible.patient.${Date.now()}@test.pharmate`;
+    const registered = await request(app).post('/api/auth/register').send({
+      email,
+      password: PASSWORD,
+      role: 'patient',
+      full_name: 'Visibility Test',
+    });
+    expect(registered.status).toBe(201);
+    const [[identity]] = await pool.execute(
+      `SELECT u.id,u.role,p.patient_code FROM users u
+       JOIN patients p ON p.id=u.id WHERE u.email=?`,
+      [email]
+    );
+    expect(identity.role).toBe('patient');
+    const pharmacistPatients = await request(app)
+      .get('/api/pharmacist/patients')
+      .set('Authorization', `Bearer ${pharmacistToken}`);
+    expect(pharmacistPatients.body).toEqual(
+      expect.arrayContaining([expect.objectContaining({ patient_code: identity.patient_code })])
+    );
+    const adminUsers = await request(app)
+      .get('/api/admin/users?role=patient')
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(adminUsers.body).toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: identity.id, role: 'patient' })])
+    );
+  });
 
   test('patient login returns accessToken, refreshToken, and patientCode', async () => {
     const res = await request(app).post('/api/auth/login').send({

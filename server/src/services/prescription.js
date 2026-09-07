@@ -87,7 +87,9 @@ export async function pendingValidations(pharmacistId) {
             CASE WHEN pp.claimed_by=? AND pp.claim_expires_at>NOW(3)
               THEN pp.claim_expires_at ELSE NULL END AS claim_expires_at,
             pp.review_stage, pp.ocr_text, pp.ocr_confidence, pp.schedule_draft_json,
-            m.drug_name_raw, m.frequency, m.dosage_instruction, p.patient_code
+            m.drug_name_raw, m.frequency, m.dosage_instruction, m.schedule_type,
+            m.schedule_times, m.interval_hours, m.interval_start_time, m.schedule_days,
+            m.schedule_status, m.start_date, m.end_date, p.patient_code
      FROM prescription_photos pp JOIN medications m ON m.id=pp.medication_id
      JOIN patients p ON p.id=m.patient_id
      WHERE pp.status='pending' AND
@@ -280,8 +282,12 @@ export async function decideValidation(pharmacistId, photoId, action, reason, op
           : photo.schedule_draft_json;
       const slots = Array.isArray(draft?.slots) ? draft.slots : [];
       if (!slots.length) {
-        await conn.rollback();
-        return { error: 'no_schedule' };
+        await conn.execute(
+          `UPDATE medications SET schedule_status='NEEDS_REVIEW', schedule_updated_by=?,
+                  schedule_updated_at=NOW(3), schedule_approved_by=NULL, schedule_approved_at=NULL
+            WHERE id=?`,
+          [pharmacistId, photo.medication_id]
+        );
       }
       const [[versionRow]] = await conn.execute(
         `SELECT COALESCE(MAX(schedule_version), 0) + 1 AS next
@@ -290,7 +296,7 @@ export async function decideValidation(pharmacistId, photoId, action, reason, op
       );
       for (const slot of slots) {
         await conn.execute(
-          `INSERT INTO medication_schedules
+          `INSERT IGNORE INTO medication_schedules
              (id, medication_id, patient_id, scheduled_time, generated_reason,
               is_confirmed, is_prn_slot, schedule_version, status)
            VALUES (?, ?, ?, ?, ?, 1, 0, ?, 'scheduled')`,
@@ -304,7 +310,16 @@ export async function decideValidation(pharmacistId, photoId, action, reason, op
           ]
         );
       }
-      await conn.execute("UPDATE prescription_photos SET review_stage='complete' WHERE id=?", [
+      if (slots.length) {
+        await conn.execute(
+          `UPDATE medications SET schedule_status='APPROVED', schedule_updated_by=?,
+                  schedule_updated_at=NOW(3), schedule_approved_by=?, schedule_approved_at=NOW(3)
+            WHERE id=?`,
+          [pharmacistId, pharmacistId, photo.medication_id]
+        );
+      }
+      await conn.execute('UPDATE prescription_photos SET review_stage=? WHERE id=?', [
+        slots.length ? 'complete' : 'schedule',
         photoId,
       ]);
       await conn.execute(

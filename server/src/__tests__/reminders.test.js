@@ -12,6 +12,7 @@ import request from 'supertest';
 import app from '../index.js';
 import { pool } from '../db/connection.js';
 import { dueReminders, dispatchReminders } from '../services/reminders.js';
+import { v4 as uuidv4 } from 'uuid';
 
 const PASSWORD = 'TestPass@123';
 const stamp = Date.now();
@@ -33,13 +34,17 @@ beforeAll(async () => {
   patientToken = p.token;
   patientId = p.id;
   // A confirmed schedule so there are real medication_schedules rows to remind on.
-  await request(app)
+  const medication = await request(app)
     .post('/api/patient/medications')
     .set({ Authorization: `Bearer ${patientToken}` })
     .send({ drug_name: 'paracetamol', frequency: 'TID', source: 'OTC_SELF', is_prn: false });
-  await request(app)
-    .post('/api/patient/schedule/confirm')
-    .set({ Authorization: `Bearer ${patientToken}` });
+  await pool.execute("UPDATE medications SET schedule_status='APPROVED' WHERE id=?", [medication.body.id]);
+  await pool.execute(
+    `INSERT INTO medication_schedules
+       (id,medication_id,patient_id,scheduled_time,generated_reason,is_confirmed,schedule_version,status)
+     VALUES (?,?,?,NOW(),'reminder test',1,1,'scheduled')`,
+    [uuidv4(), medication.body.id, patientId]
+  );
 });
 
 afterAll(async () => {
@@ -94,7 +99,7 @@ describe('Device-token registration', () => {
 });
 
 describe('Reminder dispatch', () => {
-  test('a due dose is selected, then stamped so it never fires twice', async () => {
+  test('a due dose repeats after five minutes until taken', async () => {
     const now = new Date();
     const doseId = await anchorDoseAt(now);
 
@@ -110,21 +115,13 @@ describe('Reminder dispatch', () => {
     );
     expect(stamped.reminder_sent_at).not.toBeNull();
 
-    // Second scan: the stamped dose is gone from the due set (idempotent).
+    // Immediate scans do not duplicate the reminder.
     const after = await dueReminders(now);
     expect(after.some((d) => d.schedule_id === doseId)).toBe(false);
-
-    // Simulate a cron retry after its legacy dispatch marker was not persisted.
-    await pool.execute('UPDATE medication_schedules SET reminder_sent_at = NULL WHERE id = ?', [
-      doseId,
-    ]);
-    await dispatchReminders(now);
-    const [[inbox]] = await pool.execute(
-      `SELECT COUNT(*) AS count FROM patient_notifications
-       WHERE event_key = ? AND patient_id = ?`,
-      [`dose-reminder:${doseId}`, patientId]
-    );
-    expect(Number(inbox.count)).toBe(1);
+    expect((await dueReminders(new Date(now.getTime() + 4 * 60000))).some((d) => d.schedule_id === doseId)).toBe(false);
+    expect((await dueReminders(new Date(now.getTime() + 5 * 60000))).some((d) => d.schedule_id === doseId)).toBe(true);
+    await pool.execute("UPDATE medication_schedules SET status='taken' WHERE id=?", [doseId]);
+    expect((await dueReminders(new Date(now.getTime() + 10 * 60000))).some((d) => d.schedule_id === doseId)).toBe(false);
   });
 
   test('a PRN slot is never reminded (no fixed time)', async () => {

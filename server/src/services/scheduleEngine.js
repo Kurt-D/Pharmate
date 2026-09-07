@@ -70,7 +70,7 @@ function domainsFor(item) {
   // daytime anchors are too close together (for example, BID with a 12-hour gap).
   if (
     !keepsMinimumGap(base, minimum) &&
-    (item.food_rule === 'NONE' || item.standard_frequency === 'BID') &&
+    (item.food_rule === 'NONE' || item.schedule_basis === 'PATIENT_LABEL') &&
     minimum > 0 &&
     base.length * minimum <= DAY
   ) {

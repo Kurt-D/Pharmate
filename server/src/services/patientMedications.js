@@ -12,6 +12,11 @@ const EDITABLE = new Set([
   'is_prn',
   'start_date',
   'end_date',
+  'schedule_type',
+  'schedule_times',
+  'interval_hours',
+  'interval_start_time',
+  'schedule_days',
 ]);
 const CONTROL = new Set(['expected_updated_at']);
 const EVENTS = new Set(['updated', 'stopped', 'cancelled']);
@@ -25,7 +30,10 @@ const STATUSES = new Set([
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const SELECT = `SELECT m.id, m.patient_id, m.drug_id, m.drug_name_raw, m.source, m.is_prn,
   m.frequency, m.frequency_code, m.dosage_instruction, m.label_direction,
-  m.food_instruction, m.timing_note, m.start_date, m.end_date,
+  m.food_instruction, m.timing_note, m.start_date, m.end_date, m.schedule_type,
+  m.schedule_times, m.interval_hours, m.interval_start_time, m.schedule_days,
+  m.schedule_status, m.schedule_updated_by, m.schedule_updated_at,
+  m.schedule_approved_by, m.schedule_approved_at,
   m.status, m.pharmacist_id, m.validated_at, m.created_at, m.updated_at, dr.rx_class,
   dr.min_interval_hours, dr.max_daily_doses,
   pp.status AS prescription_status, pp.decision_reason AS prescription_reason,
@@ -46,6 +54,16 @@ function medication(row) {
     is_prn: Boolean(row.is_prn),
     frequency: row.frequency,
     frequency_code: row.frequency_code,
+    schedule_type: row.schedule_type,
+    schedule_times: row.schedule_times,
+    interval_hours: row.interval_hours == null ? null : Number(row.interval_hours),
+    interval_start_time: row.interval_start_time,
+    schedule_days: row.schedule_days,
+    schedule_status: row.schedule_status,
+    schedule_updated_by: row.schedule_updated_by,
+    schedule_updated_at: jsonDate(row.schedule_updated_at),
+    schedule_approved_by: row.schedule_approved_by,
+    schedule_approved_at: jsonDate(row.schedule_approved_at),
     dosage_instruction: row.dosage_instruction,
     label_direction: row.label_direction,
     food_instruction: row.food_instruction,
@@ -70,6 +88,12 @@ function auditSnapshot(row) {
     timing_note: row.timing_note,
     frequency: row.frequency,
     frequency_code: row.frequency_code,
+    schedule_type: row.schedule_type,
+    schedule_times: row.schedule_times,
+    interval_hours: row.interval_hours,
+    interval_start_time: row.interval_start_time,
+    schedule_days: row.schedule_days,
+    schedule_status: row.schedule_status,
     is_prn: Boolean(row.is_prn),
     start_date: row.start_date,
     end_date: row.end_date,
@@ -200,6 +224,30 @@ export function validateMedicationPatch(body) {
     if (typeof body.is_prn !== 'boolean') return fail(400, 'is_prn must be boolean');
     value.is_prn = body.is_prn ? 1 : 0;
   }
+  if ('schedule_type' in body) {
+    const allowed = new Set(['SPECIFIC_TIMES','EVERY_N_HOURS','ONCE_DAILY','TWICE_DAILY','THREE_TIMES_DAILY','SPECIFIC_DAYS','WEEKLY','AS_NEEDED']);
+    if (!allowed.has(body.schedule_type)) return fail(400, 'Unsupported schedule_type');
+    value.schedule_type = body.schedule_type;
+  }
+  if ('schedule_times' in body) {
+    if (!Array.isArray(body.schedule_times) || body.schedule_times.some((time) => !/^([01]\d|2[0-3]):[0-5]\d$/.test(String(time)))) {
+      return fail(400, 'schedule_times must contain HH:MM values');
+    }
+    value.schedule_times = JSON.stringify([...new Set(body.schedule_times)].sort());
+  }
+  if ('interval_hours' in body) {
+    const hours = Number(body.interval_hours);
+    if (!Number.isInteger(hours) || hours < 1 || hours > 24) return fail(400, 'interval_hours must be between 1 and 24');
+    value.interval_hours = hours;
+  }
+  if ('interval_start_time' in body) {
+    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(String(body.interval_start_time))) return fail(400, 'interval_start_time must be HH:MM');
+    value.interval_start_time = body.interval_start_time;
+  }
+  if ('schedule_days' in body) {
+    if (!Array.isArray(body.schedule_days)) return fail(400, 'schedule_days must be an array');
+    value.schedule_days = JSON.stringify([...new Set(body.schedule_days.map(String))]);
+  }
   for (const key of ['start_date', 'end_date']) {
     if (key in body) {
       if (body[key] !== null && (typeof body[key] !== 'string' || !validDate(body[key])))
@@ -256,14 +304,18 @@ export async function updateMedication(patientId, medicationId, parsed) {
       await conn.rollback();
       return fail(400, 'end_date must not be before start_date');
     }
-    const timingChanged = ['frequency', 'is_prn', 'start_date', 'end_date'].some(
+    const timingChanged = ['frequency', 'is_prn', 'start_date', 'end_date', 'schedule_type',
+      'schedule_times', 'interval_hours', 'interval_start_time', 'schedule_days',
+      'dosage_instruction', 'label_direction', 'timing_note'].some(
       (key) => key in parsed.value
     );
     const before = auditSnapshot(row);
     const entries = Object.entries(parsed.value);
     await conn.execute(
-      `UPDATE medications SET ${entries.map(([key]) => `${key}=?`).join(', ')}, updated_at=NOW(3) WHERE id=?`,
-      [...entries.map(([, value]) => value), row.id]
+      `UPDATE medications SET ${entries.map(([key]) => `${key}=?`).join(', ')},
+        schedule_status=?, schedule_updated_by=?, schedule_updated_at=NOW(3),
+        schedule_approved_by=NULL, schedule_approved_at=NULL, updated_at=NOW(3) WHERE id=?`,
+      [...entries.map(([, value]) => value), timingChanged ? (row.schedule_status === 'APPROVED' ? 'MODIFIED' : 'NEEDS_REVIEW') : row.schedule_status, patientId, row.id]
     );
     const invalidated = timingChanged ? await invalidateFuture(conn, row) : 0;
     const [[updated]] = await conn.execute(`${SELECT} WHERE m.id=? AND m.patient_id=?`, [
@@ -271,6 +323,14 @@ export async function updateMedication(patientId, medicationId, parsed) {
       patientId,
     ]);
     await insertAudit(conn, row, patientId, 'updated', before, auditSnapshot(updated));
+    if (timingChanged) {
+      await conn.execute(
+        `INSERT INTO medication_schedule_audit
+           (id, medication_id, patient_id, actor_id, actor_role, before_info, after_info)
+         VALUES (?, ?, ?, ?, 'patient', ?, ?)`,
+        [uuidv4(), row.id, patientId, patientId, JSON.stringify(before), JSON.stringify(auditSnapshot(updated))]
+      );
+    }
     if (timingChanged)
       await createPatientNotification({
         patientId,

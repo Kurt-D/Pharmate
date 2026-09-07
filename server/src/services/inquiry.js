@@ -21,7 +21,7 @@ import { findRestricted } from './formulary.js';
  */
 export async function openThread(
   patientId,
-  { subject = null, branchId = null, pharmacistId = null, drugName = null } = {}
+  { subject = null, branchId = null, pharmacistId = null, drugName = null, medicationDraftKey = null } = {}
 ) {
   if (drugName) {
     const restricted = await findRestricted(drugName);
@@ -46,9 +46,9 @@ export async function openThread(
   const id = uuidv4();
   await pool.execute(
     `INSERT INTO inquiry_threads
-       (id, patient_id, branch_id, requested_pharmacist_id, status, priority, subject)
-     VALUES (?, ?, ?, ?, 'open', ?, ?)`,
-    [id, patientId, branchId, pharmacistId, priority, subject]
+       (id, patient_id, branch_id, requested_pharmacist_id, status, priority, subject, medication_draft_key)
+     VALUES (?, ?, ?, ?, 'open', ?, ?, ?)`,
+    [id, patientId, branchId, pharmacistId, priority, subject, medicationDraftKey]
   );
   return { thread_id: id, priority, validation_status: 'awaiting_pharmacist' };
 }

@@ -3,16 +3,16 @@ import { pool } from '../db/connection.js';
 import { sendPush } from './notifications.js';
 import { createPatientNotification } from './patientNotifications.js';
 
-const MAX_LEAD_MIN = 60;
-const GRACE_MIN = 15;
+const DUE_WINDOW_MIN = 30;
+const REPEAT_MIN = 5;
 const GENERIC_PHRASE = 'It is time for your medicine.';
 
 export async function dueReminders(
   now = new Date(),
-  { graceMin = GRACE_MIN, maxLeadMin = MAX_LEAD_MIN } = {}
+  { dueWindowMin = DUE_WINDOW_MIN } = {}
 ) {
-  const from = new Date(now.getTime() - graceMin * 60000);
-  const to = new Date(now.getTime() + maxLeadMin * 60000);
+  const from = new Date(now.getTime() - dueWindowMin * 60000);
+  const to = now;
   const [rows] = await pool.execute(
     `SELECT ms.id AS schedule_id, ms.patient_id, ms.scheduled_time,
             m.drug_name_raw AS drug_name, p.fcm_token,
@@ -27,19 +27,22 @@ export async function dueReminders(
      JOIN patients p ON p.id = ms.patient_id
      LEFT JOIN patient_preferences pp ON pp.patient_id = ms.patient_id
      WHERE ms.status = 'scheduled'
-       AND ms.reminder_sent_at IS NULL
+       AND ms.is_confirmed = 1
+       AND m.schedule_status = 'APPROVED'
+       AND ms.schedule_version = (SELECT COALESCE(MAX(ms2.schedule_version), 0)
+             FROM medication_schedules ms2
+            WHERE ms2.patient_id = ms.patient_id AND ms2.medication_id = ms.medication_id)
+       AND (ms.reminder_sent_at IS NULL OR ms.reminder_sent_at <= ?)
        AND ms.is_prn_slot = 0
        AND COALESCE(pp.reminders_enabled, 1) = 1
        AND ms.scheduled_time >= ?
        AND ms.scheduled_time <= ?
+       AND NOT EXISTS (SELECT 1 FROM dose_logs dl
+                        WHERE dl.schedule_id=ms.id AND dl.status IN ('taken','taken_late'))
      ORDER BY ms.scheduled_time ASC`,
-    [from, to]
+    [new Date(now.getTime() - REPEAT_MIN * 60000), from, to]
   );
-  return rows.filter(
-    (row) =>
-      new Date(row.scheduled_time).getTime() <=
-      now.getTime() + Number(row.reminder_lead_minutes) * 60000
-  );
+  return rows;
 }
 
 function localClock(date, timezone) {
@@ -76,7 +79,7 @@ export function buildReminderPayload(reminder) {
 
 async function markReminded(scheduleId, at) {
   await pool.execute(
-    `UPDATE medication_schedules SET reminder_sent_at = ? WHERE id = ? AND reminder_sent_at IS NULL`,
+    `UPDATE medication_schedules SET reminder_sent_at = ? WHERE id = ?`,
     [at, scheduleId]
   );
 }
@@ -95,7 +98,7 @@ export async function dispatchReminders(now = new Date()) {
     await createPatientNotification({
       patientId: dose.patient_id,
       type: 'dose_reminder',
-      eventKey: `dose-reminder:${dose.schedule_id}`,
+      eventKey: `dose-reminder:${dose.schedule_id}:${Math.floor(now.getTime() / (REPEAT_MIN * 60000))}`,
       medicineName: dose.drug_name,
       metadata: { schedule_id: dose.schedule_id },
     });

@@ -65,10 +65,12 @@ test('suggested schedule reuses an existing medicine and persists dosage and sta
           dosage_instruction: 'Take 1 tablet',
           quantity_on_hand: 30,
           quantity_unit: 'tablets',
-          start_date: '2026-09-01',
+          start_date: '2026-09-07',
           end_date: '2026-09-07',
           entry_method: 'MANUAL',
           label_frequency: 'QID',
+          frequency_source: 'PATIENT_SELECTED',
+          first_dose_time: '08:00',
           label_food_instruction: 'NONE',
           patient_confirmed: true,
         },
@@ -76,7 +78,7 @@ test('suggested schedule reuses an existing medicine and persists dosage and sta
     });
 
   expect(saved.status).toBe(201);
-  expect(saved.body.count).toBe(28);
+  expect(saved.body.count).toBe(4);
   const [[medicineCount]] = await pool.execute(
     "SELECT COUNT(*) AS count FROM medications WHERE patient_id=? AND drug_id=? AND status='active'",
     [patientId, drug.id]
@@ -93,7 +95,7 @@ test('suggested schedule reuses an existing medicine and persists dosage and sta
     quantity_on_hand: '30.00',
     quantity_unit: 'tablets',
     patient_confirmed: 1,
-    start_date: '2026-09-01',
+    start_date: '2026-09-07',
   });
   const [[scheduled]] = await pool.execute(
     `SELECT COUNT(*) AS count,
@@ -102,12 +104,12 @@ test('suggested schedule reuses an existing medicine and persists dosage and sta
      FROM medication_schedules WHERE medication_id=?`,
     [medicationId]
   );
-  expect(Number(scheduled.count)).toBe(28);
-  expect(scheduled.start_date).toBe('2026-09-01');
+  expect(Number(scheduled.count)).toBe(4);
+  expect(scheduled.start_date).toBe('2026-09-07');
   expect(scheduled.end_date).toBe('2026-09-07');
   const visibleDoses = await request(app).get('/api/patient/doses/today').set(auth(token));
   expect(visibleDoses.status).toBe(200);
-  expect(visibleDoses.body.filter((dose) => dose.medication_id === medicationId)).toHaveLength(28);
+  expect(visibleDoses.body.filter((dose) => dose.medication_id === medicationId)).toHaveLength(4);
 });
 
 test('suggested schedule cannot be saved before Step 3 confirmation', async () => {
@@ -147,7 +149,7 @@ test('suggested scheduling rejects duplicate active ingredients before persisten
     dosage_instruction: 'Take 1 tablet',
     quantity_on_hand: 30,
     quantity_unit: 'tablets',
-    start_date: '2026-09-01',
+    start_date: '2026-09-07',
     entry_method: 'MANUAL',
     label_frequency: 'QID',
     label_food_instruction: 'NONE',
@@ -204,7 +206,7 @@ test('an available catalog medicine uses confirmed label frequency when its cata
     dosage_instruction: '1 tablet',
     quantity_on_hand: 20,
     quantity_unit: 'tablets',
-    start_date: '2026-09-01',
+    start_date: '2026-09-07',
     entry_method: 'MANUAL',
     label_food_instruction: 'NONE',
     patient_confirmed: true,
@@ -222,7 +224,7 @@ test('an available catalog medicine uses confirmed label frequency when its cata
   const labelBased = await request(app)
     .post('/api/medications/generate-schedule')
     .set(auth(login.body.accessToken))
-    .send({ medications: [{ ...medicine, label_frequency: 'QD' }] });
+    .send({ medications: [{ ...medicine, label_frequency: 'QD', frequency_source: 'PATIENT_SELECTED', first_dose_time: '08:00' }] });
   expect(labelBased.status).toBe(200);
   expect(labelBased.body.schedule_basis).toBe('PATIENT_LABEL');
   expect(labelBased.body.schedule).toHaveLength(1);

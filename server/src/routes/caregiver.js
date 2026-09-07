@@ -4,7 +4,13 @@ import { pool } from '../db/connection.js';
 import { requireAuth } from '../middleware/auth.js';
 import { requireRole } from '../middleware/role.js';
 import { caregiverAlerts } from '../services/alerts.js';
-import { createRefill, createDelivery, listOrders } from '../services/orders.js';
+import {
+  createCatalogOrder,
+  createRefill,
+  createDelivery,
+  listOrders,
+} from '../services/orders.js';
+import { uploadPrescription } from '../middleware/upload.js';
 import { openThread } from '../services/inquiry.js';
 import { failedAttemptLimit, rateLimit } from '../middleware/rateLimit.js';
 import { createPatientNotification } from '../services/patientNotifications.js';
@@ -21,7 +27,9 @@ import { publishUser } from '../services/realtimeEvents.js';
 import { parseFrequency } from '../../engine/frequencyParser.js';
 import { findRestricted, resolveDrug, searchDrugs } from '../services/formulary.js';
 import { confirmForPatient } from '../services/schedule.js';
-import { todayDoses } from '../services/doses.js';
+import { doseHistory, todayDoses } from '../services/doses.js';
+import { computeDoseStatus } from '../services/medicationSchedule.js';
+import { deriveScheduleDefinition } from '../services/scheduleDefinition.js';
 import { recordAudit } from '../services/audit.js';
 import { createPortalNotification } from '../services/portalNotifications.js';
 import {
@@ -140,6 +148,8 @@ function sendOrderError(res, result, kind) {
       error: 'prescription_required',
       message: `This medication needs an approved prescription on record before a ${kind} can be requested. The patient must upload their prescription for validation first.`,
     });
+  } else if (result.error === 'invalid_payment_method') {
+    res.status(400).json({ error: 'Invalid payment method' });
   } else {
     return false;
   }
@@ -185,7 +195,9 @@ router.get('/patients/:code/medications', async (req, res) => {
   if (!patientId) return res.status(404).json({ error: 'Patient not linked' });
   const [rows] = await pool.execute(
     `SELECT m.id, m.drug_name_raw, m.status, m.source, m.dosage_instruction,
-            m.frequency, m.start_date, m.end_date, m.updated_at, dr.rx_class
+            m.frequency, m.start_date, m.end_date, m.updated_at, m.schedule_type,
+            m.schedule_times, m.interval_hours, m.interval_start_time, m.schedule_days,
+            m.schedule_status, dr.rx_class
      FROM medications m
      LEFT JOIN drug_reference dr ON dr.id = m.drug_id
      WHERE m.patient_id = ? AND m.status = 'active'
@@ -199,6 +211,14 @@ router.get('/patients/:code/today', async (req, res) => {
   const patientId = await linkedPatientId(req.user.sub, req.params.code);
   if (!patientId) return res.status(404).json({ error: 'Patient not linked' });
   res.json(await todayDoses(patientId));
+});
+
+router.get('/patients/:code/doses/history', async (req, res) => {
+  const patientId = await linkedPatientId(req.user.sub, req.params.code);
+  if (!patientId) return res.status(404).json({ error: 'Patient not linked' });
+  const result = await doseHistory(patientId, req.query.startDate, req.query.endDate);
+  if (result.error) return res.status(400).json({ error: result.error });
+  res.json(result);
 });
 
 router.get('/drugs', async (req, res) => {
@@ -225,15 +245,15 @@ router.post('/patients/:code/medications', async (req, res) => {
   const drug = await resolveDrug(drugName);
   if (!drug) return res.status(400).json({ error: 'Choose a verified medicine from the list' });
   const frequencyCode = parseFrequency(frequency);
-  if (frequencyCode === 'CONSULT') {
-    return res.status(400).json({ error: 'Choose a supported medicine frequency' });
-  }
+  const definition = deriveScheduleDefinition(req.body, frequencyCode);
   const id = uuidv4();
   await pool.execute(
     `INSERT INTO medications
        (id, patient_id, drug_id, drug_name_raw, source, is_prn, frequency,
-        frequency_code, dosage_instruction, start_date, status)
-     VALUES (?, ?, ?, ?, 'OTC_SELF', 0, ?, ?, ?, ?, 'active')`,
+        frequency_code, schedule_type, schedule_times, interval_hours,
+        interval_start_time, schedule_days, schedule_status, schedule_updated_by,
+        schedule_updated_at, dosage_instruction, start_date, status)
+     VALUES (?, ?, ?, ?, 'OTC_SELF', 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(3), ?, ?, 'active')`,
     [
       id,
       patientId,
@@ -241,6 +261,13 @@ router.post('/patients/:code/medications', async (req, res) => {
       drugName,
       frequency,
       frequencyCode,
+      definition.scheduleType,
+      JSON.stringify(definition.times),
+      definition.intervalHours,
+      definition.intervalStartTime,
+      JSON.stringify(definition.days),
+      definition.status,
+      req.user.sub,
       dosageInstruction,
       req.body?.start_date || new Date().toISOString().slice(0, 10),
     ]
@@ -255,13 +282,15 @@ router.post('/patients/:code/medications', async (req, res) => {
   });
   await medicationChanged(patientId, 'MEDICATION_CREATED', id, drugName);
   publishCaregiverEvent(req.user.sub, 'adherence-updated', { patient_code: req.params.code });
-  res.status(201).json({ id, status: 'active', rx_class: drug.rx_class });
+  res
+    .status(201)
+    .json({ id, status: 'active', schedule_status: definition.status, rx_class: drug.rx_class });
 });
 
 router.post('/patients/:code/schedule/suggested', async (req, res) => {
   const patientId = await medicationManagementPatient(req, res);
   if (!patientId) return;
-  const result = await confirmForPatient(patientId);
+  const result = await confirmForPatient(patientId, undefined, [], { actorId: req.user.sub });
   if (result.error === 'invalid_layout') {
     return res.status(409).json({ error: 'A medicine spacing rule could not be satisfied' });
   }
@@ -352,13 +381,32 @@ router.post('/patients/:code/medications/:id/stop', async (req, res) => {
 router.post('/patients/:code/notify', async (req, res) => {
   const patientId = await linkedPatientId(req.user.sub, req.params.code);
   if (!patientId) return res.status(404).json({ error: 'Patient not linked' });
-  const medicineName = String(req.body?.drug_name || '').trim() || null;
+  const doseId = String(req.body?.dose_id || '').trim();
+  if (!doseId) return res.status(400).json({ error: 'A due dose is required' });
+  const [[dose]] = await pool.execute(
+    `SELECT ms.id, ms.scheduled_time AS scheduled_at, ms.status AS stored_status,
+            m.drug_name_raw, m.schedule_status,
+            (SELECT dl.logged_at FROM dose_logs dl WHERE dl.schedule_id=ms.id
+              AND dl.status IN ('taken','taken_late') LIMIT 1) AS taken_at
+       FROM medication_schedules ms JOIN medications m ON m.id=ms.medication_id
+      WHERE ms.id=? AND ms.patient_id=? AND ms.is_confirmed=1`,
+    [doseId, patientId]
+  );
+  if (!dose) return res.status(404).json({ error: 'Dose not found' });
+  if (dose.schedule_status !== 'APPROVED' || computeDoseStatus(dose) !== 'DUE') {
+    return res.status(409).json({
+      error: 'A reminder can only be sent while the dose is due',
+      code: 'dose_not_due',
+    });
+  }
+  const medicineName = dose.drug_name_raw;
   const eventId = uuidv4();
   const result = await createPatientNotification({
     patientId,
     type: 'dose_reminder',
     medicineName,
-    eventKey: `caregiver:${req.user.sub}:${patientId}:${eventId}`,
+    eventKey: `caregiver:${req.user.sub}:${patientId}:${doseId}:${Math.floor(Date.now() / 300000)}`,
+    metadata: { schedule_id: doseId },
   });
   let pushSent = false;
   if (result.created) {
@@ -406,6 +454,33 @@ router.get('/patients/:code/orders', async (req, res) => {
   const patientId = await linkedPatientId(req.user.sub, req.params.code);
   if (!patientId) return res.status(404).json({ error: 'Patient not linked' });
   res.json(await listOrders(patientId));
+});
+
+router.post('/patients/:code/orders', async (req, res, next) => {
+  const patientId = await linkedPatientId(req.user.sub, req.params.code);
+  if (!patientId) return res.status(404).json({ error: 'Patient not linked' });
+  uploadPrescription(req, res, async (uploadError) => {
+    if (uploadError) return res.status(400).json({ error: uploadError.message });
+    try {
+      const result = await createCatalogOrder(
+        patientId,
+        { id: req.user.sub, role: 'caregiver' },
+        req.body || {},
+        req.file?.filename || null
+      );
+      if (result.error) return res.status(400).json({ error: result.error, code: result.error });
+      await orderChanged({
+        patientId,
+        kind: result.kind,
+        orderId: result.id,
+        status: result.status,
+        created: true,
+      });
+      return res.status(201).json(result);
+    } catch (error) {
+      return next(error);
+    }
+  });
 });
 
 // ── POST /api/caregiver/patients/:code/refills ────────────────────────────────

@@ -64,7 +64,10 @@ export async function searchDrugs(query, limit = 20, filters = {}) {
   // The patient catalog currently contains a few hundred entries. Keep a hard
   // ceiling to prevent unbounded responses while allowing the complete catalog.
   const safeLimit = Math.min(Math.max(parseInt(limit, 10) || 20, 1), 500);
-  const conditions = ['(LOWER(dr.generic_name) LIKE ? OR LOWER(dr.brand_names_json) LIKE ?)'];
+  const conditions = [
+    'dr.availability = 1',
+    '(LOWER(dr.generic_name) LIKE ? OR LOWER(dr.brand_names_json) LIKE ?)',
+  ];
   const params = [q, q];
   if (filters.rxClass === 'RX' || filters.rxClass === 'OTC') {
     conditions.push('dr.rx_class = ?');

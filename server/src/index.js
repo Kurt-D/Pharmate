@@ -18,13 +18,15 @@ import directoryRouter from './routes/directory.js';
 import realtimeRouter from './routes/realtime.js';
 import medicationRouter from './routes/medication.js';
 import notificationsRouter from './routes/notifications.js';
-import { trustedOrigins, validateEnvironment } from './config/environment.js';
+import { trustedOrigins, trustedProxyHops, validateEnvironment } from './config/environment.js';
 import { initializeSocketServer } from './realtime/socketServer.js';
 
 validateEnvironment();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const proxyHops = trustedProxyHops();
+if (proxyHops) app.set('trust proxy', proxyHops);
 
 app.use(helmet());
 const allowedOrigins = trustedOrigins();
@@ -65,6 +67,9 @@ app.use((_req, res) => {
 // The unused _next arg is required for Express to treat this as an error handler.
 app.use((err, _req, res, _next) => {
   const status = err.status || err.statusCode || 500;
+  if (status >= 500 && (process.env.NODE_ENV !== 'test' || process.env.DEBUG_ERRORS === 'true')) {
+    console.error(err);
+  }
   const message = status >= 500 ? 'Internal server error' : err.message;
   res.status(status).json({ error: message });
 });
