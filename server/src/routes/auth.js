@@ -306,6 +306,7 @@ router.post('/register', registerLimit, verifyCaptcha, async (req, res) => {
     await invalidateUndeliveredOtp(pool, issued.id);
     console.error('Email verification delivery failed', {
       code: error?.code || 'EMAIL_PROVIDER_ERROR',
+      status: error?.response?.status || null,
     });
     return res.status(503).json({
       code: 'EMAIL_DELIVERY_FAILED',
@@ -824,8 +825,12 @@ router.post('/resend-verification-otp', forgotEmailLimit, async (req, res) => {
       await invalidateUndeliveredOtp(pool, delivery.otpId);
       console.error('Email verification delivery failed', {
         code: error?.code || 'EMAIL_PROVIDER_ERROR',
+        status: error?.response?.status || null,
       });
-      return res.status(503).json({ error: 'Verification email could not be sent' });
+      return res.status(503).json({
+        code: 'EMAIL_DELIVERY_FAILED',
+        error: 'Verification email could not be sent',
+      });
     }
   }
   return res.json({ message: 'If verification is required, a code has been sent.' });

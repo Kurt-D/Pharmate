@@ -170,7 +170,10 @@ export default function SignupRedesign() {
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
-        setResendSeconds(Number(data.retryAfter) || 60);
+        // Only a real rate-limit response should lock the resend button. A
+        // provider/configuration failure invalidates the undelivered OTP on the
+        // backend, so the patient must be allowed to retry immediately.
+        setResendSeconds(response.status === 429 ? Number(data.retryAfter) || 60 : 0);
         return setError(data.error || 'Please wait before requesting another code.');
       }
       setResendSeconds(60);
