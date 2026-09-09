@@ -298,9 +298,9 @@ router.post('/register', registerLimit, verifyCaptcha, async (req, res) => {
   // Production can never enter this branch; OTP-specific tests opt in explicitly.
   if (testAutoVerify) return res.status(201).json({ message: 'Account created.' });
   if (developmentAutoVerify) {
-    return res.status(201).json(
-      await createSession({ id: userId, email, role, session_version: 0 })
-    );
+    return res
+      .status(201)
+      .json(await createSession({ id: userId, email, role, session_version: 0 }));
   }
 
   const connForOtp = await pool.getConnection();

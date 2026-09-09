@@ -102,12 +102,6 @@ export async function createCatalogOrder(
         [uuidv4(), kind, id, patientId, prescriptionFilename]
       );
     }
-    await conn.execute(
-      `INSERT INTO order_status_history
-         (id,order_kind,order_id,from_status,to_status,changed_by,changed_by_role)
-       VALUES (?,?,?,NULL,'pending',?,?)`,
-      [uuidv4(), kind, id, placedBy.id, placedBy.role]
-    );
     await conn.commit();
     return {
       id,
@@ -209,7 +203,7 @@ export async function createRefill(
     [medication_id, patientId]
   );
   if (
-    !balance?.prescribed_quantity ||
+    Number(balance?.prescribed_quantity) > 0 &&
     amount > Number(balance.prescribed_quantity) - Number(balance.purchased_quantity)
   )
     return { error: 'quantity_exceeds_prescription' };
