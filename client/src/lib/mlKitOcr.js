@@ -163,7 +163,109 @@ async function imageStats(url) {
   };
 }
 
+function pickBrowserImage() {
+  return new Promise((resolve) => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/jpeg,image/png,image/webp';
+    input.onchange = () => {
+      const file = input.files?.[0];
+      resolve(file ? { webPath: URL.createObjectURL(file), format: file.type } : null);
+    };
+    input.addEventListener('cancel', () => resolve(null), { once: true });
+    input.click();
+  });
+}
+
+async function captureBrowserCamera() {
+  if (!navigator.mediaDevices?.getUserMedia) {
+    throw new Error('Live camera capture is not supported by this browser. Use the installed app.');
+  }
+  const stream = await navigator.mediaDevices.getUserMedia({
+    audio: false,
+    video: {
+      facingMode: { ideal: 'environment' },
+      width: { ideal: 1920 },
+      height: { ideal: 1080 },
+    },
+  });
+  return new Promise((resolve, reject) => {
+    const overlay = document.createElement('div');
+    const video = document.createElement('video');
+    const controls = document.createElement('div');
+    const capture = document.createElement('button');
+    const cancel = document.createElement('button');
+    const finish = (value) => {
+      stream.getTracks().forEach((track) => track.stop());
+      overlay.remove();
+      resolve(value);
+    };
+
+    Object.assign(overlay.style, {
+      position: 'fixed',
+      inset: '0',
+      zIndex: '10000',
+      background: '#05070b',
+      display: 'grid',
+      gridTemplateRows: '1fr auto',
+      padding: 'env(safe-area-inset-top) 0 env(safe-area-inset-bottom)',
+    });
+    Object.assign(video.style, { width: '100%', height: '100%', objectFit: 'contain' });
+    Object.assign(controls.style, {
+      display: 'flex',
+      gap: '12px',
+      padding: '18px',
+      justifyContent: 'center',
+    });
+    for (const button of [capture, cancel]) {
+      Object.assign(button.style, {
+        minHeight: '48px',
+        padding: '0 24px',
+        borderRadius: '24px',
+        fontWeight: '700',
+      });
+    }
+    capture.textContent = 'Capture label';
+    cancel.textContent = 'Cancel';
+    capture.style.background = '#1769ff';
+    capture.style.color = '#fff';
+    cancel.style.background = '#fff';
+    video.autoplay = true;
+    video.muted = true;
+    video.playsInline = true;
+    video.srcObject = stream;
+    capture.onclick = async () => {
+      try {
+        if (!video.videoWidth || !video.videoHeight) throw new Error('Camera is not ready yet.');
+        const canvas = document.createElement('canvas');
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        canvas.getContext('2d').drawImage(video, 0, 0);
+        const blob = await new Promise((done) => canvas.toBlob(done, 'image/jpeg', 0.95));
+        if (!blob) throw new Error('The photo could not be captured.');
+        finish({ webPath: URL.createObjectURL(blob), format: 'image/jpeg', browserCaptured: true });
+      } catch (error) {
+        stream.getTracks().forEach((track) => track.stop());
+        overlay.remove();
+        reject(error);
+      }
+    };
+    cancel.onclick = () => finish(null);
+    controls.append(capture, cancel);
+    overlay.append(video, controls);
+    document.body.append(overlay);
+    video.play().catch((error) => {
+      stream.getTracks().forEach((track) => track.stop());
+      overlay.remove();
+      reject(error);
+    });
+  });
+}
+
 export async function captureOcrImage(source = 'camera') {
+  if (!Capacitor.isNativePlatform()) {
+    return source === 'gallery' ? pickBrowserImage() : captureBrowserCamera();
+  }
   if (source === 'gallery') {
     const response = await Camera.chooseFromGallery({
       mediaType: MediaTypeSelection.Photo,
@@ -172,7 +274,6 @@ export async function captureOcrImage(source = 'camera') {
       quality: 95,
       correctOrientation: true,
       includeMetadata: true,
-      webUseInput: true,
     });
     return response.results?.[0] || null;
   }
@@ -185,7 +286,6 @@ export async function captureOcrImage(source = 'camera') {
     cameraDirection: CameraDirection.Rear,
     saveToGallery: false,
     includeMetadata: true,
-    webUseInput: true,
   });
 }
 
