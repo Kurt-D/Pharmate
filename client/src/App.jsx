@@ -34,11 +34,9 @@ import AdminLayout from './pages/admin/AdminLayout.jsx';
 import AdminDashboard from './pages/admin/DashboardRedesign.jsx';
 import AdminUsers from './pages/admin/UsersRedesign.jsx';
 import AdminMedicines from './pages/admin/Medicines.jsx';
-import AdminRuleGovernance from './pages/admin/RuleGovernance.jsx';
 import AdminOrders from './pages/admin/Orders.jsx';
 import AdminAlerts from './pages/admin/Alerts.jsx';
 import AdminAccessibility from './pages/admin/Accessibility.jsx';
-import AdminOcrValidation from './pages/admin/OcrValidation.jsx';
 import CaregiverPortal from './pages/caregiver/CaregiverPortal.jsx';
 import ProtectedRoute from './components/ProtectedRoute.jsx';
 import './App.css';
@@ -107,6 +105,10 @@ export default function App() {
                     element={<Navigate to="/pharmacist/dashboard" replace />}
                   />
                   <Route path="curation" element={<DrugCuration />} />
+                  <Route
+                    path="medicine-rules"
+                    element={<Navigate to="/pharmacist/dashboard?tab=medicine-rules" replace />}
+                  />
                   <Route path="validation" element={<Validation />} />
                   <Route path="inquiries" element={<Inquiries />} />
                   <Route path="orders" element={<OrdersQueue />} />
@@ -127,8 +129,11 @@ export default function App() {
                   <Route path="dashboard" element={<AdminDashboard />} />
                   <Route path="users" element={<AdminUsers />} />
                   <Route path="medicines" element={<AdminMedicines />} />
-                  <Route path="rules" element={<AdminRuleGovernance />} />
-                  <Route path="ocr-validation" element={<AdminOcrValidation />} />
+                  <Route path="rules" element={<Navigate to="/admin/medicines" replace />} />
+                  <Route
+                    path="ocr-validation"
+                    element={<Navigate to="/admin/dashboard" replace />}
+                  />
                   <Route path="orders" element={<AdminOrders />} />
                   <Route path="priority" element={<Navigate to="/admin/dashboard" replace />} />
                   <Route path="alerts" element={<AdminAlerts />} />

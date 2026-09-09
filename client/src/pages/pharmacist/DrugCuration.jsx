@@ -397,7 +397,7 @@ function jsonArrayValue(value) {
   }
 }
 
-function ClinicalRuleVerification() {
+export function ClinicalRuleVerification() {
   const [rules, setRules] = useState(null);
   const [report, setReport] = useState(null);
   const [selectedRule, setSelectedRule] = useState(null);
@@ -490,10 +490,10 @@ function ClinicalRuleVerification() {
   }
 
   return (
-    <section className="pw-card mt-3 p-3">
+    <section className="pw-card pw-medicine-rules mt-3 p-3">
       <div className="d-flex flex-wrap justify-content-between gap-2 align-items-start mb-3">
         <div>
-          <h3 className="h5 mb-1">Clinical Rule Verification</h3>
+          <h3 className="h5 mb-1">Medicine Rules &amp; Safety</h3>
           <p className="text-muted mb-0">
             One-time evidence review for formulary scheduling rules. This does not approve an
             individual patient schedule.
@@ -535,10 +535,12 @@ function ClinicalRuleVerification() {
               className="form-control"
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Search medicine"
+              aria-label="Search medicine rules"
               value={query}
             />
             <select
               className="form-select"
+              aria-label="Filter by rule review status"
               onChange={(event) => setStatus(event.target.value)}
               value={status}
             >

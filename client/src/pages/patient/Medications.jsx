@@ -1377,6 +1377,7 @@ export default function Medications() {
           taken={taken}
           onCalendar={() => navigate('/patient/calendar')}
           onEdit={() => navigate('/patient/schedule')}
+          onAdd={() => navigate('/patient/medications/add')}
           onHistory={setModal}
           onManageMedicine={setMedicineToManage}
           onMark={() => setDoseToConfirm(dueDose)}
@@ -2146,12 +2147,14 @@ function Dashboard({
   logBusy,
   onCalendar,
   onEdit,
+  onAdd,
   onManageMedicine,
   onMark,
   onScan,
   onSnooze,
   tr,
 }) {
+  const [calendarEmpty, setCalendarEmpty] = useState(false);
   return (
     <section className="pm-med-dashboard-v2">
       {reminderDose && (
@@ -2166,32 +2169,60 @@ function Dashboard({
       )}
 
       <section className="pm-dashboard-schedule-tools">
-        <button className="pm-edit-schedule-card" onClick={onEdit} type="button">
+        <button
+          className="pm-edit-schedule-card"
+          onClick={calendarEmpty ? onAdd : onEdit}
+          type="button"
+        >
           <span>
-            <Icon name="edit" size={28} />
+            <Icon name={calendarEmpty ? 'add' : 'edit'} size={28} />
           </span>
           <div>
-            <strong>{tr('Edit Schedule', 'I-edit ang Iskedyul')}</strong>
+            <strong>
+              {calendarEmpty
+                ? tr('Add medicine', 'Magdagdag ng gamot')
+                : tr('Edit Schedule', 'I-edit ang Iskedyul')}
+            </strong>
             <small>
-              {tr(
-                'Add, delete, or update your medicines and schedules.',
-                'Magdagdag, magtanggal, o mag-update ng iyong mga gamot at iskedyul.'
-              )}
+              {calendarEmpty
+                ? tr(
+                    'Add a medicine and set its reminders.',
+                    'Magdagdag ng gamot at itakda ang mga paalala nito.'
+                  )
+                : tr(
+                    'Add, delete, or update your medicines and schedules.',
+                    'Magdagdag, magtanggal, o mag-update ng iyong mga gamot at iskedyul.'
+                  )}
             </small>
           </div>
           <Icon name="arrow" size={26} />
         </button>
       </section>
-      <MedicationCalendarSummary onCalendar={onCalendar} onOpen={onManageMedicine} tr={tr} />
+      <MedicationCalendarSummary
+        onCalendar={onCalendar}
+        onOpen={onManageMedicine}
+        onEmptyChange={setCalendarEmpty}
+        tr={tr}
+      />
     </section>
   );
 }
 
-function MedicationCalendarSummary({ onCalendar, onOpen, tr }) {
+function MedicationCalendarSummary({ onCalendar, onOpen, onEmptyChange, tr }) {
   const [selectedDate, setSelectedDate] = useState(() => new Date());
   const [filter, setFilter] = useState('upcoming');
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+  const [revision, setRevision] = useState(0);
+  const filteredRows = rows.filter((row) =>
+    (filter === 'taken'
+      ? ['TAKEN']
+      : filter === 'missed'
+        ? ['MISSED']
+        : ['UPCOMING', 'DUE']
+    ).includes(String(row.status).toUpperCase())
+  );
   const week = useMemo(() => {
     const start = new Date(selectedDate);
     start.setDate(selectedDate.getDate() - selectedDate.getDay());
@@ -2205,12 +2236,21 @@ function MedicationCalendarSummary({ onCalendar, onOpen, tr }) {
   useEffect(() => {
     let active = true;
     setLoading(true);
-    api(`/api/patient/doses/calendar?date=${localDayKey(selectedDate)}&status=${filter}`)
+    setError(false);
+    onEmptyChange(false);
+    api(`/api/patient/doses/calendar?date=${localDayKey(selectedDate)}&status=all`)
       .then((response) => {
-        if (active) setRows(Array.isArray(response.data) ? response.data : []);
+        if (active) {
+          if (!Array.isArray(response.data)) throw new Error('Invalid calendar response');
+          setRows(response.data);
+          onEmptyChange(response.data.length === 0);
+        }
       })
       .catch(() => {
-        if (active) setRows([]);
+        if (active) {
+          setRows([]);
+          setError(true);
+        }
       })
       .finally(() => {
         if (active) setLoading(false);
@@ -2218,7 +2258,13 @@ function MedicationCalendarSummary({ onCalendar, onOpen, tr }) {
     return () => {
       active = false;
     };
-  }, [filter, selectedDate]);
+  }, [selectedDate, onEmptyChange, revision]);
+
+  useEffect(() => {
+    const refresh = () => setRevision((value) => value + 1);
+    window.addEventListener('pm-domain-updated', refresh);
+    return () => window.removeEventListener('pm-domain-updated', refresh);
+  }, []);
 
   function moveDay(amount) {
     setSelectedDate((current) => {
@@ -2293,8 +2339,15 @@ function MedicationCalendarSummary({ onCalendar, onOpen, tr }) {
       <div className="pm-medication-calendar-summary__result" aria-live="polite">
         {loading ? (
           <p>{tr('Loading doses…', 'Nilo-load ang mga dose…')}</p>
-        ) : rows.length ? (
-          <DoseRows dashboard onOpen={onOpen} rows={rows} status={filter} tr={tr} />
+        ) : error ? (
+          <div role="alert">
+            <p>{tr('Could not load the schedule.', 'Hindi ma-load ang iskedyul.')}</p>
+            <button type="button" onClick={() => setRevision((value) => value + 1)}>
+              {tr('Try again', 'Subukan muli')}
+            </button>
+          </div>
+        ) : filteredRows.length ? (
+          <DoseRows dashboard onOpen={onOpen} rows={filteredRows} status={filter} tr={tr} />
         ) : (
           <p>{tr(`No ${filter} doses for this date.`, 'Walang dose para sa petsang ito.')}</p>
         )}

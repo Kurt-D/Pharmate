@@ -937,7 +937,7 @@ router.post('/schedule/confirm', async (req, res) => {
 });
 
 // ── DELETE /api/patient/schedule/items ────────────────────────────────────────
-// Delete selected, not-yet-taken reminders while preserving adherence history.
+// Explicit patient deletion includes recorded doses; retain an audit snapshot.
 router.delete('/schedule/items', async (req, res) => {
   const scheduleIds = Array.isArray(req.body?.schedule_ids) ? req.body.schedule_ids : [];
   const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -947,12 +947,41 @@ router.delete('/schedule/items', async (req, res) => {
   );
   if (!validIds.length) return res.json({ deleted: 0 });
   const placeholders = validIds.map(() => '?').join(',');
-  const [result] = await pool.execute(
-    `DELETE FROM medication_schedules
-     WHERE patient_id = ? AND status = 'scheduled' AND id IN (${placeholders})`,
-    [req.user.sub, ...validIds]
-  );
-  res.json({ deleted: result.affectedRows });
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const [entries] = await conn.execute(
+      `SELECT * FROM medication_schedules WHERE patient_id = ? AND id IN (${placeholders}) FOR UPDATE`,
+      [req.user.sub, ...validIds]
+    );
+    if (!entries.length) {
+      await conn.commit();
+      return res.json({ deleted: 0 });
+    }
+    const [logs] = await conn.execute(
+      `SELECT * FROM dose_logs WHERE patient_id = ? AND schedule_id IN (${placeholders})`,
+      [req.user.sub, ...validIds]
+    );
+    await recordAudit({
+      actor: req.user,
+      action: 'patient.schedule_entries_deleted',
+      entityType: 'medication_schedule',
+      patientId: req.user.sub,
+      metadata: { entries, dose_logs: logs },
+      executor: conn,
+    });
+    const [result] = await conn.execute(
+      `DELETE FROM medication_schedules WHERE patient_id = ? AND id IN (${placeholders})`,
+      [req.user.sub, ...validIds]
+    );
+    await conn.commit();
+    res.json({ deleted: result.affectedRows });
+  } catch (error) {
+    await conn.rollback();
+    throw error;
+  } finally {
+    conn.release();
+  }
 });
 
 // ── GET /api/patient/doses/today ──────────────────────────────────────────────

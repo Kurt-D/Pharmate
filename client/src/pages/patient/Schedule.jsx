@@ -158,7 +158,6 @@ export default function Schedule() {
   const [selectionMode, setSelectionMode] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [selectedRows, setSelectedRows] = useState(() => new Set());
-  const [removedRows, setRemovedRows] = useState(() => new Set());
   const [deleting, setDeleting] = useState(false);
   const [scheduleError, setScheduleError] = useState('');
   const [loadRevision, setLoadRevision] = useState(0);
@@ -227,6 +226,12 @@ export default function Schedule() {
   }, [loadRevision]);
 
   useEffect(() => {
+    setSelectedRows(new Set());
+    setEditMode(false);
+    setCalendarRows([]);
+  }, [selectedDate]);
+
+  useEffect(() => {
     let active = true;
     setCalendarLoading(true);
     api(`/api/patient/doses/calendar?date=${localDayKey(selectedDate)}&status=all`)
@@ -234,7 +239,10 @@ export default function Schedule() {
         if (active) setCalendarRows(Array.isArray(response.data) ? response.data : []);
       })
       .catch(() => {
-        if (active) setCalendarRows([]);
+        if (active) {
+          setCalendarRows([]);
+          setScheduleError('Could not load this date’s schedule. Please try again.');
+        }
       })
       .finally(() => {
         if (active) setCalendarLoading(false);
@@ -270,10 +278,10 @@ export default function Schedule() {
       }),
     [calendarRows, doses, proposal, medicines, manual, source]
   );
-  const visibleRows = rows.filter((row) => !removedRows.has(String(row.rowKey)));
-  const hasOngoingSchedule = hasSavedSchedule && visibleRows.length > 0;
-  const editableRows = visibleRows.filter((row) =>
-    ['scheduled', 'snoozed', 'upcoming', 'due'].includes(String(row.status || '').toLowerCase())
+  const visibleRows = rows;
+  const hasOngoingSchedule = visibleRows.length > 0;
+  const selectedDeletableRows = visibleRows.filter(
+    (row) => Boolean(row.schedule_id) && selectedRows.has(String(row.rowKey))
   );
   const scheduleWeek = useMemo(() => {
     const start = new Date(selectedDate);
@@ -351,62 +359,46 @@ export default function Schedule() {
     setEditMode(false);
     setSelectionMode(true);
     setSelectedRows((current) =>
-      current.size === editableRows.length
+      visibleRows.every((row) => current.has(String(row.rowKey)))
         ? new Set()
-        : new Set(editableRows.map((row) => String(row.rowKey)))
+        : new Set(visibleRows.map((row) => String(row.rowKey)))
     );
   }
 
   async function deleteSelected() {
-    if (!selectedRows.size) return;
+    if (!selectedDeletableRows.length || deleting || calendarLoading) return;
     const confirmed = window.confirm(
-      tr('Delete the selected schedule items?', 'Tanggalin ang mga napiling item sa iskedyul?')
+      tr(
+        'Delete the selected schedule entries? This also removes their dose logs, including taken or missed records, and may change your adherence totals. This cannot be undone here. The medicine itself will stay saved.',
+        'Tanggalin ang mga napiling iskedyul? Maaalis din ang kaugnay na tala ng nainom o hindi nainom na dose at maaaring magbago ang kabuuang pagsunod sa gamot. Hindi ito maibabalik dito. Mananatiling naka-save ang gamot.'
+      )
     );
     if (!confirmed) return;
     setDeleting(true);
     setScheduleError('');
-    const selected = visibleRows.filter((row) => selectedRows.has(String(row.rowKey)));
-    const remaining = visibleRows.filter((row) => !selectedRows.has(String(row.rowKey)));
-    const next = new Set([...removedRows, ...selectedRows]);
-    setRemovedRows(next);
-    localStorage.setItem('pm_removed_schedule_rows', JSON.stringify([...next]));
-    const persistedRows = remaining.map((row, index) => {
-      const persisted = { ...row };
-      delete persisted.date;
-      delete persisted.rowKey;
-      delete persisted.timeValue;
-      return {
-        ...persisted,
-        medication_id: row.medication_id || row.id,
-        scheduled_time: row.scheduled_time || row.date.toISOString(),
-        schedule_id: row.schedule_id || `saved-remaining-${index}`,
-        status: 'scheduled',
-      };
-    });
-    localStorage.setItem('pm_saved_schedule_rows', JSON.stringify(persistedRows));
-    setDoses((current) => [
-      ...persistedRows,
-      ...current.filter((dose) => !['scheduled', 'snoozed'].includes(dose.status)),
-    ]);
-    if (!remaining.length) {
-      localStorage.removeItem('pm_has_medication_schedule');
-      localStorage.setItem('pm_schedule_hidden', '1');
-    } else {
-      localStorage.setItem('pm_has_medication_schedule', '1');
-      localStorage.removeItem('pm_schedule_hidden');
-    }
-    setSelectedRows(new Set());
-    setSelectionMode(false);
+    const selected = selectedDeletableRows;
     try {
-      await api('/api/patient/schedule/items', {
+      const response = await api('/api/patient/schedule/items', {
         method: 'DELETE',
         body: { schedule_ids: selected.map((row) => row.schedule_id).filter(Boolean) },
       });
+      setSelectedRows(new Set());
+      setSelectionMode(false);
+      setLoadRevision((value) => value + 1);
+      window.dispatchEvent(new Event('pm-domain-updated'));
+      if ((response.data?.deleted || 0) < selected.length) {
+        setScheduleError(
+          tr(
+            'Some entries were not deleted. The schedule has been refreshed; review the remaining entries before trying again.',
+            'May mga talang hindi natanggal. Na-refresh ang iskedyul; suriin ang natitirang tala bago subukang muli.'
+          )
+        );
+      }
     } catch {
       setScheduleError(
         tr(
-          'The reminders were removed from this device, but the server could not be updated. Please try again when connected.',
-          'Inalis ang mga paalala sa device na ito, ngunit hindi na-update ang server. Subukan muli kapag may koneksyon.'
+          'Could not confirm deletion. Refresh the schedule before trying again.',
+          'Hindi makumpirma ang pagtanggal. I-refresh ang iskedyul bago subukang muli.'
         )
       );
     } finally {
@@ -487,6 +479,16 @@ export default function Schedule() {
       {scheduleError && (
         <div className="pm-banner pm-banner--warn" role="alert">
           {scheduleError}
+          <button
+            type="button"
+            disabled={calendarLoading}
+            onClick={() => {
+              setScheduleError('');
+              setLoadRevision((value) => value + 1);
+            }}
+          >
+            {tr('Refresh schedule', 'I-refresh ang iskedyul')}
+          </button>
         </div>
       )}
 
@@ -584,7 +586,10 @@ export default function Schedule() {
             </button>
             <button
               aria-label={tr('Select all items', 'Piliin lahat ng item')}
-              aria-pressed={editableRows.length > 0 && selectedRows.size === editableRows.length}
+              aria-pressed={
+                visibleRows.length > 0 &&
+                visibleRows.every((row) => selectedRows.has(String(row.rowKey)))
+              }
               onClick={toggleSelectAll}
               type="button"
             >
@@ -606,6 +611,9 @@ export default function Schedule() {
           aria-pressed={editMode}
           className={editMode ? 'active' : ''}
           onClick={() => {
+            const selected = visibleRows.filter((row) => selectedRows.has(String(row.rowKey)));
+            if (selected.length === 1) return editMedicine(selected[0]);
+            if (visibleRows.length === 1) return editMedicine(visibleRows[0]);
             setEditMode((value) => !value);
             setSelectionMode(false);
             setSelectedRows(new Set());
@@ -618,7 +626,7 @@ export default function Schedule() {
         <button
           aria-label={tr('Delete selected items', 'Tanggalin ang mga napiling item')}
           className="danger"
-          disabled={!selectedRows.size || deleting}
+          disabled={!selectedDeletableRows.length || deleting || calendarLoading}
           onClick={deleteSelected}
           type="button"
         >
@@ -626,6 +634,20 @@ export default function Schedule() {
           <small>{deleting ? tr('Deleting', 'Tinatanggal') : tr('Delete', 'Tanggalin')}</small>
         </button>
       </div>
+
+      {(selectionMode || editMode) && (
+        <p className="pm-schedule-date-empty" role="status">
+          {editMode
+            ? tr(
+                'Choose Edit beside the medicine you want to change.',
+                'Piliin ang I-edit sa tabi ng gamot na babaguhin.'
+              )
+            : tr(
+                `${selectedRows.size} selected. Choose Delete to remove the selected entries, including taken or missed doses.`,
+                `${selectedRows.size} ang napili. Piliin ang Tanggalin para alisin ang mga napiling tala, pati ang nainom o hindi nainom na dose.`
+              )}
+        </p>
+      )}
 
       <div
         className={`pm-schedule-groups ${selectionMode ? 'is-selecting' : ''} ${editMode ? 'is-editing' : ''}`}
@@ -654,7 +676,7 @@ export default function Schedule() {
                   const selected = selectedRows.has(String(row.rowKey));
                   return (
                     <article className={selected ? 'selected' : ''} key={row.rowKey}>
-                      {selectionMode && editableRows.includes(row) && (
+                      {selectionMode && (
                         <button
                           aria-label={`${tr('Select', 'Piliin')} ${medicineName(row)}`}
                           aria-pressed={selected}
@@ -677,7 +699,17 @@ export default function Schedule() {
                       <div className="pm-schedule-medicine-copy">
                         <header>
                           <h3>{medicineName(row)}</h3>
-                          <em>{tr('Upcoming', 'Paparating')}</em>
+                          <em>
+                            {{
+                              upcoming: tr('Upcoming', 'Paparating'),
+                              scheduled: tr('Upcoming', 'Paparating'),
+                              due: tr('Due now', 'Oras na'),
+                              missed: tr('Missed', 'Hindi nainom'),
+                              taken: tr('Taken', 'Nainom'),
+                              taken_late: tr('Taken late', 'Nahuling nainom'),
+                              snoozed: tr('Snoozed', 'Ipinagpaliban'),
+                            }[String(row.status || '').toLowerCase()] || tr('Saved', 'Naka-save')}
+                          </em>
                         </header>
                         <p>{doseText(row)}</p>
                         <small>
@@ -688,7 +720,7 @@ export default function Schedule() {
                             )}
                         </small>
                       </div>
-                      {editMode && editableRows.includes(row) && (
+                      {editMode && row.medication_id && (
                         <button
                           aria-label={`${tr('Edit', 'I-edit')} ${medicineName(row)}`}
                           className="pm-schedule-row-edit"

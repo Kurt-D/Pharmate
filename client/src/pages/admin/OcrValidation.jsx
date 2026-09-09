@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { api } from '../../api.js';
+import { adminRead } from '../../lib/adminRead.js';
 import '../../styles/counseling.css';
 
 function Metric({ label, value, suffix = '' }) {
@@ -14,12 +14,37 @@ function Metric({ label, value, suffix = '' }) {
 export default function OcrValidation() {
   const [report, setReport] = useState(null);
   const [error, setError] = useState('');
+  const [revision, setRevision] = useState(0);
   useEffect(() => {
-    api('/api/admin/ocr-validation')
-      .then((response) => setReport(response.data))
-      .catch((requestError) => setError(requestError.message));
-  }, []);
-  if (error) return <div className="alert alert-warning">{error}</div>;
+    let active = true;
+    setError('');
+    adminRead('/api/admin/ocr-validation')
+      .then((response) => {
+        if (
+          !response.data?.summary ||
+          !Array.isArray(response.data.quality) ||
+          !Array.isArray(response.data.devices)
+        ) {
+          throw new Error('The server returned an invalid validation report. Please try again.');
+        }
+        if (active) setReport(response.data);
+      })
+      .catch((requestError) => {
+        if (active) setError(requestError.message);
+      });
+    return () => {
+      active = false;
+    };
+  }, [revision]);
+  if (error)
+    return (
+      <div className="alert alert-warning" role="alert">
+        <p>{error}</p>
+        <button type="button" onClick={() => setRevision((value) => value + 1)}>
+          Try again
+        </button>
+      </div>
+    );
   if (!report) return <div className="admin-ocr-loading">Loading validation measurements…</div>;
   const summary = report.summary;
   return (

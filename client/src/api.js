@@ -57,7 +57,7 @@ async function fetchWithAuthRefresh(path, options = {}, auth = true) {
   return response;
 }
 
-export async function api(path, { method = 'GET', body, auth = true } = {}) {
+export async function api(path, { method = 'GET', body, auth = true, signal } = {}) {
   const headers = { 'Content-Type': 'application/json' };
   if (auth) {
     const token = sessionStorage.getItem('pm_token') || localStorage.getItem('pm_token');
@@ -69,6 +69,7 @@ export async function api(path, { method = 'GET', body, auth = true } = {}) {
     {
       method,
       headers,
+      signal,
       body: body !== undefined ? JSON.stringify(body) : undefined,
     },
     auth

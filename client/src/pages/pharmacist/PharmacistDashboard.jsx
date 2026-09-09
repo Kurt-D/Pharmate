@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { ClinicalRuleVerification } from './DrugCuration.jsx';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { api } from '../../api.js';
 import { useRealtime } from '../../hooks/useRealtime.js';
@@ -10,6 +11,7 @@ import '../../styles/pharmacist-dashboard.css';
 const NAV_ITEMS = [
   { id: 'overview', label: 'Overview', icon: 'dashboard' },
   { id: 'validation', label: 'Prescription Validation', icon: 'prescription' },
+  { id: 'medicine-rules', label: 'Medicine Rules & Safety', icon: 'prescription' },
   { id: 'inquiries', label: 'Medication Inquiries', icon: 'chat' },
   { id: 'patients', label: 'Patients', icon: 'patients' },
   { id: 'adherence', label: 'Adherence Tracking', icon: 'report' },
@@ -1746,7 +1748,9 @@ function NoteDrawer({ patient, note, setNote, noteType, setNoteType, onClose, on
 export default function PharmacistDashboard() {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
-  const [activeTab, setActiveTab] = useState('overview');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedTab = searchParams.get('tab');
+  const activeTab = NAV_ITEMS.some((item) => item.id === requestedTab) ? requestedTab : 'overview';
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [prescriptions, setPrescriptions] = useState(MOCK_PRESCRIPTIONS);
   const [selectedPrescriptionId, setSelectedPrescriptionId] = useState(MOCK_PRESCRIPTIONS[0].id);
@@ -1811,7 +1815,7 @@ export default function PharmacistDashboard() {
   const licenseNumber = user?.license_number || user?.licenseNo || 'PRC-0123456';
 
   function selectTab(tab) {
-    setActiveTab(tab);
+    setSearchParams(tab === 'overview' ? {} : { tab });
     setSidebarOpen(false);
   }
 
@@ -2017,6 +2021,11 @@ export default function PharmacistDashboard() {
           </div>
         </header>
         <div className="phd-workstation">
+          {activeTab === 'medicine-rules' && (
+            <div className="phd-medicine-rules">
+              <ClinicalRuleVerification />
+            </div>
+          )}
           {activeTab === 'overview' && (
             <Overview metrics={metrics} onNavigate={selectTab} pharmacistName={pharmacistName} />
           )}

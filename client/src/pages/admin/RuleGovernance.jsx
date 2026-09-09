@@ -10,6 +10,7 @@ import {
   ShieldCheck,
 } from 'lucide-react';
 import { api } from '../../api.js';
+import { adminRead } from '../../lib/adminRead.js';
 import '../../styles/admin-rule-governance.css';
 
 const ACTIONS = ['ALLOW', 'REVIEW', 'BLOCK'];
@@ -92,11 +93,18 @@ export default function RuleGovernance() {
 
   async function load() {
     setLoading(true);
+    setError('');
     try {
       const [response, credentials] = await Promise.all([
-        api('/api/admin/rule-governance'),
-        api('/api/admin/pharmacist-credentials'),
+        adminRead('/api/admin/rule-governance'),
+        adminRead('/api/admin/pharmacist-credentials'),
       ]);
+      if (
+        !Array.isArray(response.data?.medicines) ||
+        !Array.isArray(credentials.data?.pharmacists)
+      ) {
+        throw new Error('The server returned invalid rule data. Please try again.');
+      }
       setData(response.data);
       setCredentialData(credentials.data);
       const nextCredential = credentialDraft?.id
@@ -127,7 +135,7 @@ export default function RuleGovernance() {
 
   useEffect(() => {
     if (!selectedId) return;
-    api(`/api/admin/rule-governance/${selectedId}/history`)
+    adminRead(`/api/admin/rule-governance/${selectedId}/history`)
       .then((response) => setHistory(response.data))
       .catch(() => setHistory([]));
   }, [selectedId]);
@@ -205,6 +213,16 @@ export default function RuleGovernance() {
       setCredentialSaving(false);
     }
   }
+
+  if (error && !draft)
+    return (
+      <div className="arg-page" role="alert">
+        <p>{error}</p>
+        <button type="button" onClick={load} disabled={loading}>
+          {loading ? 'Loading…' : 'Try again'}
+        </button>
+      </div>
+    );
 
   if (loading && !draft)
     return (
