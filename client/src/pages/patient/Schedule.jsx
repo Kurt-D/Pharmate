@@ -79,6 +79,13 @@ const medicineName = (item) => item.drug_name || item.drug_name_raw || item.name
 const doseText = (item) =>
   item.dosage_instruction || item.strength || item.dosage || 'Follow prescribed dose';
 
+function localDayKey(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 function dateAtTime(value) {
   if (!value) return null;
   if (value.includes?.('T')) return new Date(value);
@@ -155,6 +162,9 @@ export default function Schedule() {
   const [deleting, setDeleting] = useState(false);
   const [scheduleError, setScheduleError] = useState('');
   const [loadRevision, setLoadRevision] = useState(0);
+  const [selectedDate, setSelectedDate] = useState(() => new Date());
+  const [calendarRows, setCalendarRows] = useState(null);
+  const [calendarLoading, setCalendarLoading] = useState(false);
   const source = localStorage.getItem('pm_medication_schedule_source') || 'suggested';
   const scheduleHidden = localStorage.getItem('pm_schedule_hidden') === '1';
   const hasSavedSchedule =
@@ -217,6 +227,24 @@ export default function Schedule() {
   }, [loadRevision]);
 
   useEffect(() => {
+    let active = true;
+    setCalendarLoading(true);
+    api(`/api/patient/doses/calendar?date=${localDayKey(selectedDate)}&status=all`)
+      .then((response) => {
+        if (active) setCalendarRows(Array.isArray(response.data) ? response.data : []);
+      })
+      .catch(() => {
+        if (active) setCalendarRows([]);
+      })
+      .finally(() => {
+        if (active) setCalendarLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [selectedDate, loadRevision]);
+
+  useEffect(() => {
     const refresh = () => setLoadRevision((value) => value + 1);
     const refreshWhenVisible = () => {
       if (document.visibilityState === 'visible') refresh();
@@ -232,11 +260,30 @@ export default function Schedule() {
   }, []);
 
   const rows = useMemo(
-    () => normalizeRows({ doses, proposal, medicines, manual, source }),
-    [doses, proposal, medicines, manual, source]
+    () =>
+      normalizeRows({
+        doses: calendarRows === null ? doses : calendarRows,
+        proposal: calendarRows === null ? proposal : null,
+        medicines: calendarRows === null ? medicines : [],
+        manual: calendarRows === null ? manual : null,
+        source,
+      }),
+    [calendarRows, doses, proposal, medicines, manual, source]
   );
   const visibleRows = rows.filter((row) => !removedRows.has(String(row.rowKey)));
   const hasOngoingSchedule = hasSavedSchedule && visibleRows.length > 0;
+  const editableRows = visibleRows.filter((row) =>
+    ['scheduled', 'snoozed', 'upcoming', 'due'].includes(String(row.status || '').toLowerCase())
+  );
+  const scheduleWeek = useMemo(() => {
+    const start = new Date(selectedDate);
+    start.setDate(selectedDate.getDate() - selectedDate.getDay());
+    return Array.from({ length: 7 }, (_, index) => {
+      const date = new Date(start);
+      date.setDate(start.getDate() + index);
+      return date;
+    });
+  }, [selectedDate]);
   const groups = Object.values(
     visibleRows.reduce((result, row) => {
       const dayKey = `${row.date.getFullYear()}-${String(row.date.getMonth() + 1).padStart(2, '0')}-${String(row.date.getDate()).padStart(2, '0')}`;
@@ -304,9 +351,9 @@ export default function Schedule() {
     setEditMode(false);
     setSelectionMode(true);
     setSelectedRows((current) =>
-      current.size === visibleRows.length
+      current.size === editableRows.length
         ? new Set()
-        : new Set(visibleRows.map((row) => String(row.rowKey)))
+        : new Set(editableRows.map((row) => String(row.rowKey)))
     );
   }
 
@@ -376,7 +423,7 @@ export default function Schedule() {
       </main>
     );
 
-  if (!hasSavedSchedule || !rows.length)
+  if (!hasSavedSchedule && !rows.length)
     return (
       <main className="pm-saved-schedule">
         <header className="pm-saved-schedule__title">
@@ -436,20 +483,83 @@ export default function Schedule() {
                 )}
           </p>
         </div>
-        <button
-          className="pm-schedule-calendar-link"
-          onClick={() => navigate('/patient/calendar')}
-          type="button"
-        >
-          <Icon name="calendar" size={18} />
-          <span>{tr('View Calendar', 'Tingnan ang Kalendaryo')}</span>
-        </button>
       </header>
       {scheduleError && (
         <div className="pm-banner pm-banner--warn" role="alert">
           {scheduleError}
         </div>
       )}
+
+      <section
+        className="pm-schedule-week-calendar"
+        aria-label={tr('Choose schedule date', 'Pumili ng petsa')}
+      >
+        <div className="pm-schedule-week-calendar__title">
+          <div>
+            <small>{tr('Medicine Calendar', 'Kalendaryo ng Gamot')}</small>
+            <strong>{tr('Choose a schedule date', 'Pumili ng petsa ng iskedyul')}</strong>
+          </div>
+          <button onClick={() => navigate('/patient/calendar')} type="button">
+            <Icon name="calendar" size={18} />
+            <span>{tr('View Calendar', 'Tingnan ang Kalendaryo')}</span>
+          </button>
+        </div>
+        <header>
+          <button
+            aria-label={tr('Previous day', 'Nakaraang araw')}
+            onClick={() =>
+              setSelectedDate((current) => {
+                const next = new Date(current);
+                next.setDate(current.getDate() - 1);
+                return next;
+              })
+            }
+            type="button"
+          >
+            <Icon name="back" />
+          </button>
+          <div>
+            <small>
+              {localDayKey(selectedDate) === localDayKey(new Date())
+                ? tr('Today', 'Ngayon')
+                : tr('Selected day', 'Napiling araw')}
+            </small>
+            <strong>
+              {selectedDate.toLocaleDateString([], { month: 'long', year: 'numeric' })}
+            </strong>
+          </div>
+          <button
+            aria-label={tr('Next day', 'Susunod na araw')}
+            onClick={() =>
+              setSelectedDate((current) => {
+                const next = new Date(current);
+                next.setDate(current.getDate() + 1);
+                return next;
+              })
+            }
+            type="button"
+          >
+            <Icon name="back" />
+          </button>
+        </header>
+        <div className="pm-schedule-week-calendar__days">
+          {scheduleWeek.map((date) => (
+            <button
+              aria-pressed={localDayKey(date) === localDayKey(selectedDate)}
+              className={localDayKey(date) === localDayKey(selectedDate) ? 'selected' : ''}
+              key={localDayKey(date)}
+              onClick={() => {
+                setSelectedRows(new Set());
+                setSelectedDate(date);
+              }}
+              type="button"
+            >
+              <small>{date.toLocaleDateString([], { weekday: 'narrow' })}</small>
+              <strong>{date.getDate()}</strong>
+            </button>
+          ))}
+        </div>
+      </section>
 
       <div
         aria-label={tr('Schedule actions', 'Mga aksyon sa iskedyul')}
@@ -474,7 +584,7 @@ export default function Schedule() {
             </button>
             <button
               aria-label={tr('Select all items', 'Piliin lahat ng item')}
-              aria-pressed={selectedRows.size === visibleRows.length}
+              aria-pressed={editableRows.length > 0 && selectedRows.size === editableRows.length}
               onClick={toggleSelectAll}
               type="button"
             >
@@ -520,76 +630,86 @@ export default function Schedule() {
       <div
         className={`pm-schedule-groups ${selectionMode ? 'is-selecting' : ''} ${editMode ? 'is-editing' : ''}`}
       >
-        {groups.map((group) => (
-          <section key={group.id}>
-            <header>
-              <div className={`pm-schedule-period-title ${group.id}`}>
-                <span>
-                  <Icon name={group.icon} />
-                </span>
-                <div>
-                  <h2>{group.label}</h2>
-                  <small>{group.range}</small>
+        {calendarLoading ? (
+          <p className="pm-schedule-date-empty">
+            {tr('Loading schedule…', 'Nilo-load ang iskedyul…')}
+          </p>
+        ) : groups.length ? (
+          groups.map((group) => (
+            <section key={group.id}>
+              <header>
+                <div className={`pm-schedule-period-title ${group.id}`}>
+                  <span>
+                    <Icon name={group.icon} />
+                  </span>
+                  <div>
+                    <h2>{group.label}</h2>
+                    <small>{group.range}</small>
+                  </div>
                 </div>
+                <b>{group.rows.length}</b>
+              </header>
+              <div>
+                {group.rows.map((row) => {
+                  const selected = selectedRows.has(String(row.rowKey));
+                  return (
+                    <article className={selected ? 'selected' : ''} key={row.rowKey}>
+                      {selectionMode && editableRows.includes(row) && (
+                        <button
+                          aria-label={`${tr('Select', 'Piliin')} ${medicineName(row)}`}
+                          aria-pressed={selected}
+                          className="pm-schedule-row-select"
+                          onClick={() => toggleSelection(row.rowKey)}
+                          type="button"
+                        >
+                          {selected && <Icon name="check" size={19} />}
+                        </button>
+                      )}
+                      <time>
+                        <Icon name="clock" />
+                        <strong>
+                          {row.date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
+                        </strong>
+                      </time>
+                      <span className="pm-saved-med-icon">
+                        <Icon name="medicine" />
+                      </span>
+                      <div className="pm-schedule-medicine-copy">
+                        <header>
+                          <h3>{medicineName(row)}</h3>
+                          <em>{tr('Upcoming', 'Paparating')}</em>
+                        </header>
+                        <p>{doseText(row)}</p>
+                        <small>
+                          {row.reason ||
+                            tr(
+                              'Follow the saved medication instructions',
+                              'Sundin ang naka-save na tagubilin'
+                            )}
+                        </small>
+                      </div>
+                      {editMode && editableRows.includes(row) && (
+                        <button
+                          aria-label={`${tr('Edit', 'I-edit')} ${medicineName(row)}`}
+                          className="pm-schedule-row-edit"
+                          onClick={() => editMedicine(row)}
+                          type="button"
+                        >
+                          <Icon name="edit" size={17} />
+                          <span>{tr('Edit', 'I-edit')}</span>
+                        </button>
+                      )}
+                    </article>
+                  );
+                })}
               </div>
-              <b>{group.rows.length}</b>
-            </header>
-            <div>
-              {group.rows.map((row) => {
-                const selected = selectedRows.has(String(row.rowKey));
-                return (
-                  <article className={selected ? 'selected' : ''} key={row.rowKey}>
-                    {selectionMode && (
-                      <button
-                        aria-label={`${tr('Select', 'Piliin')} ${medicineName(row)}`}
-                        aria-pressed={selected}
-                        className="pm-schedule-row-select"
-                        onClick={() => toggleSelection(row.rowKey)}
-                        type="button"
-                      >
-                        {selected && <Icon name="check" size={19} />}
-                      </button>
-                    )}
-                    <time>
-                      <Icon name="clock" />
-                      <strong>
-                        {row.date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
-                      </strong>
-                    </time>
-                    <span className="pm-saved-med-icon">
-                      <Icon name="medicine" />
-                    </span>
-                    <div className="pm-schedule-medicine-copy">
-                      <header>
-                        <h3>{medicineName(row)}</h3>
-                        <em>{tr('Upcoming', 'Paparating')}</em>
-                      </header>
-                      <p>{doseText(row)}</p>
-                      <small>
-                        {row.reason ||
-                          tr(
-                            'Follow the saved medication instructions',
-                            'Sundin ang naka-save na tagubilin'
-                          )}
-                      </small>
-                    </div>
-                    {editMode && (
-                      <button
-                        aria-label={`${tr('Edit', 'I-edit')} ${medicineName(row)}`}
-                        className="pm-schedule-row-edit"
-                        onClick={() => editMedicine(row)}
-                        type="button"
-                      >
-                        <Icon name="edit" size={17} />
-                        <span>{tr('Edit', 'I-edit')}</span>
-                      </button>
-                    )}
-                  </article>
-                );
-              })}
-            </div>
-          </section>
-        ))}
+            </section>
+          ))
+        ) : (
+          <p className="pm-schedule-date-empty">
+            {tr('No doses scheduled for this date.', 'Walang dose sa petsang ito.')}
+          </p>
+        )}
       </div>
 
       <aside className="pm-schedule-safety">

@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react';
+import { useAuth } from '../../context/AuthContext.jsx';
+import '../../styles/caregiver-patient-info.css';
 import {
   AlertTriangle,
   ContactRound,
@@ -14,31 +16,63 @@ import {
 } from 'lucide-react';
 
 const OBSERVATIONS = [
-  { id: 'mood', label: 'Good Mood', icon: Smile },
-  { id: 'bp', label: 'BP Checked', icon: HeartPulse },
-  { id: 'dizzy', label: 'Mild Dizziness', icon: AlertTriangle },
-  { id: 'meals', label: 'Finished Meals', icon: Utensils },
+  { id: 'mood', label: 'Good mood', icon: Smile },
+  { id: 'bp', label: 'Blood pressure checked', icon: HeartPulse },
+  { id: 'dizzy', label: 'Felt dizzy', icon: AlertTriangle },
+  { id: 'meals', label: 'Finished meals', icon: Utensils },
 ];
 
-function storageKey(patientCode) {
-  return `pm_caregiver_notes_${patientCode || 'unlinked'}`;
+function storageKey(accountId, patientCode) {
+  return `pm_caregiver_notes_v2_${encodeURIComponent(accountId)}_${encodeURIComponent(patientCode)}`;
 }
 
 export default function CaregiverPatientInfo({ patient, onAddPatient }) {
+  const { user } = useAuth();
+  return (
+    <PatientInfo
+      key={`${user?.id || ''}:${patient?.patient_code || ''}`}
+      patient={patient}
+      onAddPatient={onAddPatient}
+      accountId={user?.id}
+    />
+  );
+}
+
+function PatientInfo({ patient, onAddPatient, accountId }) {
   const [notes, setNotes] = useState([]);
   const [draft, setDraft] = useState('');
   const [selectedTags, setSelectedTags] = useState([]);
   const patientCode = patient?.patient_code || '';
+  const [error, setError] = useState('');
+  const [message, setMessage] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [storageReady, setStorageReady] = useState(false);
 
   useEffect(() => {
     try {
-      setNotes(JSON.parse(localStorage.getItem(storageKey(patientCode)) || '[]'));
+      if (!accountId || !patientCode) return;
+      const saved = JSON.parse(localStorage.getItem(storageKey(accountId, patientCode)) || '[]');
+      if (
+        !Array.isArray(saved) ||
+        saved.some(
+          (note) =>
+            !note ||
+            typeof note.id !== 'string' ||
+            typeof note.text !== 'string' ||
+            !Array.isArray(note.tags) ||
+            !Number.isFinite(new Date(note.createdAt).getTime())
+        )
+      )
+        throw new Error('Invalid notes');
+      setNotes(saved);
+      setStorageReady(true);
     } catch {
       setNotes([]);
+      setError('Saved notes could not be opened. Reload to try again. Nothing has been changed.');
     }
     setDraft('');
     setSelectedTags([]);
-  }, [patientCode]);
+  }, [accountId, patientCode]);
 
   function toggleTag(id) {
     setSelectedTags((current) =>
@@ -46,32 +80,52 @@ export default function CaregiverPatientInfo({ patient, onAddPatient }) {
     );
   }
 
-  function saveNote() {
+  async function saveNote() {
     const text = draft.trim();
-    if (!text && !selectedTags.length) return;
-    const updated = [
-      { id: crypto.randomUUID(), text, tags: selectedTags, createdAt: new Date().toISOString() },
-      ...notes,
-    ];
-    setNotes(updated);
-    localStorage.setItem(storageKey(patientCode), JSON.stringify(updated));
-    setDraft('');
-    setSelectedTags([]);
+    if ((!text && !selectedTags.length) || !storageReady || saving) return;
+    setSaving(true);
+    setMessage('');
+    setError('');
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+    try {
+      const updated = [
+        { id: crypto.randomUUID(), text, tags: selectedTags, createdAt: new Date().toISOString() },
+        ...notes,
+      ];
+      localStorage.setItem(storageKey(accountId, patientCode), JSON.stringify(updated));
+      setNotes(updated);
+      setDraft('');
+      setSelectedTags([]);
+      setMessage('Care note saved on this device.');
+    } catch {
+      setError(
+        'Could not save the note on this device. Your text is still here. Please try again.'
+      );
+    } finally {
+      setSaving(false);
+    }
   }
 
   function removeNote(id) {
-    const updated = notes.filter((note) => note.id !== id);
-    setNotes(updated);
-    localStorage.setItem(storageKey(patientCode), JSON.stringify(updated));
+    if (!window.confirm('Delete this care note? This cannot be undone.')) return;
+    try {
+      const updated = notes.filter((note) => note.id !== id);
+      localStorage.setItem(storageKey(accountId, patientCode), JSON.stringify(updated));
+      setNotes(updated);
+      setMessage('Care note deleted from this device.');
+    } catch {
+      setError('Could not delete the note. Please try again.');
+    }
   }
 
-  if (!patient)
+  // Patient records come from the active-link-only caregiver endpoint.
+  if (!patient || (patient.status && patient.status !== 'active'))
     return (
-      <main className="grid gap-4 px-4 pb-4 pt-5">
+      <main className="cg-patient-info-screen">
         <header className="cg-page-header">
           <p className="m-0 text-sm font-semibold text-blue-700">Patient information</p>
           <h1 className="mb-0 mt-1 text-2xl font-bold tracking-tight text-slate-900">
-            Patient Info
+            Patient information
           </h1>
         </header>
         <section className="rounded-2xl border border-slate-200 bg-white p-6 text-center shadow-sm">
@@ -93,12 +147,14 @@ export default function CaregiverPatientInfo({ patient, onAddPatient }) {
     );
 
   return (
-    <main className="grid gap-4 px-4 pb-4 pt-5">
+    <main className="cg-patient-info-screen">
       <header className="cg-page-header">
         <p className="m-0 text-sm font-semibold text-blue-700">Linked patient</p>
-        <h1 className="mb-0 mt-1 text-2xl font-bold tracking-tight text-slate-900">Patient Info</h1>
+        <h1 className="mb-0 mt-1 text-2xl font-bold tracking-tight text-slate-900">
+          Patient information
+        </h1>
         <p className="mb-0 mt-1 text-sm font-medium leading-5 text-slate-600">
-          Profile, secure link status, and daily well-being notes.
+          Keep everyday care details in one place.
         </p>
       </header>
       <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -107,11 +163,13 @@ export default function CaregiverPatientInfo({ patient, onAddPatient }) {
             <ContactRound className="h-8 w-8" />
           </span>
           <div className="min-w-0 flex-1">
-            <h2 className="m-0 text-lg font-bold text-slate-900">{patient.displayLabel}</h2>
-            <p className="mb-0 mt-1 text-sm font-medium text-slate-600">Linked family member</p>
+            <h2 className="m-0 text-lg font-bold text-slate-900">
+              {patient.relationship || 'Linked patient'}
+            </h2>
+            <p className="mb-0 mt-1 text-sm font-medium text-slate-600">Patient connection</p>
             <span className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700">
               <ShieldCheck className="h-4 w-4" />
-              Secure link active
+              Patient connection active
             </span>
           </div>
         </div>
@@ -123,27 +181,22 @@ export default function CaregiverPatientInfo({ patient, onAddPatient }) {
             </span>
             <strong className="text-sm text-slate-900">{patient.patient_code}</strong>
           </div>
-          <div className="flex items-center justify-between gap-3 border-t border-slate-200 pt-2">
-            <span className="text-sm font-semibold text-slate-600">Relationship</span>
-            <strong className="text-sm text-slate-900">
-              {patient.relationship || 'Caregiver'}
-            </strong>
-          </div>
         </div>
       </section>
       <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
         <div>
-          <h2 className="m-0 text-lg font-bold text-slate-900">Daily care observation</h2>
+          <h2 className="m-0 text-lg font-bold text-slate-900">How is your patient today?</h2>
           <p className="mb-0 mt-1 text-sm font-medium leading-5 text-slate-600">
-            Record important changes that may help during the next consultation.
+            Write changes you want to remember for the next consultation.
           </p>
         </div>
-        <div className="mt-4 flex flex-wrap gap-2" aria-label="Quick observations">
+        <div className="cg-observation-grid" aria-label="Quick observations (optional)">
           {OBSERVATIONS.map(({ id, label, icon: Icon }) => {
             const active = selectedTags.includes(id);
             return (
               <button
                 aria-pressed={active}
+                disabled={saving || !storageReady}
                 className={`inline-flex min-h-[44px] items-center gap-1.5 rounded-full border px-3 text-xs font-semibold ${active ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-200 bg-white text-slate-700'}`}
                 key={id}
                 onClick={() => toggleTag(id)}
@@ -151,35 +204,48 @@ export default function CaregiverPatientInfo({ patient, onAddPatient }) {
               >
                 <Icon className="h-4 w-4" />
                 {label}
+                {active && <span aria-hidden="true"> ✓</span>}
               </button>
             );
           })}
         </div>
         <label className="mt-4 grid gap-2 text-sm font-semibold text-slate-800">
-          Observation note
+          Add a care note
           <textarea
+            disabled={saving || !storageReady}
             className="min-h-28 resize-y rounded-xl border border-slate-300 bg-white p-3 text-base font-medium leading-6 text-slate-900 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
             onChange={(event) => setDraft(event.target.value)}
-            placeholder="Example: BP was 120/80 after breakfast. Patient was active and finished the meal."
+            placeholder="Write what you noticed today…"
             value={draft}
           />
         </label>
+        {!draft.trim() && !selectedTags.length && (
+          <p className="cg-note-help">Write a note or select an observation to enable saving.</p>
+        )}
+        <p role="status" className="cg-note-success">
+          {message}
+        </p>
+        {error && (
+          <p role="alert" className="cg-note-error">
+            {error}
+          </p>
+        )}
         <button
           className="mt-3 flex h-14 w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 text-base font-semibold text-white hover:bg-blue-700 disabled:bg-slate-300"
-          disabled={!draft.trim() && !selectedTags.length}
+          disabled={saving || !storageReady || (!draft.trim() && !selectedTags.length)}
           onClick={saveNote}
           type="button"
         >
           <Save className="h-5 w-5" />
-          Save Care Note
+          {saving ? 'Saving…' : 'Save note'}
         </button>
         <p className="mb-0 mt-2 text-xs font-medium leading-5 text-slate-500">
-          Care notes are stored on this device and are not automatically sent to a pharmacist.
+          Saved on this device only. Not automatically shared with the pharmacist.
         </p>
       </section>
       <section className="grid gap-3">
         <div className="flex items-center justify-between">
-          <h2 className="m-0 text-lg font-bold text-slate-900">Care journal</h2>
+          <h2 className="m-0 text-lg font-bold text-slate-900">Saved care notes</h2>
           <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-600">
             {notes.length}
           </span>
@@ -230,9 +296,8 @@ export default function CaregiverPatientInfo({ patient, onAddPatient }) {
           ))
         ) : (
           <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-6 text-center">
-            <Plus className="mx-auto h-7 w-7 text-slate-400" />
             <p className="mb-0 mt-2 text-sm font-medium text-slate-600">
-              No care observations saved yet.
+              No notes yet. Add your first care note above.
             </p>
           </div>
         )}

@@ -1,6 +1,35 @@
 import { suggestedTimes, validateMedicationSchedule } from '../services/scheduleDefinition.js';
 
 describe('structured medication schedule rules', () => {
+  test('manual reminders allow chosen counts but still reject duplicate times', () => {
+    const input = {
+      scheduleMode: 'MANUAL',
+      frequencyCode: 'Q4H',
+      startDate: '2026-09-09',
+      scheduleTimes: ['08:00', '12:00'],
+    };
+    expect(validateMedicationSchedule(input).valid).toBe(true);
+    expect(validateMedicationSchedule({ ...input, scheduleTimes: ['08:00', '08:00'] }).valid).toBe(
+      false
+    );
+    expect(validateMedicationSchedule({ ...input, frequencyCode: 'AS_NEEDED' }).valid).toBe(false);
+    expect(validateMedicationSchedule({ ...input, scheduleMode: 'SUGGESTED' }).valid).toBe(false);
+  });
+  test('four-times-daily editor preserves QID count with specific times', () => {
+    const input = {
+      frequencyType: 'SPECIFIC_TIMES',
+      frequencyCode: 'QID',
+      startDate: '2026-09-09',
+      scheduleTimes: ['06:00', '12:00', '18:00', '23:00'],
+    };
+    expect(validateMedicationSchedule(input).valid).toBe(true);
+    expect(validateMedicationSchedule({ ...input, scheduleTimes: ['08:00'] }).code).toBe(
+      'FREQUENCY_TIME_COUNT_MISMATCH'
+    );
+    expect(validateMedicationSchedule({ ...input, frequencyCode: undefined }).code).toBe(
+      'UNSUPPORTED_FREQUENCY'
+    );
+  });
   test.each([
     ['QD', '08:00', ['08:00']],
     ['BID', '08:00', ['08:00', '20:00']],

@@ -149,6 +149,7 @@ export default function AskRedesign() {
   const [chatQuery, setChatQuery] = useState('');
   const [historyMessageQuery, setHistoryMessageQuery] = useState('');
   const [requestStep, setRequestStep] = useState(0);
+  const [showConsent, setShowConsent] = useState(false);
   const [draft, setDraft] = useState('');
   const [error, setError] = useState('');
   const [restoringThread, setRestoringThread] = useState(true);
@@ -170,6 +171,13 @@ export default function AskRedesign() {
     setQuestion(scheduleInquiry.question);
     setRequestStep(1);
   }, [scheduleInquiry]);
+
+  useEffect(() => {
+    if (!showConsent || !consent.consented) return;
+    setShowConsent(false);
+    setUsePriority(false);
+    setRequestStep(1);
+  }, [consent.consented, showConsent]);
 
   useEffect(() => {
     api('/api/directory/branches')
@@ -489,7 +497,6 @@ export default function AskRedesign() {
           )}
         </p>
       </header>
-      <InquiryConsent consent={consent} />
       {!thread && requestStep > 0 && (
         <div
           aria-label={tr('Ask a pharmacist progress', 'Progreso sa pagtatanong sa parmasyutiko')}
@@ -575,124 +582,140 @@ export default function AskRedesign() {
         </section>
       ) : !thread ? (
         <>
-          {requestStep === 0 && (
-            <div className="pm-ask-home-options">
-              <section className="pm-ask-card pm-ask-home-card">
-                <span className="pm-ask-home-icon">
-                  <ChatIcon name="user" />
-                </span>
-                <div>
-                  <h2>{tr('Ask a Pharmacist', 'Magtanong sa Parmasyutiko')}</h2>
-                  <p>
-                    {tr(
-                      'Start a new private conversation about your medicine.',
-                      'Magsimula ng pribadong usapan tungkol sa iyong gamot.'
-                    )}
-                  </p>
-                </div>
-                <button
-                  className="pm-ask-primary"
-                  onClick={() => {
-                    setUsePriority(false);
-                    setRequestStep(1);
-                  }}
-                  type="button"
-                >
-                  {tr('Ask a Pharmacist', 'Magtanong sa Parmasyutiko')}
+          {requestStep === 0 &&
+            (showConsent ? (
+              <div className="pm-ask-consent-step">
+                <button className="pm-ask-back" onClick={() => setShowConsent(false)} type="button">
+                  <ChatIcon name="back" />
+                  {tr('Back', 'Bumalik')}
                 </button>
-              </section>
-              <section className="pm-ask-card pm-ask-home-card pm-ask-history-card">
-                <span className="pm-ask-home-icon">
-                  <ChatIcon name="bookmark" />
-                </span>
-                <div>
-                  <h2>{tr('Conversation History', 'Kasaysayan ng Usapan')}</h2>
-                  <p>
-                    {savedOpenThread
-                      ? tr(
-                          'You have a conversation in progress.',
-                          'May usapan kang kasalukuyang nagpapatuloy.'
-                        )
-                      : tr(
-                          `${closedThreads.length} saved conversation${closedThreads.length === 1 ? '' : 's'}`,
-                          `${closedThreads.length} naka-save na usapan`
-                        )}
-                  </p>
-                </div>
-                <label className="pm-conversation-search">
-                  <ChatIcon name="search" />
-                  <input
-                    aria-label={tr('Search conversation messages', 'Maghanap sa mga mensahe')}
-                    onChange={(event) => setHistoryQuery(event.target.value)}
-                    placeholder={tr(
-                      'Search messages or pharmacist',
-                      'Maghanap ng mensahe o parmasyutiko'
-                    )}
-                    value={historyQuery}
-                  />
-                  {historyQuery && (
-                    <button
-                      aria-label={tr('Clear search', 'Burahin ang hinahanap')}
-                      onClick={() => setHistoryQuery('')}
-                      type="button"
-                    >
-                      <ChatIcon name="close" />
-                    </button>
-                  )}
-                </label>
-                {historyQuery.trim().length >= 2 && (
-                  <div className="pm-conversation-search-results">
-                    {historySearchLoading ? (
-                      <p>{tr('Searching conversations…', 'Naghahanap sa mga usapan…')}</p>
-                    ) : historySearchResults.length ? (
-                      historySearchResults.map((result, index) => (
-                        <button
-                          key={`${result.thread.id}-${result.message?.id || index}`}
-                          onClick={() => viewHistory(result.thread, historyQuery)}
-                          type="button"
-                        >
-                          <span>
-                            <ChatIcon name="user" />
-                          </span>
-                          <div>
-                            <strong>
-                              {result.thread.pharmacist_name ||
-                                tr('PharMate Pharmacist', 'Parmasyutiko ng PharMate')}
-                            </strong>
-                            <small>{result.message?.message || result.thread.subject}</small>
-                          </div>
-                        </button>
-                      ))
-                    ) : (
-                      <p>
-                        {tr('No matching messages found.', 'Walang nahanap na katugmang mensahe.')}
-                      </p>
-                    )}
+                <InquiryConsent consent={consent} />
+              </div>
+            ) : (
+              <div className="pm-ask-home-options">
+                <section className="pm-ask-card pm-ask-home-card">
+                  <span className="pm-ask-home-icon">
+                    <ChatIcon name="user" />
+                  </span>
+                  <div>
+                    <h2>{tr('Ask a Pharmacist', 'Magtanong sa Parmasyutiko')}</h2>
+                    <p>
+                      {tr(
+                        'Start a new private conversation about your medicine.',
+                        'Magsimula ng pribadong usapan tungkol sa iyong gamot.'
+                      )}
+                    </p>
                   </div>
-                )}
-                {savedOpenThread && (
                   <button
                     className="pm-ask-primary"
-                    onClick={() => setThread(savedOpenThread)}
+                    onClick={() => {
+                      if (consent.consented) {
+                        setUsePriority(false);
+                        setRequestStep(1);
+                      } else {
+                        setShowConsent(true);
+                      }
+                    }}
                     type="button"
                   >
-                    {tr('Resume Current Conversation', 'Ipagpatuloy ang Kasalukuyang Usapan')}
+                    {tr('Ask a Pharmacist', 'Magtanong sa Parmasyutiko')}
                   </button>
-                )}
-                {closedThreads.length > 0 && (
-                  <button
-                    className="pm-ask-secondary"
-                    onClick={() => setShowAllHistory((value) => !value)}
-                    type="button"
-                  >
-                    {showAllHistory
-                      ? tr('Hide Conversation History', 'Itago ang Kasaysayan')
-                      : tr('View Conversation History', 'Tingnan ang Kasaysayan')}
-                  </button>
-                )}
-              </section>
-            </div>
-          )}
+                </section>
+                <section className="pm-ask-card pm-ask-home-card pm-ask-history-card">
+                  <span className="pm-ask-home-icon">
+                    <ChatIcon name="bookmark" />
+                  </span>
+                  <div>
+                    <h2>{tr('Conversation History', 'Kasaysayan ng Usapan')}</h2>
+                    <p>
+                      {savedOpenThread
+                        ? tr(
+                            'You have a conversation in progress.',
+                            'May usapan kang kasalukuyang nagpapatuloy.'
+                          )
+                        : tr(
+                            `${closedThreads.length} saved conversation${closedThreads.length === 1 ? '' : 's'}`,
+                            `${closedThreads.length} naka-save na usapan`
+                          )}
+                    </p>
+                  </div>
+                  <label className="pm-conversation-search">
+                    <ChatIcon name="search" />
+                    <input
+                      aria-label={tr('Search conversation messages', 'Maghanap sa mga mensahe')}
+                      onChange={(event) => setHistoryQuery(event.target.value)}
+                      placeholder={tr(
+                        'Search messages or pharmacist',
+                        'Maghanap ng mensahe o parmasyutiko'
+                      )}
+                      value={historyQuery}
+                    />
+                    {historyQuery && (
+                      <button
+                        aria-label={tr('Clear search', 'Burahin ang hinahanap')}
+                        onClick={() => setHistoryQuery('')}
+                        type="button"
+                      >
+                        <ChatIcon name="close" />
+                      </button>
+                    )}
+                  </label>
+                  {historyQuery.trim().length >= 2 && (
+                    <div className="pm-conversation-search-results">
+                      {historySearchLoading ? (
+                        <p>{tr('Searching conversations…', 'Naghahanap sa mga usapan…')}</p>
+                      ) : historySearchResults.length ? (
+                        historySearchResults.map((result, index) => (
+                          <button
+                            key={`${result.thread.id}-${result.message?.id || index}`}
+                            onClick={() => viewHistory(result.thread, historyQuery)}
+                            type="button"
+                          >
+                            <span>
+                              <ChatIcon name="user" />
+                            </span>
+                            <div>
+                              <strong>
+                                {result.thread.pharmacist_name ||
+                                  tr('PharMate Pharmacist', 'Parmasyutiko ng PharMate')}
+                              </strong>
+                              <small>{result.message?.message || result.thread.subject}</small>
+                            </div>
+                          </button>
+                        ))
+                      ) : (
+                        <p>
+                          {tr(
+                            'No matching messages found.',
+                            'Walang nahanap na katugmang mensahe.'
+                          )}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                  {savedOpenThread && (
+                    <button
+                      className="pm-ask-primary"
+                      onClick={() => setThread(savedOpenThread)}
+                      type="button"
+                    >
+                      {tr('Resume Current Conversation', 'Ipagpatuloy ang Kasalukuyang Usapan')}
+                    </button>
+                  )}
+                  {closedThreads.length > 0 && (
+                    <button
+                      className="pm-ask-secondary"
+                      onClick={() => setShowAllHistory((value) => !value)}
+                      type="button"
+                    >
+                      {showAllHistory
+                        ? tr('Hide Conversation History', 'Itago ang Kasaysayan')
+                        : tr('View Conversation History', 'Tingnan ang Kasaysayan')}
+                    </button>
+                  )}
+                </section>
+              </div>
+            ))}
 
           {requestStep === 1 && (
             <section className="pm-ask-card pm-ask-single-step">

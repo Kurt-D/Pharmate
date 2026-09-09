@@ -85,7 +85,8 @@ export default function SignupRedesign() {
 
   function finishAuthentication(data) {
     login(data.user, data.accessToken, data.refreshToken);
-    navigate(homeForRole(data.role || data.user.role), { replace: true });
+    const role = data.role || data.user.role;
+    navigate(role === 'patient' ? '/patient/onboarding' : homeForRole(role), { replace: true });
   }
 
   async function submit(event) {

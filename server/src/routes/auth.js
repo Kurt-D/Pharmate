@@ -166,6 +166,7 @@ async function createPatientRecords(conn, userId, fullName) {
   ]);
   await conn.execute('INSERT INTO patient_anchors (patient_id) VALUES (?)', [userId]);
   await conn.execute('INSERT INTO patient_preferences (patient_id) VALUES (?)', [userId]);
+  await conn.execute('INSERT INTO patient_safety_profiles (patient_id) VALUES (?)', [userId]);
 }
 
 async function createPublicRoleRecords(conn, userId, role, fullName) {
@@ -191,6 +192,10 @@ router.post('/register', registerLimit, verifyCaptcha, async (req, res) => {
   const testRequiresVerification =
     process.env.NODE_ENV === 'test' && req.get('x-test-email-verification') === 'required';
   const testAutoVerify = process.env.NODE_ENV === 'test' && !testRequiresVerification;
+  const developmentAutoVerify =
+    process.env.NODE_ENV === 'development' &&
+    process.env.EMAIL_ENABLED !== 'true' &&
+    process.env.PASSWORD_RESET_EMAIL_ENABLED !== 'true';
   const {
     password,
     confirmPassword,
@@ -221,11 +226,23 @@ router.post('/register', registerLimit, verifyCaptcha, async (req, res) => {
   const passwordError = validatePassword(password);
   if (passwordError) return res.status(400).json({ error: passwordError });
 
-  const [existing] = await pool.execute('SELECT id,is_verified FROM users WHERE email = ?', [
-    email,
-  ]);
+  const [existing] = await pool.execute(
+    'SELECT id,email,role,is_verified,session_version,password_hash FROM users WHERE email = ?',
+    [email]
+  );
   if (existing.length > 0) {
     if (!existing[0].is_verified) {
+      if (developmentAutoVerify) {
+        const passwordMatches = await bcrypt.compare(password, existing[0].password_hash);
+        if (!passwordMatches || existing[0].role !== role) {
+          return res.status(409).json({ error: 'Email already registered' });
+        }
+        await pool.execute(
+          'UPDATE users SET is_verified=1,email_verified_at=COALESCE(email_verified_at,NOW(3)) WHERE id=?',
+          [existing[0].id]
+        );
+        return res.status(200).json(await createSession(existing[0]));
+      }
       return res.status(200).json({
         message: 'Account verification is still required.',
         verificationRequired: true,
@@ -250,28 +267,21 @@ router.post('/register', registerLimit, verifyCaptcha, async (req, res) => {
         email,
         passwordHash,
         role,
-        testAutoVerify ? 1 : 0,
-        testAutoVerify ? new Date() : null,
+        testAutoVerify || developmentAutoVerify ? 1 : 0,
+        testAutoVerify || developmentAutoVerify ? new Date() : null,
       ]
     );
 
     if (role === 'patient') {
-      const patientCode = await generatePatientCode();
-      await conn.execute(
-        `INSERT INTO patients
-           (id, patient_code, full_name_enc, contact_num_enc, address_enc, medical_condition_enc)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-        [
-          userId,
-          patientCode,
-          full_name ? encrypt(full_name) : null,
-          contact_num ? encrypt(contact_num) : null,
-          address ? encrypt(address) : null,
-          medical_condition ? encrypt(medical_condition) : null,
-        ]
-      );
-      await conn.execute('INSERT INTO patient_anchors (patient_id) VALUES (?)', [userId]);
-      await conn.execute('INSERT INTO patient_preferences (patient_id) VALUES (?)', [userId]);
+      await createPatientRecords(conn, userId, full_name?.trim());
+      const patientDetails = { contact_num, address, medical_condition };
+      const patientUpdates = Object.entries(patientDetails).filter(([, value]) => value);
+      if (patientUpdates.length) {
+        await conn.execute(
+          `UPDATE patients SET ${patientUpdates.map(([field]) => `${field}_enc=?`).join(',')} WHERE id=?`,
+          [...patientUpdates.map(([, value]) => encrypt(value)), userId]
+        );
+      }
     } else {
       await createPublicRoleRecords(conn, userId, role, full_name?.trim());
     }
@@ -287,6 +297,11 @@ router.post('/register', registerLimit, verifyCaptcha, async (req, res) => {
   // Existing integration suites provision accounts through this public route.
   // Production can never enter this branch; OTP-specific tests opt in explicitly.
   if (testAutoVerify) return res.status(201).json({ message: 'Account created.' });
+  if (developmentAutoVerify) {
+    return res.status(201).json(
+      await createSession({ id: userId, email, role, session_version: 0 })
+    );
+  }
 
   const connForOtp = await pool.getConnection();
   let issued;

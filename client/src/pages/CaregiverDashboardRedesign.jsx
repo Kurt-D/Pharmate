@@ -220,10 +220,15 @@ export default function CaregiverDashboardRedesign() {
         method: 'POST',
         body: { drug_name: drug },
       });
-      if (!response.data.notified) {
+      if (response.data.reminders_enabled === false) {
         setMessage('The patient has medication reminders turned off in their settings.');
         return false;
       }
+      if (response.data.already_sent) {
+        setMessage('This reminder was already sent recently.');
+        return true;
+      }
+      if (!response.data.notified) throw new Error('The reminder could not be sent.');
       setMessage(`Reminder for ${drug || 'the scheduled medicine'} sent to the patient.`);
       return true;
     } catch (e) {

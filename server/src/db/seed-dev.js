@@ -45,12 +45,11 @@ async function seed() {
     const [existing] = await conn.execute('SELECT id FROM users WHERE email = ?', [email]);
 
     if (existing.length === 0) {
-      await conn.execute('INSERT INTO users (id, email, password_hash, role) VALUES (?, ?, ?, ?)', [
-        id,
-        email,
-        pw,
-        role,
-      ]);
+      // Local demo accounts have no deliverable inbox; make them ready to sign in.
+      await conn.execute(
+        'INSERT INTO users (id, email, password_hash, role, is_verified, email_verified_at) VALUES (?, ?, ?, ?, 1, NOW(3))',
+        [id, email, pw, role]
+      );
     } else {
       // Reuse the existing user's ID
       if (email === 'patient@dev.pharmate') {

@@ -35,12 +35,6 @@ function PatientIcon({ name, size = 23 }) {
         <path d="M8 9h8M8 13h5" />
       </>
     ),
-    calendar: (
-      <>
-        <rect x="3" y="5" width="18" height="16" rx="2" />
-        <path d="M16 3v4M8 3v4M3 10h18M8 14h3M13 14h3M8 18h3" />
-      </>
-    ),
     delivery: (
       <>
         <path d="M3 6h11v11H3Z" />
@@ -106,7 +100,6 @@ const NAV = [
   { to: '/patient/today', icon: 'home', label: 'nav.home' },
   { to: '/patient/medications', icon: 'medication', label: 'nav.medications' },
   { to: '/patient/ask', icon: 'message', label: 'nav.ask' },
-  { to: '/patient/appointments', icon: 'calendar', label: 'nav.appointments' },
   { to: '/patient/shop', icon: 'delivery', label: 'nav.orders' },
   { to: '/patient/profile', icon: 'profile', label: 'nav.profile' },
 ];
@@ -340,42 +333,43 @@ export default function PatientLayout() {
           '/patient/shop',
           '/patient/orders',
           '/patient/accessibility',
-        ].includes(location.pathname) && (
-          <div className="pm-global-patient-actions">
-            <Link
-              className={`pm-header-streak-button streak-state-${streakStatus.state}`}
-              to="/patient/streak"
-              aria-label={tr('Open adherence streak', 'Buksan ang adherence streak')}
-            >
-              <PatientIcon name="flame" />
-              <span className="pm-streak-status-badge" aria-hidden="true">
-                <PatientIcon
-                  name={
-                    streakStatus.state === 'reward_ready'
-                      ? 'gift'
-                      : streakStatus.state === 'at_risk'
-                        ? 'warning'
-                        : streakStatus.state === 'safe'
-                          ? 'check'
-                          : 'flame'
-                  }
-                  size={12}
-                />
-              </span>
-            </Link>
-            <button
-              onClick={() => {
-                setNotificationsOpen(true);
-                loadNotifications();
-              }}
-              aria-label={tr('Open notifications', 'Buksan ang mga abiso')}
-              type="button"
-            >
-              <PatientIcon name="bell" />
-              {unread > 0 && <b>{unread > 9 ? '9+' : unread}</b>}
-            </button>
-          </div>
-        )}
+        ].includes(location.pathname) &&
+          !/^\/patient\/medications(?:\/[^/]+)?\/prescription$/.test(location.pathname) && (
+            <div className="pm-global-patient-actions">
+              <Link
+                className={`pm-header-streak-button streak-state-${streakStatus.state}`}
+                to="/patient/streak"
+                aria-label={tr('Open adherence streak', 'Buksan ang adherence streak')}
+              >
+                <PatientIcon name="flame" />
+                <span className="pm-streak-status-badge" aria-hidden="true">
+                  <PatientIcon
+                    name={
+                      streakStatus.state === 'reward_ready'
+                        ? 'gift'
+                        : streakStatus.state === 'at_risk'
+                          ? 'warning'
+                          : streakStatus.state === 'safe'
+                            ? 'check'
+                            : 'flame'
+                    }
+                    size={12}
+                  />
+                </span>
+              </Link>
+              <button
+                onClick={() => {
+                  setNotificationsOpen(true);
+                  loadNotifications();
+                }}
+                aria-label={tr('Open notifications', 'Buksan ang mga abiso')}
+                type="button"
+              >
+                <PatientIcon name="bell" />
+                {unread > 0 && <b>{unread > 9 ? '9+' : unread}</b>}
+              </button>
+            </div>
+          )}
         <Outlet />
       </div>
       <PointerSpotlight

@@ -159,7 +159,9 @@ export async function createPatientNotification({
      FROM patient_preferences WHERE patient_id = ?`,
     [patientId]
   );
-  if (type === 'dose_reminder' && prefs && !prefs.reminders_enabled) return { created: false };
+  if (type === 'dose_reminder' && prefs && !prefs.reminders_enabled) {
+    return { created: false, remindersEnabled: false, duplicate: false };
+  }
   const named = prefs?.detail === 'medicine_name' && Boolean(medicineName);
   const medicine = named ? medicineName : GENERIC_MEDICINE;
   const defaultCopy = {
@@ -221,7 +223,8 @@ export async function createPatientNotification({
       eventKey,
     ]
   );
-  return { created: result.affectedRows === 1 };
+  const created = result.affectedRows === 1;
+  return { created, remindersEnabled: true, duplicate: !created };
 }
 
 export async function purgeReadNotifications(now = new Date(), days = notificationRetentionDays()) {

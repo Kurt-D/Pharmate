@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import '../../styles/medication-corrections.css';
+import { medicineIssues } from '../../lib/medicationGuidance.js';
 import { useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -175,6 +177,10 @@ export default function AutomatedAddMedication() {
   const [searching, setSearching] = useState(false);
   const [working, setWorking] = useState(false);
   const [error, setError] = useState('');
+  const [scheduleIssue, setScheduleIssue] = useState(null);
+  const [correction, setCorrection] = useState(null);
+  const [showIssues, setShowIssues] = useState(false);
+  const validationLock = useRef(false);
   const [schedule, setSchedule] = useState(initial.schedule || null);
   const [source, setSource] = useState(initial.source || '');
   const [manualTimes, setManualTimes] = useState(initial.manualTimes || ['08:00']);
@@ -185,6 +191,7 @@ export default function AutomatedAddMedication() {
   const [confirmation, setConfirmation] = useState(null);
   const [saved, setSaved] = useState(false);
   const saveLock = useRef(false);
+  const resumedSafetyCheck = useRef(false);
 
   useEffect(() => {
     if (saved) return;
@@ -462,6 +469,19 @@ export default function AutomatedAddMedication() {
     }
     if (step === 8 && durationPage && medicine.duration === 'END_DATE' && !medicine.end_date)
       return setError(tr('Choose the treatment end date.', 'Piliin ang petsa ng pagtatapos.'));
+    if (correction && (step !== 8 || durationPage)) {
+      const remaining = medicineIssues(medicine, selectedEndDate).filter(
+        (issue) => issue.step === step
+      );
+      if (remaining.length) {
+        setError(remaining[0].message);
+        return;
+      }
+      setConfirmed(false);
+      setPhase(correction.returnPhase);
+      setCorrection(null);
+      return;
+    }
     if (step === 8 && durationPage) {
       setMedicineList(allMedicines);
       setConfirmed(false);
@@ -536,6 +556,15 @@ export default function AutomatedAddMedication() {
       setWorking(false);
     }
   }
+
+  useEffect(() => {
+    const shouldResume = new URLSearchParams(window.location.search).get('resumeSafety') === '1';
+    if (!shouldResume || resumedSafetyCheck.current) return;
+    resumedSafetyCheck.current = true;
+    generate();
+    // This runs once after returning from the separate safety-profile page.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   function startManualQuestions() {
     setMedicineList(allMedicines);
     setSource('manual');
@@ -690,12 +719,24 @@ export default function AutomatedAddMedication() {
     );
   }
   async function applyEditedMedicineTimes() {
+    if (validationLock.current) return;
+    const detailsIssues = medicineIssues(medicine, selectedEndDate);
+    if (detailsIssues.length) {
+      setShowIssues(true);
+      return;
+    }
+    validationLock.current = true;
+    setWorking(true);
+    setScheduleIssue(null);
+    setError('');
     const frequency = frequencyDetails(medicine.frequency_code);
     try {
       await api('/api/medications/validate-schedule', {
         method: 'POST',
         body: {
           frequencyType: frequency.frequencyType,
+          scheduleMode: source === 'manual' ? 'MANUAL' : 'SUGGESTED',
+          frequencyCode: medicine.frequency_code,
           intervalHours: frequency.intervalHours,
           scheduleTimes: manualRows().map((row) => row.time),
           startDate: medicine.start_date,
@@ -703,8 +744,12 @@ export default function AutomatedAddMedication() {
         },
       });
     } catch (requestError) {
+      setScheduleIssue(requestError.body?.code || null);
       setError(requestError.body?.message || requestError.body?.error || requestError.message);
       return;
+    } finally {
+      validationLock.current = false;
+      setWorking(false);
     }
     const medicineKey = String(editingMedicine?.drug_id || editingMedicine?.name || intake.drug_id);
     const groups = (schedule?.schedule || [])
@@ -785,6 +830,10 @@ export default function AutomatedAddMedication() {
   }
   async function saveSchedule() {
     if (!confirmed || working || saveLock.current) return;
+    if (medicineIssues(medicine, selectedEndDate).length) {
+      setShowIssues(true);
+      return;
+    }
     saveLock.current = true;
     setWorking(true);
     setError('');
@@ -835,12 +884,18 @@ export default function AutomatedAddMedication() {
           body: { source: 'manual', slots, medication_ids: medicationIds, review_confirmed: true },
         });
       }
-      localStorage.removeItem('pm_schedule_hidden');
-      localStorage.setItem('pm_has_medication_schedule', '1');
-      localStorage.setItem('pm_medication_schedule_source', source);
-      sessionStorage.setItem('pm_medicine_added_success', '1');
-      sessionStorage.removeItem(DRAFT_KEY);
-      localStorage.removeItem(DRAFT_KEY);
+      // The server save succeeded. Device preference failures must not invite
+      // the patient to repeat a successfully completed server save.
+      try {
+        localStorage.removeItem('pm_schedule_hidden');
+        localStorage.setItem('pm_has_medication_schedule', '1');
+        localStorage.setItem('pm_medication_schedule_source', source);
+        sessionStorage.setItem('pm_medicine_added_success', '1');
+        sessionStorage.removeItem(DRAFT_KEY);
+        localStorage.removeItem(DRAFT_KEY);
+      } catch {
+        /* A blocked device store does not undo the confirmed save. */
+      }
       setSaved(true);
       setPhase('success');
     } catch (requestError) {
@@ -862,6 +917,26 @@ export default function AutomatedAddMedication() {
     );
   }
 
+  function reviewField(issue) {
+    setCorrection({ ...issue, returnPhase: phase === 'manual-times' ? 'manual-times' : 'review' });
+    setPhase('questions');
+    setStep(issue.step);
+    setDurationPage(false);
+    setError('');
+  }
+  useEffect(() => {
+    if (!correction || phase !== 'questions') return;
+    const timer = window.setTimeout(() => {
+      const target =
+        document.querySelector(
+          '.pm-wizard__question-card input, .pm-wizard__question-card select, .pm-wizard__question-card textarea'
+        ) || document.getElementById('pm-guidance-correction');
+      target?.scrollIntoView({ block: 'center', behavior: 'auto' });
+      target?.focus({ preventScroll: true });
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [correction, phase, step]);
+  const currentIssues = showIssues ? medicineIssues(medicine, selectedEndDate) : [];
   const questionTitle = [
     tr('What is the name of your medicine?', 'Ano ang pangalan ng iyong gamot?'),
     tr('What form is your medicine?', 'Anong uri ang iyong gamot?'),
@@ -897,6 +972,29 @@ export default function AutomatedAddMedication() {
           )}
         </div>
       </header>
+      {correction && phase === 'questions' && (
+        <aside id="pm-guidance-correction" className="pm-guidance-note" tabIndex={-1}>
+          <strong>{correction.label}</strong>
+          <p>{correction.message}</p>
+          <p>Your other answers and reminder times are kept.</p>
+          <button type="button" onClick={next}>
+            Continue to review
+          </button>
+        </aside>
+      )}
+      {currentIssues.length > 0 && phase !== 'questions' && (
+        <aside className="pm-guidance-note" role="alert">
+          <strong>Please review these details</strong>
+          {currentIssues.map((issue) => (
+            <div key={issue.code}>
+              <p>{issue.message}</p>
+              <button type="button" onClick={() => reviewField(issue)}>
+                {issue.label}
+              </button>
+            </div>
+          ))}
+        </aside>
+      )}
       {phase === 'questions' && (
         <div
           aria-label={tr('Medication setup progress', 'Progreso ng pag-set up ng gamot')}
@@ -1461,7 +1559,10 @@ export default function AutomatedAddMedication() {
             <div>
               <h3>{tr('One-time health questions', 'Isang beses na health questions')}</h3>
               <p>{error}</p>
-              <button onClick={() => navigate('/patient/onboarding')} type="button">
+              <button
+                onClick={() => navigate('/patient/onboarding?return=medication-setup')}
+                type="button"
+              >
                 {tr('Complete Safety Profile', 'Kumpletuhin ang Safety Profile')}
               </button>
               <button onClick={() => setPhase('schedule-choice')} type="button">
@@ -1652,23 +1753,43 @@ export default function AutomatedAddMedication() {
               'Piliin ang mga petsa at oras ng paalala sa ibaba.'
             )}
           </p>
-          <MedicineDayEditor
-            allDates={treatmentDates(medicine.start_date, selectedEndDate)}
-            onChange={(dates) =>
-              setMedicineDates((current) => ({
-                ...current,
-                [String(editingMedicine?.drug_id || editingMedicine?.name || intake.drug_id)]:
-                  dates,
-              }))
+          <div
+            id="pm-edit-dates"
+            tabIndex={-1}
+            className="pm-correction-target"
+            aria-invalid={scheduleIssue === 'INVALID_DATE_RANGE'}
+            aria-describedby={
+              scheduleIssue === 'INVALID_DATE_RANGE' ? 'pm-schedule-error' : undefined
             }
-            selectedDates={
-              medicineDates[
-                String(editingMedicine?.drug_id || editingMedicine?.name || intake.drug_id)
-              ] || treatmentDates(medicine.start_date, selectedEndDate)
-            }
-            tr={tr}
-          />
-          <section className="pm-wizard__time-list">
+          >
+            <MedicineDayEditor
+              allDates={treatmentDates(medicine.start_date, selectedEndDate)}
+              onChange={(dates) =>
+                setMedicineDates((current) => ({
+                  ...current,
+                  [String(editingMedicine?.drug_id || editingMedicine?.name || intake.drug_id)]:
+                    dates,
+                }))
+              }
+              selectedDates={
+                medicineDates[
+                  String(editingMedicine?.drug_id || editingMedicine?.name || intake.drug_id)
+                ] || treatmentDates(medicine.start_date, selectedEndDate)
+              }
+              tr={tr}
+            />
+          </div>
+          <section
+            id="pm-edit-times"
+            tabIndex={-1}
+            aria-invalid={[
+              'FREQUENCY_TIME_COUNT_MISMATCH',
+              'INVALID_OR_DUPLICATE_TIME',
+              'AS_NEEDED_HAS_FIXED_TIMES',
+            ].includes(scheduleIssue)}
+            aria-describedby={scheduleIssue ? 'pm-schedule-error' : undefined}
+            className="pm-wizard__time-list pm-correction-target"
+          >
             <header>
               <h3>{tr('Choose reminder times', 'Piliin ang mga oras')}</h3>
               <span>{manualTimes.length}</span>
@@ -1711,7 +1832,11 @@ export default function AutomatedAddMedication() {
             className="pm-wizard__add-time"
             onClick={() => {
               const maximum = frequencyDetails(medicine.frequency_code).count;
-              if (Number.isInteger(maximum) && manualTimes.length >= maximum) {
+              if (
+                source !== 'manual' &&
+                Number.isInteger(maximum) &&
+                manualTimes.length >= maximum
+              ) {
                 setError(
                   maximum === 1
                     ? tr(
@@ -1733,9 +1858,72 @@ export default function AutomatedAddMedication() {
             {tr('Add another time', 'Magdagdag ng oras')}
           </button>
           {error && (
-            <div className="pm-wizard__error" role="alert">
+            <div id="pm-schedule-error" className="pm-wizard__error" role="alert">
               <Info />
-              {error}
+              {scheduleIssue === 'FREQUENCY_TIME_COUNT_MISMATCH' ? (
+                <div>
+                  <strong>
+                    {tr(
+                      'Your reminder times do not match the saved directions',
+                      'Hindi tugma ang oras sa naka-save na tagubilin'
+                    )}
+                  </strong>
+                  <p>
+                    {tr(
+                      'Review the label and your reminder times. Do not add doses just to clear this message. If the label says “as needed” or “while awake,” ask your pharmacist to review it.',
+                      'Suriin ang label at oras. Huwag magdagdag ng dose para lang mawala ang mensahe. Ipasuri sa parmasyutiko kung hindi malinaw.'
+                    )}
+                  </p>
+                  <button type="button" onClick={askPharmacist}>
+                    {tr(
+                      'Review directions with pharmacist',
+                      'Ipasuri ang tagubilin sa parmasyutiko'
+                    )}
+                  </button>
+                </div>
+              ) : (
+                error
+              )}
+              {scheduleIssue && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (scheduleIssue === 'INVALID_DATE_RANGE') {
+                      reviewField({
+                        step: 8,
+                        label: 'Choose dates',
+                        message: 'Review the treatment start and end dates.',
+                      });
+                      return;
+                    }
+                    if (['UNSUPPORTED_FREQUENCY', 'INVALID_INTERVAL'].includes(scheduleIssue)) {
+                      askPharmacist();
+                      return;
+                    }
+                    const target = document.getElementById(
+                      scheduleIssue === 'INVALID_DATE_RANGE' ? 'pm-edit-dates' : 'pm-edit-times'
+                    );
+                    target?.scrollIntoView({
+                      block: 'center',
+                      behavior:
+                        window.matchMedia('(prefers-reduced-motion: reduce)').matches ||
+                        document.body.classList.contains('pm-a11y-reduce-motion')
+                          ? 'auto'
+                          : 'smooth',
+                    });
+                    target?.focus({ preventScroll: true });
+                  }}
+                >
+                  {scheduleIssue === 'INVALID_DATE_RANGE'
+                    ? tr('Choose dates', 'Piliin ang mga petsa')
+                    : ['UNSUPPORTED_FREQUENCY', 'INVALID_INTERVAL'].includes(scheduleIssue)
+                      ? tr(
+                          'Ask pharmacist to review directions',
+                          'Ipasuri ang tagubilin sa parmasyutiko'
+                        )
+                      : tr('Review reminder times', 'Suriin ang mga oras ng paalala')}
+                </button>
+              )}
             </div>
           )}
           <div className="pm-wizard__edit-actions">
@@ -1959,12 +2147,14 @@ export default function AutomatedAddMedication() {
                 type="button"
               >
                 {working ? <LoaderCircle className="spin" /> : <CheckCircle2 />}
-                {schedule?.schedule?.length
-                  ? tr('Confirm & Save Schedule', 'Kumpirmahin at I-save ang Iskedyul')
-                  : tr(
-                      'Confirm & Save As-Needed Medicine',
-                      'Kumpirmahin at I-save ang Gamot Kapag Kailangan'
-                    )}
+                {working
+                  ? tr('Saving…', 'Nagse-save…')
+                  : schedule?.schedule?.length
+                    ? tr('Confirm & Save Schedule', 'Kumpirmahin at I-save ang Iskedyul')
+                    : tr(
+                        'Confirm & Save As-Needed Medicine',
+                        'Kumpirmahin at I-save ang Gamot Kapag Kailangan'
+                      )}
               </button>
             </>
           )}
@@ -1974,7 +2164,13 @@ export default function AutomatedAddMedication() {
         </WizardPage>
       )}
       {phase === 'success' && (
-        <WizardPage title={tr('Medication schedule saved', 'Nai-save ang iskedyul ng gamot')}>
+        <WizardPage
+          title={
+            schedule?.schedule?.length
+              ? tr('Medicine and reminders saved', 'Nai-save ang gamot at mga paalala')
+              : tr('As-needed medicine saved', 'Nai-save ang gamot kapag kailangan')
+          }
+        >
           <div className="pm-wizard__success">
             <CheckCircle2 />
             <p>

@@ -20,7 +20,6 @@ import Orders from './pages/patient/OrdersRedesign.jsx';
 import Shop from './pages/patient/Shop.jsx';
 import Profile from './pages/patient/ProfileRedesign.jsx';
 import AccessibilitySettings from './pages/patient/AccessibilitySettings.jsx';
-import Appointments from './pages/patient/Appointments.jsx';
 import { HelpCenterPage } from './components/TutorialCenterScreen.jsx';
 import PharmacistLayout from './pages/pharmacist/PharmacistLayout.jsx';
 import DrugCuration from './pages/pharmacist/DrugCuration.jsx';
@@ -87,7 +86,6 @@ export default function App() {
                   <Route path="schedule" element={<Schedule />} />
                   <Route path="medications/:id/prescription" element={<PrescriptionUpload />} />
                   <Route path="ask" element={<Ask />} />
-                  <Route path="appointments" element={<Appointments />} />
                   <Route path="orders" element={<Orders />} />
                   <Route path="shop" element={<Shop />} />
                   <Route path="profile" element={<Profile />} />

@@ -1696,9 +1696,10 @@ function DoseRows({ rows = [], status, tr, showStatus = true, dashboard = false,
       className={`pm-dose-rows ${dashboard ? 'pm-dashboard-dose-rows' : ''} ${showStatus ? '' : 'without-status'}`}
     >
       {rows.map((d, i) => {
-        const rowStatus = ['taken', 'taken_late'].includes(d.status)
+        const normalizedStatus = String(d.status || '').toLowerCase();
+        const rowStatus = ['taken', 'taken_late'].includes(normalizedStatus)
           ? 'taken'
-          : d.status === 'missed'
+          : normalizedStatus === 'missed'
             ? 'missed'
             : status === 'all'
               ? 'upcoming'
@@ -2143,13 +2144,8 @@ function Manual({ form, meds, setForm, onAddNewMedicine, onBack, onDone, tr }) {
 function Dashboard({
   reminderDose,
   logBusy,
-  meds,
-  upcoming,
-  missed,
-  taken,
   onCalendar,
   onEdit,
-  onHistory,
   onManageMedicine,
   onMark,
   onScan,
@@ -2186,33 +2182,123 @@ function Dashboard({
           <Icon name="arrow" size={26} />
         </button>
       </section>
-      <DoseSection
-        title={tr('Upcoming Doses', 'Paparating na Dose')}
-        action={tr('View Calendar', 'Tingnan ang Kalendaryo')}
-        onAction={onCalendar}
-        onOpen={onManageMedicine}
-        rows={upcoming.length ? upcoming : (meds || []).slice(0, 3)}
-        status="upcoming"
-        tr={tr}
-      />
-      {missed.length > 0 && (
-        <DoseSection
-          title={tr('Missed Doses', 'Mga Hindi Nainom')}
-          action={tr('View Today', 'Tingnan Ngayon')}
-          onAction={() => onHistory('missed')}
-          rows={missed}
-          status="missed"
-          tr={tr}
-        />
-      )}
-      <DoseSection
-        title={tr('Taken Doses', 'Mga Nainom')}
-        action={tr('View Today', 'Tingnan Ngayon')}
-        onAction={() => onHistory('taken')}
-        rows={taken}
-        status="taken"
-        tr={tr}
-      />
+      <MedicationCalendarSummary onCalendar={onCalendar} onOpen={onManageMedicine} tr={tr} />
+    </section>
+  );
+}
+
+function MedicationCalendarSummary({ onCalendar, onOpen, tr }) {
+  const [selectedDate, setSelectedDate] = useState(() => new Date());
+  const [filter, setFilter] = useState('upcoming');
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const week = useMemo(() => {
+    const start = new Date(selectedDate);
+    start.setDate(selectedDate.getDate() - selectedDate.getDay());
+    return Array.from({ length: 7 }, (_, index) => {
+      const date = new Date(start);
+      date.setDate(start.getDate() + index);
+      return date;
+    });
+  }, [selectedDate]);
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    api(`/api/patient/doses/calendar?date=${localDayKey(selectedDate)}&status=${filter}`)
+      .then((response) => {
+        if (active) setRows(Array.isArray(response.data) ? response.data : []);
+      })
+      .catch(() => {
+        if (active) setRows([]);
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [filter, selectedDate]);
+
+  function moveDay(amount) {
+    setSelectedDate((current) => {
+      const next = new Date(current);
+      next.setDate(current.getDate() + amount);
+      return next;
+    });
+  }
+
+  const today = localDayKey(selectedDate) === localDayKey(new Date());
+  return (
+    <section className="pm-medication-calendar-summary" aria-labelledby="medication-calendar-title">
+      <header>
+        <div>
+          <small>{tr('Medicine Calendar', 'Kalendaryo ng Gamot')}</small>
+          <h2 id="medication-calendar-title">
+            {selectedDate.toLocaleDateString([], { month: 'long', year: 'numeric' })}
+          </h2>
+        </div>
+        <button onClick={onCalendar} type="button">
+          <Icon name="calendar" size={17} /> {tr('View Calendar', 'Kalendaryo')}
+        </button>
+      </header>
+      <div className="pm-medication-calendar-summary__navigation">
+        <button aria-label={tr('Previous day', 'Nakaraang araw')} onClick={() => moveDay(-1)}>
+          <Icon name="back" />
+        </button>
+        <strong>
+          {today
+            ? tr('Today', 'Ngayon')
+            : selectedDate.toLocaleDateString([], { month: 'short', day: 'numeric' })}
+        </strong>
+        <button aria-label={tr('Next day', 'Susunod na araw')} onClick={() => moveDay(1)}>
+          <Icon name="arrow" />
+        </button>
+      </div>
+      <div className="pm-medication-calendar-summary__week">
+        {week.map((date) => (
+          <button
+            aria-pressed={localDayKey(date) === localDayKey(selectedDate)}
+            className={localDayKey(date) === localDayKey(selectedDate) ? 'selected' : ''}
+            key={localDayKey(date)}
+            onClick={() => setSelectedDate(date)}
+            type="button"
+          >
+            <small>{date.toLocaleDateString([], { weekday: 'narrow' })}</small>
+            <strong>{date.getDate()}</strong>
+          </button>
+        ))}
+      </div>
+      <div className="pm-medication-calendar-summary__filters">
+        {[
+          ['upcoming', tr('Upcoming', 'Paparating')],
+          ['taken', tr('Taken', 'Nainom')],
+          ['missed', tr('Missed', 'Hindi Nainom')],
+        ].map(([value, label]) => (
+          <button
+            aria-pressed={filter === value}
+            className={filter === value ? 'active' : ''}
+            key={value}
+            onClick={() => setFilter(value)}
+            type="button"
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      <strong className="pm-medication-calendar-summary__date">
+        {today ? tr('Today', 'Ngayon') : selectedDate.toLocaleDateString([], { weekday: 'long' })},{' '}
+        {selectedDate.toLocaleDateString([], { month: 'long', day: 'numeric' })}
+      </strong>
+      <div className="pm-medication-calendar-summary__result" aria-live="polite">
+        {loading ? (
+          <p>{tr('Loading doses…', 'Nilo-load ang mga dose…')}</p>
+        ) : rows.length ? (
+          <DoseRows dashboard onOpen={onOpen} rows={rows} status={filter} tr={tr} />
+        ) : (
+          <p>{tr(`No ${filter} doses for this date.`, 'Walang dose para sa petsang ito.')}</p>
+        )}
+      </div>
     </section>
   );
 }
@@ -2569,43 +2655,6 @@ function MedicineScanner({
         </p>
       </section>
     </div>
-  );
-}
-
-function DoseSection({ title, action, onAction, onOpen, rows, status, tr }) {
-  const [expanded, setExpanded] = useState(false);
-  const visibleRows = expanded ? rows : rows.slice(0, 2);
-  return (
-    <section className={`pm-dose-section ${status}`}>
-      <div>
-        <h2>{title}</h2>
-        <button onClick={onAction} type="button">
-          <Icon name={status === 'upcoming' ? 'calendar' : 'clock'} /> {action}
-        </button>
-      </div>
-      {rows.length ? (
-        <>
-          <DoseRows dashboard onOpen={onOpen} rows={visibleRows} status={status} tr={tr} />
-          {rows.length > 2 && (
-            <button
-              aria-expanded={expanded}
-              className={`pm-dose-see-all ${expanded ? 'expanded' : ''}`}
-              onClick={() => setExpanded((value) => !value)}
-              type="button"
-            >
-              <span>
-                {expanded
-                  ? tr('Show less', 'Mas kaunti')
-                  : tr(`See all ${rows.length} doses`, `Tingnan lahat ng ${rows.length} dose`)}
-              </span>
-              <Icon name="arrow" size={18} />
-            </button>
-          )}
-        </>
-      ) : (
-        <p className="pm-dose-empty">{tr('No doses to show.', 'Walang dose na maipapakita.')}</p>
-      )}
-    </section>
   );
 }
 

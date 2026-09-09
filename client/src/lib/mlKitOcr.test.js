@@ -4,6 +4,7 @@ import {
   calculateFieldConfidence,
   classifyImageQuality,
   extractMedicineFields,
+  extractPrescriptionQuantity,
 } from './mlKitOcr.js';
 
 test('extracts Philippine label strength and oral formulation', () => {
@@ -20,6 +21,12 @@ test('extracts Philippine label strength and oral formulation', () => {
       formulation: 'Oral Suspension',
     }
   );
+});
+
+test('extracts an explicit prescription quantity without confusing the dose strength', () => {
+  assert.equal(extractPrescriptionQuantity('Amoxicillin 500 mg\nQty: 30 tablets'), 30);
+  assert.equal(extractPrescriptionQuantity('Cetirizine 10 mg\nDispense 14'), 14);
+  assert.equal(extractPrescriptionQuantity('Metformin 500 mg twice daily'), null);
 });
 
 test('recognizes common formulations and concentration strengths', () => {

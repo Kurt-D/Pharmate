@@ -23,6 +23,15 @@ let patientCode;
 
 const auth = (t) => ({ Authorization: `Bearer ${t}` });
 
+test('caregivers cannot place catalog orders for a linked patient', async () => {
+  const response = await request(app)
+    .post(`/api/caregiver/patients/${patientCode}/orders`)
+    .set(auth(caregiverToken))
+    .send({ drug_id: 'any-medicine', quantity: 1, fulfillment: 'pickup' });
+  expect(response.status).toBe(403);
+  expect(response.body.error).toContain('tracking-only');
+});
+
 async function register(role, extra = {}) {
   const email = `${role}.cg.${stamp}.${Math.random().toString(16).slice(2, 8)}@test.pharmate`;
   if (role === 'patient') {
@@ -87,13 +96,15 @@ describe('Linked-patient scope (patient_code only, no PII)', () => {
   });
 });
 
-describe('Caregiver medicine and schedule setup', () => {
-  test('an actively linked caregiver can add a tracked medicine and create a suggested schedule', async () => {
+describe('Caregiver medicine access is read only', () => {
+  test('patient cannot grant medication editing and caregiver cannot add or reschedule medicine', async () => {
     const links = await request(app).get('/api/patient/caregivers').set(auth(patientToken));
-    await request(app)
+    const permission = await request(app)
       .patch(`/api/patient/caregivers/${links.body[0].id}/permissions`)
       .set(auth(patientToken))
       .send({ can_manage_medications: true });
+    expect(permission.status).toBe(404);
+
     const added = await request(app)
       .post(`/api/caregiver/patients/${patientCode}/medications`)
       .set(auth(caregiverToken))
@@ -102,24 +113,15 @@ describe('Caregiver medicine and schedule setup', () => {
         frequency: 'Once daily',
         dosage_instruction: 'Take one dose after breakfast',
       });
-    expect(added.status).toBe(201);
-    expect(added.body.status).toBe('active');
+    expect(added.status).toBe(404);
 
     const scheduled = await request(app)
       .post(`/api/caregiver/patients/${patientCode}/schedule/suggested`)
       .set(auth(caregiverToken));
-    // "After breakfast" has no exact medication time, so the scheduler must
-    // require review instead of inventing an active reminder.
-    expect(scheduled.status).toBe(400);
-    await request(app)
-      .patch(`/api/patient/caregivers/${links.body[0].id}/permissions`)
-      .set(auth(patientToken))
-      .send({ can_manage_medications: false });
+    expect(scheduled.status).toBe(404);
   });
-});
 
-describe('Patient-authorized medication management', () => {
-  test('caregiver edits only after the patient grants permission', async () => {
+  test('caregiver can view medicines but cannot edit them', async () => {
     const created = await request(app)
       .post('/api/patient/medications')
       .set(auth(patientToken))
@@ -136,25 +138,7 @@ describe('Patient-authorized medication management', () => {
         dosage_instruction: 'Take after breakfast',
         expected_updated_at: medicine.updated_at,
       });
-    expect(denied.status).toBe(403);
-    expect(denied.body.code).toBe('caregiver_medication_permission_required');
-
-    const links = await request(app).get('/api/patient/caregivers').set(auth(patientToken));
-    const granted = await request(app)
-      .patch(`/api/patient/caregivers/${links.body[0].id}/permissions`)
-      .set(auth(patientToken))
-      .send({ can_manage_medications: true });
-    expect(granted.status).toBe(200);
-
-    const updated = await request(app)
-      .patch(`/api/caregiver/patients/${patientCode}/medications/${medicine.id}`)
-      .set(auth(caregiverToken))
-      .send({
-        dosage_instruction: 'Take after breakfast',
-        expected_updated_at: medicine.updated_at,
-      });
-    expect(updated.status).toBe(200);
-    expect(updated.body.medication.dosage_instruction).toBe('Take after breakfast');
+    expect(denied.status).toBe(404);
   });
 });
 

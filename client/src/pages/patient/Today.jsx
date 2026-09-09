@@ -187,7 +187,6 @@ export default function Today() {
   const [scanCapturing, setScanCapturing] = useState(false);
   const [calendarDate, setCalendarDate] = useState(() => new Date());
   const [calendarFilter, setCalendarFilter] = useState('upcoming');
-  const [showAllCalendarDoses, setShowAllCalendarDoses] = useState(false);
   const [calendarRows, setCalendarRows] = useState([]);
   const [calendarLoading, setCalendarLoading] = useState(false);
   const [calendarError, setCalendarError] = useState('');
@@ -198,6 +197,7 @@ export default function Today() {
   const [summaryFilter, setSummaryFilter] = useState('taken');
   const [clockNow, setClockNow] = useState(() => Date.now());
   const [caregiverVoiceAlert, setCaregiverVoiceAlert] = useState(null);
+  const [voiceRemindersEnabled, setVoiceRemindersEnabled] = useState(true);
   const [tourReminderStep, setTourReminderStep] = useState(null);
   const seenVoiceAlerts = useRef(new Set());
   const announcedDoseKeys = useRef(new Set());
@@ -222,10 +222,14 @@ export default function Today() {
   const load = useCallback(async () => {
     try {
       await flushOutbox(api);
-      const response = await api('/api/patient/doses/today');
-      setDoses(response.data);
+      const [doseResponse, preferenceResponse] = await Promise.all([
+        api('/api/patient/doses/today'),
+        api('/api/patient/preferences'),
+      ]);
+      setDoses(doseResponse.data);
+      setVoiceRemindersEnabled(preferenceResponse.data.voice_enabled !== false);
       setError('');
-      scheduleDoseReminders(response.data);
+      scheduleDoseReminders(doseResponse.data);
       await refreshStreak();
     } catch (requestError) {
       setError(requestError.message);
@@ -275,10 +279,6 @@ export default function Today() {
       active = false;
     };
   }, [calendarDate, calendarFilter, language]);
-
-  useEffect(() => {
-    setShowAllCalendarDoses(false);
-  }, [calendarDate, calendarFilter]);
 
   useEffect(() => {
     const timer = window.setInterval(() => setClockNow(Date.now()), 30000);
@@ -642,8 +642,9 @@ export default function Today() {
       </header>
 
       <PatientVoiceAlert
-        alert={caregiverAlertDose ? caregiverVoiceAlert : null}
+        alert={caregiverVoiceAlert}
         dose={caregiverAlertDose}
+        voiceEnabled={voiceRemindersEnabled}
         onDismiss={closeCaregiverAlert}
         onScan={() => setScanOpen(true)}
         onTake={takeCaregiverAlertDose}
@@ -712,160 +713,131 @@ export default function Today() {
       )}
 
       <section
-        className="pm-week-calendar pm-simple-dose-calendar"
+        className="pm-medication-calendar-summary pm-home-calendar"
         aria-labelledby="home-calendar-title"
       >
-        <header className="pm-week-calendar__header">
+        <header>
           <div>
-            <div>
-              <small>{tr('Medicine Calendar', 'Kalendaryo ng Gamot')}</small>
-              <h2 id="home-calendar-title">
-                {calendarDate.toLocaleDateString(language === 'fil' ? 'fil-PH' : 'en-PH', {
-                  month: 'long',
-                  year: 'numeric',
-                })}
-              </h2>
-            </div>
+            <small>{tr('Medicine Calendar', 'Kalendaryo ng Gamot')}</small>
+            <h2 id="home-calendar-title">
+              {calendarDate.toLocaleDateString(language === 'fil' ? 'fil-PH' : 'en-PH', {
+                month: 'long',
+                year: 'numeric',
+              })}
+            </h2>
           </div>
-          <button
-            className="pm-simple-dose-calendar__jump pm-simple-dose-calendar__jump--header"
-            onClick={() => navigate('/patient/calendar')}
-            type="button"
-          >
+          <button onClick={() => navigate('/patient/calendar')} type="button">
             <HomeIcon name="calendar" size={17} />
             <span>{tr('View Calendar', 'Kalendaryo')}</span>
           </button>
         </header>
-
-        <div className="pm-simple-dose-calendar__controls">
-          <div
-            className="pm-simple-dose-calendar__week"
-            aria-label={tr('Choose a day', 'Pumili ng araw')}
+        <div className="pm-medication-calendar-summary__navigation">
+          <button
+            aria-label={tr('Previous day', 'Nakaraang araw')}
+            onClick={() => setCalendarDate((date) => addCalendarDays(date, -1))}
+            type="button"
           >
-            {calendarWeek.map((date) => (
-              <button
-                aria-pressed={localDayKey(date) === localDayKey(calendarDate)}
-                className={localDayKey(date) === localDayKey(calendarDate) ? 'selected' : ''}
-                key={localDayKey(date)}
-                onClick={() => {
-                  setCalendarDate(date);
-                  setShowAllCalendarDoses(false);
-                }}
-                type="button"
-              >
-                <small>
-                  {language === 'fil'
-                    ? ['LIN', 'LUN', 'MAR', 'MIY', 'HUW', 'BIY', 'SAB'][date.getDay()]
-                    : date.toLocaleDateString('en-PH', { weekday: 'narrow' })}
-                </small>
-                <strong>{date.getDate()}</strong>
-              </button>
-            ))}
-          </div>
-          <div
-            aria-label={tr('Choose dose status', 'Piliin ang katayuan ng dose')}
-            className="pm-simple-dose-calendar__filters"
+            <HomeIcon name="left" size={20} />
+          </button>
+          <strong>
+            {isCalendarToday
+              ? tr('Today', 'Ngayon')
+              : calendarDate.toLocaleDateString([], { month: 'short', day: 'numeric' })}
+          </strong>
+          <button
+            aria-label={tr('Next day', 'Susunod na araw')}
+            onClick={() => setCalendarDate((date) => addCalendarDays(date, 1))}
+            type="button"
           >
-            {[
-              ['upcoming', tr('Upcoming', 'Susunod')],
-              ['taken', tr('Taken', 'Nainom')],
-              ['missed', tr('Missed', 'Napalampas')],
-            ].map(([value, label]) => (
-              <button
-                aria-pressed={calendarFilter === value}
-                className={calendarFilter === value ? 'active' : ''}
-                key={value}
-                onClick={() => {
-                  setCalendarFilter(value);
-                  setShowAllCalendarDoses(false);
-                }}
-                type="button"
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-          <div className="pm-simple-dose-calendar__date-row">
-            <strong className="pm-simple-dose-calendar__date">
-              {calendarDateLabel(calendarDate, language)}
-            </strong>
-            {visibleCalendarDoses.length > 1 && (
-              <button
-                aria-expanded={showAllCalendarDoses}
-                aria-label={
-                  showAllCalendarDoses
-                    ? tr('Show fewer medicines', 'Magpakita ng mas kaunting gamot')
-                    : tr(
-                        `Show all ${visibleCalendarDoses.length} medicines`,
-                        `Ipakita lahat ng ${visibleCalendarDoses.length} gamot`
-                      )
-                }
-                className={`pm-simple-dose-calendar__expand${showAllCalendarDoses ? ' expanded' : ''}`}
-                onClick={() => setShowAllCalendarDoses((value) => !value)}
-                type="button"
-              >
-                <HomeIcon name="chevron" size={19} />
-              </button>
-            )}
-          </div>
+            <HomeIcon name="right" size={20} />
+          </button>
         </div>
-
-        {!(isCalendarToday ? doses === null : calendarLoading) &&
-          !calendarError &&
-          visibleCalendarDoses.length > 0 && (
-            <div
-              className="pm-week-calendar__dose-list"
-              aria-label={tr('Medicines for the selected day', 'Mga gamot para sa napiling araw')}
+        <div
+          className="pm-medication-calendar-summary__week"
+          aria-label={tr('Choose a day', 'Pumili ng araw')}
+        >
+          {calendarWeek.map((date) => (
+            <button
+              aria-pressed={localDayKey(date) === localDayKey(calendarDate)}
+              className={localDayKey(date) === localDayKey(calendarDate) ? 'selected' : ''}
+              key={localDayKey(date)}
+              onClick={() => setCalendarDate(date)}
+              type="button"
             >
-              {(showAllCalendarDoses ? visibleCalendarDoses : visibleCalendarDoses.slice(0, 1)).map(
-                (dose, index) => {
-                  const isTaken = ['taken', 'taken_late'].includes(dose.status);
-                  const isMissed = dose.status === 'missed';
-                  return (
-                    <article key={dose.schedule_id || `${dose.medication_id}-${index}`}>
+              <small>
+                {date.toLocaleDateString(language === 'fil' ? 'fil-PH' : 'en-PH', {
+                  weekday: 'narrow',
+                })}
+              </small>
+              <strong>{date.getDate()}</strong>
+            </button>
+          ))}
+        </div>
+        <div className="pm-medication-calendar-summary__filters">
+          {[
+            ['upcoming', tr('Upcoming', 'Susunod')],
+            ['taken', tr('Taken', 'Nainom')],
+            ['missed', tr('Missed', 'Napalampas')],
+          ].map(([value, label]) => (
+            <button
+              aria-pressed={calendarFilter === value}
+              className={calendarFilter === value ? 'active' : ''}
+              key={value}
+              onClick={() => setCalendarFilter(value)}
+              type="button"
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <strong className="pm-medication-calendar-summary__date">
+          {calendarDateLabel(calendarDate, language)}
+        </strong>
+        <div className="pm-medication-calendar-summary__result" aria-live="polite">
+          {(isCalendarToday ? doses === null : calendarLoading) ? (
+            <p>{tr('Loading doses…', 'Nilo-load ang mga dose…')}</p>
+          ) : calendarError ? (
+            <p role="alert">{calendarError}</p>
+          ) : visibleCalendarDoses.length ? (
+            <div className="pm-home-calendar__doses">
+              {visibleCalendarDoses.map((dose, index) => {
+                const isTaken = ['taken', 'taken_late'].includes(dose.status);
+                const isMissed = dose.status === 'missed';
+                return (
+                  <article key={dose.schedule_id || `${dose.medication_id}-${index}`}>
+                    <span>
+                      <HomeIcon name={isTaken ? 'check' : 'medicine'} size={20} />
+                    </span>
+                    <div>
+                      <strong>{dose.drug_name || tr('Medicine', 'Gamot')}</strong>
+                      <small>
+                        {dose.dosage_instruction || tr('Medicine reminder', 'Paalala sa gamot')}
+                      </small>
                       <time>
+                        <HomeIcon name="clock" size={14} />{' '}
                         {new Date(dose.scheduled_time).toLocaleTimeString([], {
                           hour: 'numeric',
                           minute: '2-digit',
                         })}
                       </time>
-                      <div className="pm-week-calendar__event">
-                        <span className="pm-week-calendar__medicine-icon">
-                          <HomeIcon name={isTaken ? 'check' : 'medicine'} size={19} />
-                        </span>
-                        <div>
-                          <strong>{dose.drug_name || tr('Medicine', 'Gamot')}</strong>
-                          <small>
-                            {dose.dosage_instruction || tr('Medicine reminder', 'Paalala sa gamot')}
-                          </small>
-                        </div>
-                        <em className={isTaken ? 'taken' : isMissed ? 'missed' : 'upcoming'}>
-                          {isTaken
-                            ? tr('Taken', 'Nainom')
-                            : isMissed
-                              ? tr('Missed', 'Hindi nainom')
-                              : tr('Upcoming', 'Paparating')}
-                        </em>
-                      </div>
-                    </article>
-                  );
-                }
-              )}
+                    </div>
+                    <em className={isTaken ? 'taken' : isMissed ? 'missed' : 'upcoming'}>
+                      {isTaken
+                        ? tr('Taken', 'Nainom')
+                        : isMissed
+                          ? tr('Missed', 'Hindi nainom')
+                          : tr('Upcoming', 'Paparating')}
+                    </em>
+                  </article>
+                );
+              })}
             </div>
+          ) : (
+            <p>
+              {tr(`No ${calendarFilter} doses for this date.`, 'Walang dose para sa petsang ito.')}
+            </p>
           )}
-
-        {((isCalendarToday ? doses === null : calendarLoading) || calendarError) && (
-          <footer className="pm-week-calendar__summary" aria-live="polite">
-            {(isCalendarToday ? doses === null : calendarLoading) ? (
-              <div className="pm-week-calendar__loading">
-                <span aria-hidden="true" />
-                {tr('Loading this day’s schedule…', 'Nilo-load ang iskedyul ng araw na ito…')}
-              </div>
-            ) : calendarError ? (
-              <p role="alert">{calendarError}</p>
-            ) : null}
-          </footer>
-        )}
+        </div>
       </section>
 
       {streakStatus?.state === 'at_risk' && (

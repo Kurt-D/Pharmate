@@ -1,50 +1,13 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { api } from '../../api.js';
 
-const RX_PRODUCTS = [
-  {
-    id: 'amoxicillin-500',
-    name: 'Amoxicillin 500 mg',
-    generic: 'Amoxicillin',
-    category: 'Antibiotic',
-    price: 120,
-    pack: '10 capsules',
-    total: 90,
-    purchased: 50,
-  },
-  {
-    id: 'amlodipine-5',
-    name: 'Amlodipine 5 mg',
-    generic: 'Amlodipine',
-    category: 'Maintenance medicine',
-    price: 95,
-    pack: '30 tablets',
-    total: 90,
-    purchased: 60,
-  },
-  {
-    id: 'metformin-500',
-    name: 'Metformin 500 mg',
-    generic: 'Metformin',
-    category: 'Maintenance medicine',
-    price: 135,
-    pack: '30 tablets',
-    total: 120,
-    purchased: 90,
-  },
-];
 function Icon({ name, size = 22 }) {
   const paths = {
     upload: (
       <>
         <path d="M12 16V4M7 9l5-5 5 5" />
         <path d="M5 14v6h14v-6" />
-      </>
-    ),
-    file: (
-      <>
-        <path d="M6 3h8l4 4v14H6Z" />
-        <path d="M14 3v5h5" />
       </>
     ),
     medicine: (
@@ -85,109 +48,106 @@ function Icon({ name, size = 22 }) {
     </svg>
   );
 }
-const money = (value) => `₱${Number(value).toFixed(2)}`;
+
+function medicineName(item) {
+  const name = item.drug_name_raw || 'Prescription medicine';
+  const strength = [item.strength_value, item.strength_unit].filter(Boolean).join(' ');
+  return strength && !name.toLowerCase().includes(strength.toLowerCase())
+    ? `${name} ${strength}`
+    : name;
+}
 
 export default function PrescriptionShop() {
   const navigate = useNavigate();
-  const cameraInputRef = useRef(null);
-  const fileInputRef = useRef(null);
-  const [prescription, setPrescription] = useState(null);
-  const [preview, setPreview] = useState('');
+  const [medications, setMedications] = useState([]);
+  const [branchId, setBranchId] = useState('');
   const [quantities, setQuantities] = useState({});
+  const [loading, setLoading] = useState(true);
+  const [placing, setPlacing] = useState(false);
   const [message, setMessage] = useState('');
+
   useEffect(() => {
-    try {
-      const savedPrescription = JSON.parse(localStorage.getItem('pm_rx_prescription') || 'null');
-      setPrescription(savedPrescription);
-      setPreview(savedPrescription?.preview || '');
-    } catch {
-      setPrescription(null);
-    }
+    Promise.all([api('/api/patient/medications'), api('/api/directory/branches')])
+      .then(([medicineResponse, branchResponse]) => {
+        setMedications(
+          medicineResponse.data.filter(
+            (item) =>
+              item.rx_class === 'RX' &&
+              item.prescription_status === 'approved' &&
+              Number(item.prescribed_quantity) > 0
+          )
+        );
+        setBranchId(branchResponse.data.find((branch) => branch.is_active !== 0)?.id || '');
+      })
+      .catch((error) => setMessage(error.message || 'Prescription records could not be loaded.'))
+      .finally(() => setLoading(false));
   }, []);
-  const selected = RX_PRODUCTS.filter((product) => Number(quantities[product.id] || 0) > 0);
-  const total = selected.reduce(
-    (sum, product) => sum + product.price * Number(quantities[product.id]),
+
+  const products = useMemo(
+    () =>
+      medications.map((item) => {
+        const total = Number(item.prescribed_quantity || 0);
+        const purchased = Math.min(total, Number(item.purchased_quantity || 0));
+        return {
+          ...item,
+          name: medicineName(item),
+          total,
+          purchased,
+          remaining: total - purchased,
+        };
+      }),
+    [medications]
+  );
+  const requestedTotal = products.reduce(
+    (sum, product) => sum + Number(quantities[product.id] || 0),
     0
   );
-  function uploadPrescription(event) {
-    const file = event.target.files?.[0];
-    event.target.value = '';
-    if (!file) return;
-    const savePrescription = (previewUrl = '') => {
-      const next = {
-        id: `RX-${Date.now().toString().slice(-7)}`,
-        name: file.name,
-        type: file.type,
-        uploaded_at: new Date().toISOString(),
-        status: 'pending_verification',
-        preview: previewUrl,
-      };
-      setPreview(previewUrl);
-      setPrescription(next);
-      localStorage.setItem('pm_rx_prescription', JSON.stringify(next));
-      setMessage('Prescription uploaded. Check the preview below before continuing.');
-    };
 
-    if (file.type.startsWith('image/')) {
-      const reader = new FileReader();
-      reader.onload = () => savePrescription(String(reader.result || ''));
-      reader.onerror = () =>
-        setMessage('We could not read that photo. Please take or choose another one.');
-      reader.readAsDataURL(file);
-      return;
-    }
-
-    savePrescription();
-  }
   function changeQuantity(product, delta) {
-    const remaining = product.total - product.purchased;
     setQuantities((current) => ({
       ...current,
-      [product.id]: Math.max(0, Math.min(remaining, Number(current[product.id] || 0) + delta)),
+      [product.id]: Math.max(
+        0,
+        Math.min(product.remaining, Number(current[product.id] || 0) + delta)
+      ),
     }));
   }
-  function placeOrder() {
-    if (!prescription) return setMessage('Upload a clear prescription image or PDF first.');
-    if (!selected.length) return setMessage('Choose at least one prescribed medicine.');
-    const order = {
-      id: `RXO-${Date.now().toString().slice(-8)}`,
-      type: 'rx',
-      created_at: new Date().toISOString(),
-      status: 'prescription_under_review',
-      fulfillment: 'delivery',
-      contact: 'Confirmed after approval',
-      address: 'Confirmed after pharmacist approval',
-      payment: 'cod',
-      prescription,
-      total,
-      items: selected.map((product) => ({
-        id: product.id,
-        name: product.name,
-        generic: product.generic,
-        strength: product.name.replace(product.generic, '').trim(),
-        category: product.category,
-        quantity: Number(quantities[product.id]),
-        max_quantity: product.total - product.purchased,
-        unit_price: product.price,
-        pack: product.pack,
-      })),
-      pharmacist: null,
-      rejection_reason: '',
-    };
-    const previous = JSON.parse(localStorage.getItem('pm_rx_orders') || '[]');
-    localStorage.setItem('pm_rx_orders', JSON.stringify([order, ...previous]));
-    navigate(`/patient/orders?placed=${encodeURIComponent(order.id)}&type=rx`);
+
+  async function placeOrder() {
+    const selected = products.filter((product) => Number(quantities[product.id] || 0) > 0);
+    if (!branchId) return setMessage('No active pharmacy branch is available.');
+    if (!selected.length) return setMessage('Choose a quantity for at least one medicine.');
+    setPlacing(true);
+    setMessage('');
+    try {
+      for (const product of selected) {
+        await api('/api/patient/refills', {
+          method: 'POST',
+          body: {
+            medication_id: product.id,
+            branch_id: branchId,
+            quantity: Number(quantities[product.id]),
+            payment_method: 'CASH_ON_PICKUP',
+          },
+        });
+      }
+      navigate('/patient/orders?placed=prescription');
+    } catch (error) {
+      setMessage(error.message || 'The prescription order could not be submitted.');
+      setPlacing(false);
+    }
   }
+
   return (
     <div className="pm-rx-shop">
       <section className="pm-rx-guide">
-        <h2>How Prescription Orders Work</h2>
+        <h2>Prescription Ordering</h2>
         <div>
           {[
-            ['upload', 'Upload Rx', 'Clear image or PDF'],
-            ['medicine', 'Add Rx Items', 'Within allowed balance'],
-            ['shield', 'Pharmacist Review', 'Safety and quantity check'],
-            ['check', 'Delivery', 'Packed after approval'],
+            ['camera', 'Scan Rx', 'OCR reads the prescription'],
+            ['check', 'Confirm', 'Check every detected detail'],
+            ['shield', 'Review', 'A pharmacist validates it'],
+            ['medicine', 'Order', 'Limited to the saved balance'],
           ].map(([icon, title, help], index) => (
             <article key={title}>
               <span>
@@ -200,197 +160,120 @@ export default function PrescriptionShop() {
           ))}
         </div>
       </section>
+
       {message && (
-        <div className="pm-rx-message" role="status">
+        <div className="pm-rx-message" role="alert">
           {message}
         </div>
       )}
+
       <section className="pm-rx-upload-card">
         <div className="pm-rx-upload-title">
           <span>
-            <Icon name="file" size={30} />
+            <Icon name="upload" size={30} />
           </span>
           <div>
-            <h2>{prescription ? 'Prescription Uploaded' : 'Prescription Required'}</h2>
-            <p>
-              {prescription
-                ? 'Review the file status before choosing quantities.'
-                : 'Upload a valid prescription before adding Rx medicine.'}
-            </p>
+            <h2>Scan a Prescription</h2>
+            <p>Use OCR, confirm the detected details, and send them for pharmacist review.</p>
           </div>
         </div>
-        {prescription ? (
-          <>
-            {preview && prescription.type?.startsWith('image/') && (
-              <figure className="pm-rx-photo-review">
-                <figcaption>
-                  <strong>Check Your Prescription Photo</strong>
-                  <span>Make sure the name, medicine, dosage, and doctor details are clear.</span>
-                </figcaption>
-                <a
-                  href={preview}
-                  target="_blank"
-                  rel="noreferrer"
-                  aria-label="Open full-size prescription photo"
-                >
-                  <img src={preview} alt="Full preview of the selected prescription" />
-                  <span>Tap photo to view full size</span>
-                </a>
-              </figure>
-            )}
-            <div className="pm-rx-file-preview">
-              {preview && prescription.type?.startsWith('image/') ? (
-                <img src={preview} alt="Prescription thumbnail" />
-              ) : (
-                <span>
-                  <Icon name="file" size={32} />
-                </span>
-              )}
-              <div>
-                <strong>{prescription.name}</strong>
-                <small>Uploaded {new Date(prescription.uploaded_at).toLocaleString()}</small>
-                <em className={prescription.status}>
-                  {prescription.status === 'verified'
-                    ? 'Verified'
-                    : prescription.status === 'needs_resubmission'
-                      ? 'Needs Resubmission'
-                      : 'Pending Verification'}
-                </em>
-              </div>
-              <button onClick={() => fileInputRef.current?.click()} type="button">
-                Replace
-              </button>
-            </div>
-          </>
-        ) : (
-          <ul>
-            <li>Prescription details and license information are readable</li>
-            <li>Prescription date and patient name</li>
-            <li>Medicine, strength, dosage, and quantity</li>
-          </ul>
-        )}
-        <input
-          ref={cameraInputRef}
-          hidden
-          type="file"
-          accept="image/*"
-          capture="environment"
-          onChange={uploadPrescription}
-        />
-        <input
-          ref={fileInputRef}
-          hidden
-          type="file"
-          accept="image/jpeg,image/png,image/webp,application/pdf"
-          onChange={uploadPrescription}
-        />
-        <div className="pm-rx-upload-actions">
-          <button
-            className="pm-rx-upload-button"
-            onClick={() => cameraInputRef.current?.click()}
-            type="button"
-          >
-            <Icon name="camera" />
-            Take a Photo
-          </button>
-          <button
-            className="pm-rx-upload-button secondary"
-            onClick={() => fileInputRef.current?.click()}
-            type="button"
-          >
-            <Icon name="upload" />
-            Upload from Gallery or File
-          </button>
-        </div>
-        <small>Take a new photo, choose a gallery image, or upload a PDF file.</small>
+        <button
+          className="pm-rx-upload-button"
+          onClick={() => navigate('/patient/medications/prescription')}
+          type="button"
+        >
+          <Icon name="camera" /> Open Prescription Scanner
+        </button>
       </section>
-      {prescription && (
-        <>
-          <section className="pm-rx-medicines">
-            <header>
-              <h2>Prescription Medicines</h2>
-              <p>Quantities cannot exceed the remaining validated prescription balance.</p>
-            </header>
-            {RX_PRODUCTS.map((product) => {
-              const remaining = product.total - product.purchased;
-              const quantity = Number(quantities[product.id] || 0);
-              const usedPercent = Math.round((product.purchased / product.total) * 100);
-              return (
-                <article key={product.id}>
-                  <div className="pm-rx-med-header">
-                    <span>
-                      <Icon name="medicine" />
-                    </span>
-                    <div>
-                      <h3>{product.name}</h3>
-                      <p>
-                        {product.generic} · {product.category}
-                      </p>
-                    </div>
-                    <strong>
-                      {money(product.price)}
-                      <small>/ {product.pack}</small>
-                    </strong>
-                  </div>
-                  <div className="pm-rx-balance">
-                    <div>
-                      <small>Total Prescribed</small>
-                      <strong>{product.total} units</strong>
-                    </div>
-                    <div>
-                      <small>Already Purchased</small>
-                      <strong>{product.purchased} units</strong>
-                    </div>
-                    <div>
-                      <small>Remaining Balance</small>
-                      <strong>{remaining} units</strong>
-                    </div>
-                    <progress max="100" value={usedPercent}>
-                      {usedPercent}% used
-                    </progress>
-                    <p>
-                      {usedPercent}% dispensed · {100 - usedPercent}% remaining
-                    </p>
-                  </div>
-                  <div className="pm-rx-quantity-row">
-                    <span>
-                      <strong>Requested quantity</strong>
-                      <small>Maximum {remaining} units</small>
-                    </span>
-                    <div>
-                      <button
-                        onClick={() => changeQuantity(product, -1)}
-                        disabled={!quantity}
-                        aria-label={`Remove one ${product.name}`}
-                        type="button"
-                      >
-                        <Icon name="minus" />
-                      </button>
-                      <b>{quantity}</b>
-                      <button
-                        onClick={() => changeQuantity(product, 1)}
-                        disabled={quantity >= remaining}
-                        aria-label={`Add one ${product.name}`}
-                        type="button"
-                      >
-                        <Icon name="plus" />
-                      </button>
-                    </div>
-                  </div>
-                </article>
-              );
-            })}
-          </section>
-          <footer className="pm-rx-order-bar">
-            <span>
-              <small>Requested total</small>
-              <strong>{money(total)}</strong>
-            </span>
-            <button disabled={!selected.length} onClick={placeOrder} type="button">
-              Submit for Pharmacist Review
-            </button>
-          </footer>
-        </>
+
+      <section className="pm-rx-medicines">
+        <header>
+          <h2>Validated Prescription Medicines</h2>
+          <p>Balances come from your reviewed prescription and saved orders.</p>
+        </header>
+        {loading && <p>Loading prescription balances…</p>}
+        {!loading && !products.length && (
+          <div className="pm-rx-message">
+            No approved prescription with a confirmed total quantity is available yet. Scan a
+            prescription first.
+          </div>
+        )}
+        {products.map((product) => {
+          const quantity = Number(quantities[product.id] || 0);
+          const usedPercent = product.total
+            ? Math.round((product.purchased / product.total) * 100)
+            : 0;
+          return (
+            <article key={product.id}>
+              <div className="pm-rx-med-header">
+                <span>
+                  <Icon name="medicine" />
+                </span>
+                <div>
+                  <h3>{product.name}</h3>
+                  <p>{product.dosage_form_snapshot || 'Prescription medicine'}</p>
+                </div>
+              </div>
+              <div className="pm-rx-balance">
+                <div>
+                  <small>Total Prescribed</small>
+                  <strong>{product.total} units</strong>
+                </div>
+                <div>
+                  <small>Already Purchased</small>
+                  <strong>{product.purchased} units</strong>
+                </div>
+                <div>
+                  <small>Remaining Balance</small>
+                  <strong>{product.remaining} units</strong>
+                </div>
+                <progress max="100" value={usedPercent}>
+                  {usedPercent}% used
+                </progress>
+                <p>
+                  {usedPercent}% ordered · {100 - usedPercent}% remaining
+                </p>
+              </div>
+              <div className="pm-rx-quantity-row">
+                <span>
+                  <strong>Requested quantity</strong>
+                  <small>Maximum {product.remaining} units</small>
+                </span>
+                <div>
+                  <button
+                    onClick={() => changeQuantity(product, -1)}
+                    disabled={!quantity}
+                    aria-label={`Remove one ${product.name}`}
+                    type="button"
+                  >
+                    <Icon name="minus" />
+                  </button>
+                  <b>{quantity}</b>
+                  <button
+                    onClick={() => changeQuantity(product, 1)}
+                    disabled={quantity >= product.remaining}
+                    aria-label={`Add one ${product.name}`}
+                    type="button"
+                  >
+                    <Icon name="plus" />
+                  </button>
+                </div>
+              </div>
+            </article>
+          );
+        })}
+      </section>
+
+      {products.length > 0 && (
+        <footer className="pm-rx-order-bar">
+          <span>
+            <small>Requested quantity</small>
+            <strong>{requestedTotal} units</strong>
+          </span>
+          <button disabled={!requestedTotal || placing} onClick={placeOrder} type="button">
+            {placing ? 'Submitting…' : 'Submit for Pharmacist Review'}
+          </button>
+        </footer>
       )}
     </div>
   );

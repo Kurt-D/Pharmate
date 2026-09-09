@@ -1,0 +1,76 @@
+/* Scoped controls: do not inherit native gray button faces or app-wide borders. */
+.cg-portal .cg-medicine-calendar {
+  margin-top: 20px;
+  padding-top: 16px;
+  border: 0;
+  border-top: 1px solid #e1ebf7;
+  border-radius: 0;
+  background: transparent;
+  color: #163153;
+  box-shadow: none;
+}
+.cg-portal .cg-medicine-calendar button {
+  appearance: none;
+  box-sizing: border-box;
+  min-width: 0;
+  min-height: 44px;
+  margin: 0;
+  padding: 6px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: #355375;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.3;
+  cursor: pointer;
+  box-shadow: none;
+}
+.cg-portal .cg-medicine-calendar button:focus-visible {
+  outline: 3px solid #82b5ff;
+  outline-offset: 2px;
+}
+.cg-portal .cg-calendar-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 0 0 12px;
+  border: 0;
+  background: transparent;
+}
+.cg-portal .cg-calendar-header p { margin: 0 0 4px; color: #2878df; font-size: 10px; letter-spacing: .055em; }
+.cg-portal .cg-calendar-header h3 { margin: 0; color: #163153; font-size: 16px; line-height: 1.35; font-weight: 700; }
+.cg-portal .cg-medicine-calendar .cg-calendar-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 8px 10px;
+  border: 1px solid #bed7fc;
+  border-radius: 12px;
+  background: #eff6ff;
+  color: #1460d2;
+  font-size: 11px;
+}
+.cg-portal .cg-calendar-body { padding: 0; }
+.cg-portal .cg-calendar-navigation { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.cg-portal .cg-calendar-navigation button { display: grid; place-items: center; border-radius: 12px; color: #1460d2; }
+.cg-portal .cg-calendar-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 5px 2px; text-align: center; }
+.cg-portal .cg-calendar-grid > span { padding: 5px 0; color: #69809d; font-size: 10px; }
+.cg-portal .cg-medicine-calendar .cg-calendar-day { border-radius: 12px; font-weight: 700; }
+.cg-portal .cg-medicine-calendar .cg-calendar-day.is-outside { color: #8497af; }
+.cg-portal .cg-medicine-calendar .cg-calendar-day[aria-current='date'] { color: #1460d2; background: #edf5ff; }
+.cg-portal .cg-medicine-calendar .cg-calendar-day[aria-pressed='true'] { color: #fff; background: #1768ed; border-color: #1768ed; box-shadow: 0 4px 10px rgb(23 104 237 / 24%); }
+.cg-portal .cg-calendar-filters { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin: 16px 0 18px; }
+.cg-portal .cg-medicine-calendar .cg-calendar-filter { border: 1px solid #c9dcf6; border-radius: 24px; background: #fff; font-size: 11px; color: #365b89; }
+.cg-portal .cg-medicine-calendar .cg-calendar-filter[aria-pressed='true'] { border-color: #2878ef; color: #095bd5; background: #eaf3ff; }
+.cg-portal .cg-calendar-date-heading { margin: 0 2px 10px; font-size: 13px; font-weight: 700; color: #193958; }
+.cg-portal .cg-calendar-results { display: grid; gap: 10px; }
+.cg-portal .cg-calendar-empty { margin: 0; padding: 12px 0 4px; border: 0; background: transparent; color: #627b9c; font-size: 12px; line-height: 1.7; text-align: center; }
+.cg-portal .cg-calendar-dose { padding: 12px; border: 1px solid #dfebfa; border-left: 3px solid #4c8ce4; border-radius: 12px; background: #f8fbff; overflow-wrap: anywhere; }
+@media (hover: hover) {
+  .cg-portal .cg-medicine-calendar button:hover { background: #eaf3ff; color: #095bd5; }
+  .cg-portal .cg-medicine-calendar .cg-calendar-day[aria-pressed='true']:hover { background: #095bd5; color: #fff; }
+}

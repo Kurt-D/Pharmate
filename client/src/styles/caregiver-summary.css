@@ -1,0 +1,28 @@
+.cg-portal .cg-care-summary { background: #fff; border: 1px solid #dce8f7; border-radius: 24px; padding: 20px; box-shadow: 0 8px 28px #234d7910; color: #183655; }
+.cg-care-summary header { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; }
+.cg-care-summary header > svg { color:#2375eb; flex-shrink:0; margin-top:8px; }
+.cg-care-summary .cg-eyebrow { color:#2676dc; font-size:10px; font-weight:700; letter-spacing:.1em; }
+.cg-care-summary h2 { margin:6px 0; font-size:18px; font-weight:700; }
+.cg-care-summary header p,.cg-chart-note { font-size:12px; line-height:1.7; color:#637c98; margin:0; }
+.cg-summary-total { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; margin:22px 0 16px; }
+.cg-summary-total strong { display:block; font-size:36px; line-height:1.2; color:#1766d9; }
+.cg-summary-total small { font-size:22px; font-weight:500; color:#7a8fa6; }
+.cg-summary-total div > span { display:block; margin-top:5px; font-size:12px; color:#607893; }
+.cg-summary-tag { border-radius:30px; padding:7px 10px; background:#eef8f1; color:#28754a; font-size:10px; font-weight:600; }
+.cg-status-track { display:flex; height:10px; border-radius:10px; overflow:hidden; background:#eef3f9; }
+.cg-status-taken { background:#36a477; }.cg-status-upcoming { background:#3b83ee; }.cg-status-missed { background:#e47783; }.cg-status-skipped { background:#b88b37; }
+.cg-summary-counts { display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap; margin:18px 0 24px; }
+.cg-summary-counts dt { display:flex; gap:5px; align-items:center; font-size:11px; font-weight:500; color:#607893; }
+.cg-summary-counts i { width:7px; height:7px; border-radius:50%; }.cg-summary-counts dd { margin:5px 0 0 12px; font-size:21px; font-weight:700; }
+.cg-trend-heading { display:flex; justify-content:space-between; gap:8px; border-top:1px solid #e7eef7; padding-top:18px; align-items:center; }
+.cg-trend-heading h3 { margin:0; font-size:14px; font-weight:700; }.cg-trend-heading > span { font-size:10px; color:#6a809a; }
+.cg-trend-bars { display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:8px; margin:18px 0 14px; text-align:center; }
+.cg-trend-bars strong { display:block; font-size:10px; color:#526e8e; margin-bottom:7px; }
+.cg-bar-track { height:76px; border-radius:6px; background:#f0f5fc; display:flex; align-items:flex-end; overflow:hidden; }
+.cg-bar-track > span { width:100%; background:#8cb8f7; border-radius:6px; }.is-today .cg-bar-track > span { background:#246fe4; }
+.cg-trend-bars > div > span { display:block; margin-top:8px; font-size:10px; color:#607893; }.cg-trend-bars small { font-size:10px; color:#8496aa; }
+.cg-care-summary button { min-height:44px; border:1px solid #c8dcf6; border-radius:12px; background:#eff6ff; color:#1766d9; padding:8px 14px; font:inherit; }
+.cg-care-summary button:focus-visible { outline:3px solid #83b4f8; outline-offset:2px; }
+.cg-portal .cg-medication-screen { padding:20px 16px; display:grid; gap:18px; }
+.cg-medication-screen h1 { margin:4px 0; font-size:24px; font-weight:700; color:#236ed7; }.cg-medication-screen > header p { margin:0; font-size:13px; color:#617a97; line-height:1.7; }
+.cg-portal .cg-medication-screen .cg-medicine-calendar { margin:0; padding:16px; border:1px solid #d8e6f8; border-radius:22px; background:white; box-shadow:0 6px 20px #234d7909; }

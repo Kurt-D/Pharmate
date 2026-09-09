@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AlertCircle, Bell, CheckCircle2, Clock3, X } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { api } from '../../api.js';
@@ -9,12 +9,12 @@ import { scheduleCaregiverDoseAlerts } from '../../lib/notifications.js';
 import { useRealtime } from '../../hooks/useRealtime.js';
 import CaregiverDashboard from './CaregiverDashboard.jsx';
 import CaregiverNavbar from './CaregiverNavbar.jsx';
-import CaregiverRefills from './CaregiverRefills.jsx';
+import CaregiverMedication from './CaregiverMedication.jsx';
 import CaregiverSettings from './CaregiverSettings.jsx';
 import CaregiverPatientInfo from './CaregiverPatientInfo.jsx';
 import CaregiverOrders from './CaregiverOrders.jsx';
 import LinkPatientModal from './LinkPatientModal.jsx';
-import VoiceReminderModal from './VoiceReminderModal.jsx';
+import { reminderPresets } from './VoiceReminderModal.jsx';
 import ElderlyTourGuide from '../../components/ElderlyTourGuide.jsx';
 import { CAREGIVER_ELDERLY_TOUR_STEPS } from '../../config/elderlyTourSteps.js';
 import '../../styles/caregiver-portal.css';
@@ -91,7 +91,9 @@ export default function CaregiverPortal() {
   const [patients, setPatients] = useState([]);
   const [pendingLinks, setPendingLinks] = useState([]);
   const [selectedCode, setSelectedCode] = useState('');
-  const [medications, setMedications] = useState([]);
+  const patientRequest = useRef(0);
+  const [loadedCode, setLoadedCode] = useState('');
+  const [, setMedications] = useState([]);
   const [timeline, setTimeline] = useState([]);
   const [doseHistory, setDoseHistory] = useState([]);
   const [orders, setOrders] = useState([]);
@@ -99,7 +101,8 @@ export default function CaregiverPortal() {
   const [loading, setLoading] = useState(true);
   const [previewMode, setPreviewMode] = useState(false);
   const [linkOpen, setLinkOpen] = useState(false);
-  const [voiceDose, setVoiceDose] = useState(null);
+  const [sendingReminder, setSendingReminder] = useState(false);
+  const reminderLock = useRef(false);
   const [snoozedUntil, setSnoozedUntil] = useState(null);
   const [toast, setToast] = useState(null);
   const [caregiverNotifications, setCaregiverNotifications] = useState([]);
@@ -140,6 +143,7 @@ export default function CaregiverPortal() {
   }, [showToast]);
 
   const loadPatient = useCallback(async (code) => {
+    const request = ++patientRequest.current;
     if (!code) {
       setMedications([]);
       setTimeline([]);
@@ -163,6 +167,8 @@ export default function CaregiverPortal() {
         ),
       ]
     );
+    if (request !== patientRequest.current) return;
+    setLoadedCode(code);
     const medicines = medicationResult.status === 'fulfilled' ? medicationResult.value.data : [];
     const orderPayload =
       orderResult.status === 'fulfilled' ? orderResult.value.data : { refills: [], deliveries: [] };
@@ -230,12 +236,19 @@ export default function CaregiverPortal() {
     navigate('/caregiver/home');
   }
 
-  async function sendVoiceAlert({ message, medicine }) {
+  async function sendVoiceAlert({ message, medicine, doseId }) {
     const response = await api(`/api/caregiver/patients/${selectedCode}/notify`, {
       method: 'POST',
-      body: { dose_id: voiceDose?.id, voice_message: message },
+      body: { dose_id: doseId, voice_message: message },
     });
-    if (!response.data.notified) throw new Error('The patient has reminders turned off.');
+    if (response.data.reminders_enabled === false) {
+      throw new Error('The patient has medicine reminders turned off.');
+    }
+    if (response.data.already_sent) {
+      showToast('This reminder was already sent recently.');
+      return;
+    }
+    if (!response.data.notified) throw new Error('The reminder could not be sent.');
     const event = {
       id: crypto.randomUUID(),
       message,
@@ -244,7 +257,11 @@ export default function CaregiverPortal() {
       patientCode: selectedCode,
       createdAt: new Date().toISOString(),
     };
-    localStorage.setItem('pm_caregiver_voice_alert', JSON.stringify(event));
+    try {
+      localStorage.setItem('pm_caregiver_voice_alert', JSON.stringify(event));
+    } catch {
+      /* Server notification is already saved. */
+    }
     window.dispatchEvent(new CustomEvent('pm-caregiver-voice-alert', { detail: event }));
     try {
       const channel = new BroadcastChannel('pharmate-voice-alerts');
@@ -265,42 +282,23 @@ export default function CaregiverPortal() {
     window.setTimeout(() => setSnoozedUntil(null), 15 * 60000);
   }
 
-  async function updatePatientMedication(medicationId, body) {
-    await api(`/api/caregiver/patients/${selectedCode}/medications/${medicationId}`, {
-      method: 'PATCH',
-      body,
-    });
-    showToast('Medication changes were saved for the patient.');
-    await loadPatient(selectedCode);
-  }
-
-  async function stopPatientMedication(medication) {
-    await api(`/api/caregiver/patients/${selectedCode}/medications/${medication.id}/stop`, {
-      method: 'POST',
-      body: { expected_updated_at: medication.updated_at },
-    });
-    showToast('Medication was removed from the active schedule.');
-    await loadPatient(selectedCode);
-  }
-
-  const searchCaregiverDrugs = useCallback(async (query) => {
-    const response = await api(`/api/caregiver/drugs?q=${encodeURIComponent(query)}&limit=8`);
-    return response.data;
-  }, []);
-
-  async function addPatientMedicine(body) {
-    await api(`/api/caregiver/patients/${selectedCode}/medications`, {
-      method: 'POST',
-      body,
-    });
-    showToast('Medicine added. You can now create a safe suggested schedule.');
-    await loadPatient(selectedCode);
-  }
-
-  async function createSuggestedSchedule() {
-    await api(`/api/caregiver/patients/${selectedCode}/schedule/suggested`, { method: 'POST' });
-    showToast('The patient’s suggested medicine schedule is now active.');
-    await loadPatient(selectedCode);
+  async function sendReminder(dose) {
+    if (reminderLock.current || loadedCode !== selectedCode) return;
+    if (!dose?.id) {
+      showToast('No scheduled medicine is available to remind the patient about.', 'error');
+      return;
+    }
+    reminderLock.current = true;
+    setSendingReminder(true);
+    try {
+      const preset = reminderPresets(selectedPatient?.displayLabel, dose.medicine)[0];
+      await sendVoiceAlert({ message: preset.message, medicine: dose.medicine, doseId: dose.id });
+    } catch (error) {
+      showToast(error.message || 'Could not send the reminder. Please try again.', 'error');
+    } finally {
+      reminderLock.current = false;
+      setSendingReminder(false);
+    }
   }
 
   async function readCaregiverNotifications() {
@@ -375,7 +373,7 @@ export default function CaregiverPortal() {
                   selectedCode={selectedCode}
                   onSelectPatient={setSelectedCode}
                   onAddPatient={() => setLinkOpen(true)}
-                  timeline={timeline}
+                  timeline={loadedCode === selectedCode ? timeline : []}
                   doseHistory={doseHistory}
                   previewMode={previewMode}
                   patientLabel={selectedPatient?.displayLabel}
@@ -384,33 +382,19 @@ export default function CaregiverPortal() {
                   }
                   onOpenNotifications={readCaregiverNotifications}
                   realtimeStatus={realtimeStatus}
-                  onVoiceReminder={(dose) =>
-                    setVoiceDose(
-                      dose?.status === 'due'
-                        ? dose
-                        : timeline.find((item) => item.status === 'due') || null
-                    )
-                  }
+                  onVoiceReminder={sendReminder}
+                  sendingReminder={sendingReminder}
                   onSnooze={snoozeAlert}
                   snoozedUntil={snoozedUntil}
-                  stockAlerts={stockAlerts}
+                  stockAlerts={loadedCode === selectedCode ? stockAlerts : []}
                   onNavigate={changePage}
                 />
               )}
               {activePage === 'medication' && (
-                <CaregiverRefills
-                  medications={medications}
-                  stockAlerts={stockAlerts}
-                  orders={orders}
-                  previewMode={previewMode}
-                  timeline={timeline}
-                  canManageMedications={Boolean(selectedPatient?.can_manage_medications)}
-                  onUpdateMedication={updatePatientMedication}
-                  onStopMedication={stopPatientMedication}
-                  onSearchDrugs={searchCaregiverDrugs}
-                  onAddMedicine={addPatientMedicine}
-                  onCreateSuggestedSchedule={createSuggestedSchedule}
-                  onSendReminder={(dose) => setVoiceDose(dose)}
+                <CaregiverMedication
+                  patientCode={selectedCode}
+                  patientLabel={selectedPatient?.displayLabel}
+                  refreshKey={timeline}
                 />
               )}
               {activePage === 'patient-info' && (
@@ -420,11 +404,7 @@ export default function CaregiverPortal() {
                 />
               )}
               {activePage === 'orders' && (
-                <CaregiverOrders
-                  orders={orders}
-                  patientCode={selectedCode}
-                  onPlaced={() => loadPatient(selectedCode)}
-                />
+                <CaregiverOrders orders={loadedCode === selectedCode ? orders : []} />
               )}
               {activePage === 'profile' && (
                 <CaregiverSettings
@@ -446,6 +426,29 @@ export default function CaregiverPortal() {
           )}
         </div>
         {!loading && <CaregiverNavbar active={activePage} onChange={changePage} />}
+        {toast && (
+          <div
+            className={`cg-caregiver-toast flex items-start gap-3 rounded-2xl border p-3 shadow-xl ${toast.type === 'error' ? 'border-rose-200 bg-rose-50 text-rose-800' : 'border-emerald-200 bg-emerald-50 text-emerald-800'}`}
+            role={toast.type === 'error' ? 'alert' : 'status'}
+          >
+            {toast.type === 'error' ? (
+              <AlertCircle className="h-5 w-5 shrink-0" />
+            ) : (
+              <CheckCircle2 className="h-5 w-5 shrink-0" />
+            )}
+            <span className="cg-caregiver-toast__message flex-1 text-sm font-semibold leading-5">
+              {toast.message}
+            </span>
+            <button
+              aria-label="Dismiss message"
+              className="cg-caregiver-toast__close grid h-8 w-8 place-items-center rounded-lg hover:bg-white/60"
+              onClick={() => setToast(null)}
+              type="button"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        )}
       </div>
       <ElderlyTourGuide
         autoNarrate={Boolean(accessibility.ttsEnabled)}
@@ -454,38 +457,10 @@ export default function CaregiverPortal() {
         open={tourOpen}
         steps={CAREGIVER_ELDERLY_TOUR_STEPS}
       />
-      {toast && (
-        <div
-          className={`fixed left-1/2 top-4 z-[70] flex w-[calc(100%-2rem)] max-w-sm -translate-x-1/2 items-start gap-3 rounded-2xl border p-3 shadow-xl ${toast.type === 'error' ? 'border-rose-200 bg-rose-50 text-rose-800' : 'border-emerald-200 bg-emerald-50 text-emerald-800'}`}
-          role={toast.type === 'error' ? 'alert' : 'status'}
-        >
-          {toast.type === 'error' ? (
-            <AlertCircle className="h-5 w-5 shrink-0" />
-          ) : (
-            <CheckCircle2 className="h-5 w-5 shrink-0" />
-          )}
-          <span className="flex-1 text-sm font-semibold leading-5">{toast.message}</span>
-          <button
-            aria-label="Dismiss message"
-            className="grid h-8 w-8 place-items-center rounded-lg hover:bg-white/60"
-            onClick={() => setToast(null)}
-            type="button"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-      )}
       <LinkPatientModal
         open={linkOpen}
         onClose={() => setLinkOpen(false)}
         onConnect={connectPatient}
-      />
-      <VoiceReminderModal
-        open={Boolean(voiceDose)}
-        patientLabel={selectedPatient?.displayLabel || 'the patient'}
-        medicine={voiceDose?.medicine}
-        onClose={() => setVoiceDose(null)}
-        onSend={sendVoiceAlert}
       />
       {notificationsOpen && (
         <div

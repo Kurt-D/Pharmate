@@ -25,6 +25,7 @@ const PHARMACIST_EMAIL = `pharm.s2test.${Date.now()}@test.pharmate`;
 const PASSWORD = 'TestPass@123';
 
 let patientToken;
+let patientId;
 let pharmacistToken;
 let adminToken;
 
@@ -50,6 +51,7 @@ beforeAll(async () => {
     password: PASSWORD,
   });
   patientToken = patRes.body.accessToken;
+  patientId = patRes.body.user.id;
 
   // Staff accounts are provisioned internally, never through public registration.
   await createPrivilegedTestUser({
@@ -175,6 +177,13 @@ describe('Auth — register and login', () => {
       [email]
     );
     expect(identity.role).toBe('patient');
+    const [safetyProfiles] = await pool.execute(
+      'SELECT patient_id, profile_completed FROM patient_safety_profiles WHERE patient_id=?',
+      [identity.id]
+    );
+    expect(safetyProfiles).toEqual([
+      expect.objectContaining({ patient_id: identity.id, profile_completed: 0 }),
+    ]);
     const pharmacistPatients = await request(app)
       .get('/api/pharmacist/patients')
       .set('Authorization', `Bearer ${pharmacistToken}`);
@@ -287,5 +296,47 @@ describe('Patient anchors', () => {
       .set('Authorization', `Bearer ${patientToken}`)
       .send({ wake_anchor: '25:00' });
     expect(res.status).toBe(400);
+  });
+});
+
+describe('Patient safety profile', () => {
+  test('patient can save and reload safety answers in the same profile record', async () => {
+    const update = await request(app)
+      .put('/api/patient/safety-profile')
+      .set('Authorization', `Bearer ${patientToken}`)
+      .send({
+        date_of_birth: '1998-04-12',
+        weight_kg: 61.5,
+        allergies: 'Penicillin',
+        conditions: 'None',
+        kidney_status: 'NO',
+        liver_status: 'NO',
+        pregnancy_status: 'NOT_APPLICABLE',
+        current_medicines: 'Vitamin C',
+        caregiver_alerts: true,
+        profile_completed: true,
+      });
+    expect(update.status).toBe(200);
+
+    const saved = await request(app)
+      .get('/api/patient/safety-profile')
+      .set('Authorization', `Bearer ${patientToken}`);
+    expect(saved.status).toBe(200);
+    expect(saved.body).toEqual(
+      expect.objectContaining({
+        date_of_birth: '1998-04-12',
+        weight_kg: 61.5,
+        allergies: 'Penicillin',
+        current_medicines: 'Vitamin C',
+        caregiver_alerts: true,
+        profile_completed: true,
+      })
+    );
+
+    const [[count]] = await pool.execute(
+      'SELECT COUNT(*) AS total FROM patient_safety_profiles WHERE patient_id=?',
+      [patientId]
+    );
+    expect(Number(count.total)).toBe(1);
   });
 });

@@ -190,19 +190,37 @@ async function branchDelivery(branchId) {
 
 export async function createRefill(
   patientId,
-  { medication_id, branch_id, notes = null, payment_method }
+  { medication_id, branch_id, quantity = 1, notes = null, payment_method }
 ) {
   if (!branch_id) return { error: 'branch_required' };
   if (!medication_id) return { error: 'medication_not_found' };
   const gate = await assertDispensable(patientId, medication_id); // UC-09
   if (gate.error) return gate;
+  const amount = Number(quantity);
+  if (!Number.isInteger(amount) || amount < 1) return { error: 'invalid_quantity' };
+  const [[balance]] = await pool.execute(
+    `SELECT pp.prescribed_quantity,
+       COALESCE((SELECT SUM(r.quantity) FROM refill_requests r
+         WHERE r.medication_id=m.id AND r.status<>'cancelled'),0)
+       + COALESCE((SELECT SUM(d.quantity) FROM delivery_requests d
+         WHERE d.medication_id=m.id AND d.status<>'cancelled'),0) AS purchased_quantity
+     FROM medications m JOIN prescription_photos pp ON pp.id=m.prescription_photo_id
+     WHERE m.id=? AND m.patient_id=? AND pp.status='approved'`,
+    [medication_id, patientId]
+  );
+  if (
+    !balance?.prescribed_quantity ||
+    amount > Number(balance.prescribed_quantity) - Number(balance.purchased_quantity)
+  )
+    return { error: 'quantity_exceeds_prescription' };
   const payment = paymentMethod(payment_method, 'CASH_ON_PICKUP');
   if (!payment) return { error: 'invalid_payment_method' };
   const id = uuidv4();
   await pool.execute(
-    `INSERT INTO refill_requests (id, patient_id, medication_id, branch_id, notes, payment_method)
-     VALUES (?, ?, ?, ?, ?, ?)`,
-    [id, patientId, medication_id, branch_id, notes, payment]
+    `INSERT INTO refill_requests
+       (id, patient_id, medication_id, quantity, branch_id, notes, payment_method)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [id, patientId, medication_id, amount, branch_id, notes, payment]
   );
   return { id, status: 'pending' };
 }

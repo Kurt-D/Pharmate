@@ -1,10 +1,23 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { Capacitor } from '@capacitor/core';
+import {
+  Camera,
+  Check,
+  FileUp,
+  Flashlight,
+  FlashlightOff,
+  Image,
+  RotateCcw,
+  SwitchCamera,
+  X,
+} from 'lucide-react';
 import { api, apiUpload } from '../../api.js';
 import { useLanguage } from '../../context/LanguageContext.jsx';
 import {
   captureOcrImage,
   OCR_CONFIDENCE_THRESHOLD,
+  extractPrescriptionQuantity,
   recognizeMedicineImage,
 } from '../../lib/mlKitOcr.js';
 import { recordOcrEvaluation } from '../../lib/ocrTelemetry.js';
@@ -24,6 +37,9 @@ export default function PrescriptionUpload() {
   const imgRef = useRef(null);
   const boxesRef = useRef([]); // committed redaction boxes
   const drawStart = useRef(null);
+  const videoRef = useRef(null);
+  const fileInputRef = useRef(null);
+  const cameraStreamRef = useRef(null);
 
   const [hasImage, setHasImage] = useState(false);
   const [cameraError, setCameraError] = useState('');
@@ -40,8 +56,149 @@ export default function PrescriptionUpload() {
   const [strength, setStrength] = useState('');
   const [medicineForm, setMedicineForm] = useState('Tablet');
   const [frequency, setFrequency] = useState('once daily');
+  const [prescribedQuantity, setPrescribedQuantity] = useState('');
   const [drugMatches, setDrugMatches] = useState([]);
   const [selectedDrug, setSelectedDrug] = useState(null);
+  const [cameraOpen, setCameraOpen] = useState(false);
+  const [cameraStarting, setCameraStarting] = useState(false);
+  const [cameraFacing, setCameraFacing] = useState('environment');
+  const [flashSupported, setFlashSupported] = useState(false);
+  const [flashOn, setFlashOn] = useState(false);
+  const [fileInfo, setFileInfo] = useState(null);
+
+  function stopCamera() {
+    cameraStreamRef.current?.getTracks().forEach((track) => track.stop());
+    cameraStreamRef.current = null;
+    setCameraOpen(false);
+    setCameraStarting(false);
+    setFlashOn(false);
+    setFlashSupported(false);
+  }
+
+  useEffect(
+    () => () => {
+      cameraStreamRef.current?.getTracks().forEach((track) => track.stop());
+    },
+    []
+  );
+
+  async function openCamera(facing = cameraFacing) {
+    setCameraError('');
+
+    // In the installed Android/iOS app, use the native camera plugin. On the
+    // web, Camera.getPhoto falls back to a file input, so it must never be
+    // used for the Take a Photo action there.
+    if (Capacitor.isNativePlatform()) {
+      await chooseImage('camera');
+      return;
+    }
+
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setCameraError(
+        tr(
+          'The camera is unavailable in this browser. Allow camera access and open PharMate using HTTPS, or use Upload Prescription.',
+          'Hindi available ang camera sa browser na ito. Payagan ang camera at buksan ang PharMate gamit ang HTTPS, o gamitin ang Upload Prescription.'
+        )
+      );
+      return;
+    }
+    stopCamera();
+    setCameraOpen(true);
+    setCameraStarting(true);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: facing }, width: { ideal: 1920 }, height: { ideal: 1080 } },
+        audio: false,
+      });
+      cameraStreamRef.current = stream;
+      setCameraFacing(facing);
+      setCameraStarting(false);
+      const track = stream.getVideoTracks()[0];
+      setFlashSupported(Boolean(track.getCapabilities?.().torch));
+      requestAnimationFrame(() => {
+        if (videoRef.current) videoRef.current.srcObject = stream;
+      });
+    } catch (error) {
+      setCameraStarting(false);
+      const denied = error?.name === 'NotAllowedError' || error?.name === 'SecurityError';
+      setCameraError(
+        denied
+          ? tr(
+              'Camera access is blocked. Enable camera permission for PharMate, then tap Take a Photo again.',
+              'Naka-block ang camera. Payagan ang camera para sa PharMate, pagkatapos ay pindutin muli ang Kumuha ng Larawan.'
+            )
+          : tr(
+              'The camera could not be opened. Close other apps using the camera and try again.',
+              'Hindi mabuksan ang camera. Isara ang ibang app na gumagamit ng camera at subukan muli.'
+            )
+      );
+    }
+  }
+
+  async function toggleFlash() {
+    const track = cameraStreamRef.current?.getVideoTracks?.()[0];
+    if (!track || !flashSupported) return;
+    const next = !flashOn;
+    try {
+      await track.applyConstraints({ advanced: [{ torch: next }] });
+      setFlashOn(next);
+    } catch {
+      setFlashSupported(false);
+    }
+  }
+
+  async function captureCameraFrame() {
+    const video = videoRef.current;
+    if (!video?.videoWidth) return;
+    const capture = document.createElement('canvas');
+    capture.width = video.videoWidth;
+    capture.height = video.videoHeight;
+    capture.getContext('2d').drawImage(video, 0, 0);
+    const preview = capture.toDataURL('image/jpeg', 0.94);
+    stopCamera();
+    setFileInfo({
+      name: 'Camera photo',
+      size: Math.round((preview.length * 3) / 4),
+      type: 'image/jpeg',
+    });
+    loadPreview(preview);
+    await runOcr({ webPath: preview });
+  }
+
+  async function chooseFile(event) {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    stopCamera();
+    if (!file.type.startsWith('image/')) {
+      setCameraError(
+        'PDF preview and OCR are not supported on this device. Upload a JPEG, PNG, or HEIC image.'
+      );
+      return;
+    }
+    const preview = URL.createObjectURL(file);
+    setFileInfo({ name: file.name, size: file.size, type: file.type });
+    setOcrReviewed(false);
+    loadPreview(preview);
+    await runOcr({ webPath: preview, file });
+  }
+
+  function rotatePreview() {
+    const canvas = canvasRef.current;
+    if (!canvas?.width) return;
+    const copy = document.createElement('canvas');
+    copy.width = canvas.height;
+    copy.height = canvas.width;
+    const context = copy.getContext('2d');
+    context.translate(copy.width / 2, copy.height / 2);
+    context.rotate(Math.PI / 2);
+    context.drawImage(canvas, -canvas.width / 2, -canvas.height / 2);
+    canvas.width = copy.width;
+    canvas.height = copy.height;
+    canvas.getContext('2d').drawImage(copy, 0, 0);
+    imgRef.current = canvas;
+    boxesRef.current = [];
+  }
 
   useEffect(() => {
     if (
@@ -77,10 +234,12 @@ export default function PrescriptionUpload() {
     else if (/twice|two times|2\s*(?:x|times)|bid/i.test(clean)) detectedFrequency = 'twice daily';
     else if (/once|one time|1\s*(?:x|time)|daily|qd/i.test(clean)) detectedFrequency = 'once daily';
     const candidate = scan?.fields?.name;
+    const quantity = extractPrescriptionQuantity(clean);
     if (candidate && !medicineName) setMedicineName(candidate);
     if (dose && !strength) setStrength(dose);
     if (formMatch) setMedicineForm(formMatch);
     if (detectedFrequency) setFrequency(detectedFrequency);
+    if (quantity && !prescribedQuantity) setPrescribedQuantity(String(quantity));
   }
 
   function redraw(preview) {
@@ -201,10 +360,20 @@ export default function PrescriptionUpload() {
       fd.append('photo', blob, 'prescription.jpg');
       fd.append('ocr_text', ocrText);
       if (ocrConfidence !== null) fd.append('ocr_confidence', String(ocrConfidence));
+      fd.append('prescribed_quantity', prescribedQuantity);
       let medicationId = id;
       if (ocrFirst) {
-        if (!medicineName.trim() || !strength.trim() || !medicineForm || !frequency.trim()) {
-          throw new Error('Review and complete the medicine name, strength, form, and frequency.');
+        if (
+          !medicineName.trim() ||
+          !strength.trim() ||
+          !medicineForm ||
+          !frequency.trim() ||
+          !Number.isInteger(Number(prescribedQuantity)) ||
+          Number(prescribedQuantity) < 1
+        ) {
+          throw new Error(
+            'Review the medicine name, strength, form, frequency, and total prescribed quantity.'
+          );
         }
         if (!selectedDrug) {
           throw new Error(
@@ -249,20 +418,24 @@ export default function PrescriptionUpload() {
   }
 
   return (
-    <>
-      <div className="d-flex align-items-center gap-2 mb-1">
-        <button className="pm-link" onClick={() => navigate('/patient/medications')}>
+    <main className="pm-prescription-capture">
+      <header className="pm-prescription-capture__header">
+        <button onClick={() => navigate('/patient/medications')} aria-label="Back to medications">
           ←
         </button>
-        <h1 className="pm-title" style={{ fontSize: '1.3rem' }}>
-          {ocrFirst
-            ? tr('Scan Prescription with OCR', 'I-scan ang Reseta gamit ang OCR')
-            : tr('Upload Prescription', 'Mag-upload ng Reseta')}
-        </h1>
-      </div>
-      <p className="pm-subtitle">
-        Cover any personal details with black boxes before sending. Only the covered image is
-        uploaded — the original stays on your phone.
+        <div>
+          <h1>
+            {ocrFirst
+              ? tr('Scan Prescription with OCR', 'I-scan ang Reseta gamit ang OCR')
+              : tr('Upload Prescription', 'Mag-upload ng Reseta')}
+          </h1>
+        </div>
+      </header>
+      <p className="pm-prescription-capture__intro">
+        {tr(
+          'Take a clear photo of the full prescription. You can cover personal details before sending it.',
+          'Kunan nang malinaw ang buong reseta. Maaari mong takpan ang personal na detalye bago ipadala.'
+        )}
       </p>
 
       {result && (
@@ -276,19 +449,69 @@ export default function PrescriptionUpload() {
         </div>
       )}
 
-      <div className="pm-card p-3">
+      <section className="pm-prescription-workspace">
+        <input
+          ref={fileInputRef}
+          className="pm-prescription-file-input"
+          type="file"
+          accept="image/jpeg,image/png,image/heic,image/heif,.jpg,.jpeg,.png,.heic,.heif"
+          onChange={chooseFile}
+        />
         {!hasImage && (
-          <div className="d-grid gap-2">
-            <button type="button" className="pm-btn-primary" onClick={() => chooseImage('camera')}>
-              📷 Take Photo
+          <div className="pm-prescription-source-choice">
+            <div className="pm-prescription-source-choice__guide">
+              <span>
+                <Camera />
+              </span>
+              <div>
+                <h2>{tr('Add your prescription', 'Idagdag ang iyong reseta')}</h2>
+                <p>
+                  {tr(
+                    'Use a bright, flat surface and include all four corners.',
+                    'Gumamit ng maliwanag at patag na lugar at isama ang apat na sulok.'
+                  )}
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              className="pm-prescription-source pm-prescription-source--camera"
+              onClick={() => openCamera()}
+            >
+              <Camera />
+              <span>
+                <strong>{tr('Take a Photo', 'Kumuha ng Larawan')}</strong>
+                <small>{tr('Open the rear camera', 'Buksan ang camera sa likod')}</small>
+              </span>
             </button>
             <button
               type="button"
-              className="btn btn-outline-secondary d-block text-center"
-              onClick={() => chooseImage('gallery')}
+              className="pm-prescription-source"
+              onClick={() => fileInputRef.current?.click()}
             >
-              🖼️ Choose from Gallery
+              <FileUp />
+              <span>
+                <strong>{tr('Upload Prescription', 'Mag-upload ng Reseta')}</strong>
+                <small>
+                  {tr(
+                    'Choose an image from files or gallery',
+                    'Pumili ng larawan sa files o gallery'
+                  )}
+                </small>
+              </span>
             </button>
+            <ul>
+              <li>
+                <Check /> {tr('Clear and readable text', 'Malinaw at nababasang teksto')}
+              </li>
+              <li>
+                <Check /> {tr('No glare or cropped edges', 'Walang silaw o putol na gilid')}
+              </li>
+              <li>
+                <Check />{' '}
+                {tr('Reviewed before pharmacist submission', 'Susuriin bago ipadala sa pharmacist')}
+              </li>
+            </ul>
           </div>
         )}
 
@@ -313,17 +536,41 @@ export default function PrescriptionUpload() {
 
         {hasImage && (
           <>
+            {fileInfo && (
+              <div className="pm-prescription-file-summary">
+                <Image />
+                <span>
+                  <strong>{fileInfo.name}</strong>
+                  <small>
+                    {Math.max(1, Math.round(fileInfo.size / 1024))} KB · {fileInfo.type}
+                  </small>
+                </span>
+                <button
+                  onClick={() => {
+                    setHasImage(false);
+                    setFileInfo(null);
+                    setOcrScan(null);
+                  }}
+                  aria-label="Remove selected prescription"
+                  type="button"
+                >
+                  <X />
+                </button>
+              </div>
+            )}
             <p className="text-muted small mt-2 mb-2">Drag across the image to redact areas.</p>
-            <div className="d-flex gap-2 mb-2">
+            <div className="pm-prescription-review-actions">
               <button className="btn btn-sm btn-outline-secondary" onClick={undo}>
                 Undo box
               </button>
-              <button
-                type="button"
-                className="btn btn-sm btn-outline-secondary mb-0"
-                onClick={() => chooseImage('gallery')}
-              >
-                Take or replace photo
+              <button type="button" onClick={rotatePreview}>
+                <RotateCcw /> Rotate
+              </button>
+              <button type="button" onClick={() => openCamera()}>
+                <Camera /> Retake
+              </button>
+              <button type="button" onClick={() => fileInputRef.current?.click()}>
+                <FileUp /> Upload another
               </button>
             </div>
             <div className="pm-ocr-review mt-3">
@@ -461,6 +708,22 @@ export default function PrescriptionUpload() {
                   onChange={(event) => setFrequency(event.target.value)}
                   placeholder="e.g., three times daily"
                 />
+                <label className="form-label mt-2">
+                  {tr('Total quantity prescribed', 'Kabuuang dami sa reseta')}
+                </label>
+                <input
+                  className="form-control"
+                  type="number"
+                  min="1"
+                  max="1000"
+                  inputMode="numeric"
+                  value={prescribedQuantity}
+                  onChange={(event) => {
+                    setPrescribedQuantity(event.target.value);
+                    setOcrReviewed(false);
+                  }}
+                  placeholder="e.g., 30 tablets"
+                />
                 <div className="form-text">
                   OCR suggestions must be checked against the prescription. The pharmacist will
                   validate them again.
@@ -474,8 +737,8 @@ export default function PrescriptionUpload() {
                     onChange={(event) => setOcrReviewed(event.target.checked)}
                   />
                   <span className="form-check-label">
-                    I checked the medicine name, strength, formulation, and directions against the
-                    paper prescription.
+                    I checked the medicine name, strength, formulation, directions, and total
+                    quantity against the paper prescription.
                   </span>
                 </label>
               </div>
@@ -500,7 +763,88 @@ export default function PrescriptionUpload() {
             </button>
           </>
         )}
-      </div>
-    </>
+      </section>
+      {cameraOpen && (
+        <div
+          className="pm-prescription-camera"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Prescription camera"
+        >
+          <video ref={videoRef} autoPlay muted playsInline />
+          <div className="pm-prescription-camera__shade" aria-hidden="true" />
+          <div className="pm-prescription-camera__frame">
+            <span>
+              {tr(
+                'Place the full prescription inside the frame',
+                'Ilagay ang buong reseta sa loob ng frame'
+              )}
+            </span>
+          </div>
+          {(cameraStarting || cameraError) && (
+            <section className="pm-prescription-camera__status" role="status">
+              <span className={cameraStarting ? 'is-loading' : ''}>
+                <Camera />
+              </span>
+              <strong>
+                {cameraStarting
+                  ? tr('Starting your camera…', 'Binubuksan ang camera…')
+                  : tr('Camera access needed', 'Kailangan ang pahintulot sa camera')}
+              </strong>
+              <p>
+                {cameraStarting
+                  ? tr(
+                      'Choose Allow in the browser message to continue inside PharMate.',
+                      'Piliin ang Allow sa mensahe ng browser upang magpatuloy sa PharMate.'
+                    )
+                  : cameraError}
+              </p>
+              {!cameraStarting && (
+                <div>
+                  <button type="button" onClick={() => openCamera(cameraFacing)}>
+                    {tr('Try camera again', 'Subukan muli ang camera')}
+                  </button>
+                  <button type="button" onClick={() => fileInputRef.current?.click()}>
+                    {tr('Upload instead', 'Mag-upload na lang')}
+                  </button>
+                </div>
+              )}
+            </section>
+          )}
+          <header>
+            <button onClick={stopCamera} aria-label="Close camera">
+              <X />
+            </button>
+            <strong>{tr('Photograph Prescription', 'Kunan ang Reseta')}</strong>
+            <button
+              onClick={toggleFlash}
+              disabled={!flashSupported}
+              aria-label={flashOn ? 'Turn flash off' : 'Turn flash on'}
+            >
+              {flashOn ? <Flashlight /> : <FlashlightOff />}
+            </button>
+          </header>
+          <footer>
+            <button onClick={() => fileInputRef.current?.click()} aria-label="Choose from gallery">
+              <Image />
+            </button>
+            <button
+              className="pm-prescription-camera__shutter"
+              onClick={captureCameraFrame}
+              disabled={cameraStarting || Boolean(cameraError)}
+              aria-label="Take photo"
+            >
+              <span />
+            </button>
+            <button
+              onClick={() => openCamera(cameraFacing === 'environment' ? 'user' : 'environment')}
+              aria-label="Switch camera"
+            >
+              <SwitchCamera />
+            </button>
+          </footer>
+        </div>
+      )}
+    </main>
   );
 }

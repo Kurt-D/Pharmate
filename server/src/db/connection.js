@@ -24,7 +24,9 @@ export const pool = mysql.createPool({
   waitForConnections: true,
   connectionLimit: 10,
   timezone: '+08:00',
-  dateStrings: false,
+  // MySQL DATE values represent calendar dates, not moments in time. Returning
+  // them as strings prevents birthdays from shifting a day during timezone conversion.
+  dateStrings: ['DATE'],
   // MariaDB exposes JSON aliases as text. Normalizing audit snapshots here
   // keeps their API shape identical across MySQL and MariaDB installations.
   typeCast: parseStructuredJson,

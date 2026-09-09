@@ -3,7 +3,15 @@ import { useCallback, useEffect, useState } from 'react';
 import { speak } from '../../lib/notifications.js';
 import { useLanguage } from '../../context/LanguageContext.jsx';
 
-export default function PatientVoiceAlert({ alert, dose, onTake, onScan, onSnooze, onDismiss }) {
+export default function PatientVoiceAlert({
+  alert,
+  dose,
+  voiceEnabled = true,
+  onTake,
+  onScan,
+  onSnooze,
+  onDismiss,
+}) {
   const { language } = useLanguage();
   const tr = (en, fil) => (language === 'fil' ? fil : en);
   const [speaking, setSpeaking] = useState(false);
@@ -14,13 +22,13 @@ export default function PatientVoiceAlert({ alert, dose, onTake, onScan, onSnooz
   );
 
   const playReminder = useCallback(() => {
-    if (!alert) return;
+    if (!alert || !voiceEnabled) return;
     speak(reminderText, {
       onStart: () => setSpeaking(true),
       onEnd: () => setSpeaking(false),
       onError: () => setSpeaking(false),
     });
-  }, [alert, reminderText]);
+  }, [alert, reminderText, voiceEnabled]);
 
   useEffect(() => {
     playReminder();
@@ -40,7 +48,9 @@ export default function PatientVoiceAlert({ alert, dose, onTake, onScan, onSnooz
           <span>
             <BellRing />
           </span>{' '}
-          {tr('Medicine Voice Reminder', 'Paalalang may Boses')}
+          {voiceEnabled
+            ? tr('Medicine Voice Reminder', 'Paalalang may Boses')
+            : tr('Medicine Reminder', 'Paalala sa Gamot')}
         </h2>
         <div className="pm-caregiver-voice-card__tools">
           <span className="pm-active-pill">{tr('Active', 'Aktibo')}</span>
@@ -61,13 +71,21 @@ export default function PatientVoiceAlert({ alert, dose, onTake, onScan, onSnooz
               : tr('Play medicine voice reminder', 'Patugtugin ang paalala')
           }
           className={`pm-mic ${speaking ? 'speaking' : ''}`}
+          disabled={!voiceEnabled}
           onClick={playReminder}
           type="button"
         >
-          <Volume2 />
+          {voiceEnabled ? <Volume2 /> : <BellRing />}
         </button>
         <div className="pm-reminder__copy">
-          <small>{tr('Scheduled medicine reminder', 'Naka-iskedyul na paalala')}</small>
+          <small>
+            {voiceEnabled
+              ? tr('Scheduled medicine reminder', 'Naka-iskedyul na paalala')
+              : tr(
+                  'Visual reminder · Voice is turned off',
+                  'Visual na paalala · Naka-off ang boses'
+                )}
+          </small>
           <h3>“{reminderText}”</h3>
           <p>
             {tr(
@@ -82,18 +100,26 @@ export default function PatientVoiceAlert({ alert, dose, onTake, onScan, onSnooz
           <span key={index} style={{ '--wave-index': index }} />
         ))}
       </div>
-      <button className="pm-action-button pm-action-button--outline" onClick={onTake} type="button">
-        <CheckCircle2 /> {tr('Mark as Taken', 'Markahan bilang Nainom')}
-      </button>
-      <button className="pm-action-button" onClick={onScan} type="button">
-        <ScanLine /> {tr('Scan Medicine', 'I-scan ang Gamot')}
-      </button>
-      <small className="pm-scan-hint">
-        {tr('Scan for a more accurate record.', 'I-scan para sa mas tumpak na tala.')}
-      </small>
-      <button className="pm-caregiver-voice-card__snooze" onClick={onSnooze} type="button">
-        <Clock3 /> {tr('Snooze for 15 minutes', 'Ipagpaliban nang 15 minuto')}
-      </button>
+      {dose && (
+        <>
+          <button
+            className="pm-action-button pm-action-button--outline"
+            onClick={onTake}
+            type="button"
+          >
+            <CheckCircle2 /> {tr('Mark as Taken', 'Markahan bilang Nainom')}
+          </button>
+          <button className="pm-action-button" onClick={onScan} type="button">
+            <ScanLine /> {tr('Scan Medicine', 'I-scan ang Gamot')}
+          </button>
+          <small className="pm-scan-hint">
+            {tr('Scan for a more accurate record.', 'I-scan para sa mas tumpak na tala.')}
+          </small>
+          <button className="pm-caregiver-voice-card__snooze" onClick={onSnooze} type="button">
+            <Clock3 /> {tr('Snooze for 15 minutes', 'Ipagpaliban nang 15 minuto')}
+          </button>
+        </>
+      )}
     </section>
   );
 }

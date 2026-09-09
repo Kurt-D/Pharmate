@@ -78,14 +78,14 @@ function DoseSection({ status, doses, onReminder }) {
                       : 'Upcoming'}
               </span>
             </div>
-            {status === 'due' && (
+            {(status === 'due' || status === 'overdue') && (
               <button
                 className="mt-3 flex min-h-[46px] w-full items-center justify-center gap-2 rounded-xl border border-blue-200 bg-white px-3 text-sm font-bold text-blue-700 active:scale-[.99]"
                 onClick={() => onReminder(dose)}
                 type="button"
               >
                 <Send className="h-4 w-4" />
-                Send notification reminder
+                {status === 'overdue' ? 'Send missed-dose reminder' : 'Send reminder'}
               </button>
             )}
           </article>
@@ -402,7 +402,7 @@ export default function CaregiverRefills({
               Today’s medicine schedule
             </h2>
             <p className="mb-0 mt-1 text-sm font-medium text-slate-600">
-              Upcoming doses are view only. Send a reminder only while a dose is due.
+              The schedule updates in real time. Send reminders for due or missed doses.
             </p>
           </div>
           <button

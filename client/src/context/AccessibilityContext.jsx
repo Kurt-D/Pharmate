@@ -46,15 +46,24 @@ const AccessibilityContext = createContext(null);
 
 export function AccessibilityProvider({ children }) {
   const [preferences, setPreferences] = useState(readAccessibilityPreferences);
+  const [storageError, setStorageError] = useState('');
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(preferences));
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(preferences));
+      setStorageError('');
+    } catch {
+      setStorageError(
+        'Changes apply now, but could not be saved on this device. They may reset when you reopen the app.'
+      );
+    }
     applyPreferences(preferences);
   }, [preferences]);
 
   const value = useMemo(
     () => ({
       preferences,
+      storageError,
       updatePreference(key, value) {
         setPreferences((current) => ({ ...current, [key]: value }));
       },
@@ -62,7 +71,7 @@ export function AccessibilityProvider({ children }) {
         setPreferences(DEFAULT_ACCESSIBILITY);
       },
     }),
-    [preferences]
+    [preferences, storageError]
   );
 
   return <AccessibilityContext.Provider value={value}>{children}</AccessibilityContext.Provider>;

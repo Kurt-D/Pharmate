@@ -1,44 +1,19 @@
 import { useMemo, useState } from 'react';
 import {
   Activity,
-  AlertTriangle,
   BellRing,
   BellOff,
-  CheckCircle2,
   ChevronDown,
   ChevronUp,
-  ClipboardCheck,
   Clock3,
   Link2,
-  Moon,
   Package,
   Plus,
   ShieldCheck,
-  Sunrise,
-  SunMedium,
-  Sunset,
   Volume2,
 } from 'lucide-react';
+import CaregiverCareSummary from './CaregiverCareSummary.jsx';
 import CaregiverRefillAlert from './CaregiverRefillAlert.jsx';
-
-const PERIOD_ICONS = { morning: Sunrise, afternoon: SunMedium, evening: Sunset, night: Moon };
-
-function StatusBadge({ dose }) {
-  const variants = {
-    taken: 'border-emerald-200 bg-emerald-50 text-emerald-700',
-    upcoming: 'border-amber-200 bg-amber-50 text-amber-700',
-    overdue: 'border-rose-200 bg-rose-50 text-rose-700',
-  };
-  const Icon = dose.status === 'taken' ? CheckCircle2 : Clock3;
-  return (
-    <span
-      className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-bold ${variants[dose.status] || variants.upcoming}`}
-    >
-      <Icon className="h-4 w-4 stroke-[2.2]" />
-      {dose.statusText}
-    </span>
-  );
-}
 
 function PatientSwitcher({ patients, selectedCode, onSelect, onAdd }) {
   const selected = patients.find((patient) => patient.patient_code === selectedCode) || patients[0];
@@ -87,6 +62,7 @@ export default function CaregiverDashboard({
   timeline,
   previewMode,
   onVoiceReminder,
+  sendingReminder = false,
   onSnooze,
   snoozedUntil,
   stockAlerts = [],
@@ -98,16 +74,13 @@ export default function CaregiverDashboard({
 }) {
   const [showAllStock, setShowAllStock] = useState(false);
   const [dismissedStock, setDismissedStock] = useState([]);
-  const completed = timeline.filter((dose) => dose.status === 'taken').length;
-  const upcoming = timeline.filter((dose) => dose.status === 'upcoming').length;
-  const overdue = timeline.filter((dose) => dose.status === 'overdue').length;
-  const adherence = timeline.length ? Math.round((completed / timeline.length) * 100) : 0;
   const visibleStockAlerts = useMemo(
     () => stockAlerts.filter((item) => !dismissedStock.includes(item.id)),
     [dismissedStock, stockAlerts]
   );
   const urgentDose =
     timeline.find((dose) => dose.status === 'overdue') ||
+    timeline.find((dose) => dose.status === 'due') ||
     timeline.find(
       (dose) =>
         dose.status === 'upcoming' &&
@@ -239,7 +212,7 @@ export default function CaregiverDashboard({
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <h2 className="m-0 text-lg font-bold text-rose-800" id="caregiver-dose-alert-title">
-                  Dose Due Now
+                  {urgentDose.status === 'overdue' ? 'Missed Dose' : 'Dose Due Now'}
                 </h2>
                 <span className="rounded-full border border-rose-200 bg-white px-2.5 py-1 text-xs font-bold text-rose-700">
                   Action needed
@@ -260,10 +233,12 @@ export default function CaregiverDashboard({
             <button
               className="flex min-h-[56px] items-center justify-center gap-2 rounded-xl bg-blue-600 px-3 text-sm font-semibold text-white hover:bg-blue-700 active:scale-[.98]"
               onClick={() => onVoiceReminder(urgentDose)}
+              disabled={sendingReminder}
+              aria-busy={sendingReminder}
               type="button"
             >
               <Volume2 className="h-5 w-5 stroke-[2.2]" />
-              Send Voice Reminder
+              {sendingReminder ? 'Sending…' : 'Send reminder'}
             </button>
             <button
               className="flex min-h-[56px] items-center justify-center gap-2 rounded-xl border border-blue-300 bg-white px-3 text-sm font-semibold text-blue-700 hover:bg-blue-50 active:scale-[.98]"
@@ -282,150 +257,7 @@ export default function CaregiverDashboard({
         </div>
       )}
 
-      <section
-        aria-labelledby="patient-adherence-summary"
-        className="cg-adherence-card rounded-2xl border border-slate-100 bg-white p-4 shadow-sm"
-      >
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <h2
-              className="m-0 text-lg font-bold tracking-tight text-slate-900"
-              id="patient-adherence-summary"
-            >
-              Today’s care summary
-            </h2>
-            <p className="mb-0 mt-1 text-sm font-medium text-slate-600">
-              Today’s scheduled medicines
-            </p>
-          </div>
-          <Activity className="h-6 w-6 shrink-0 text-blue-600" />
-        </div>
-        <div className="mt-4 flex items-start justify-between gap-3">
-          <div>
-            <p className="m-0 text-sm font-semibold text-slate-600">Doses completed</p>
-            <p className="mb-0 mt-1 text-2xl font-bold tracking-tight text-slate-900">
-              <span className="text-blue-600">{completed}</span>/{timeline.length || 0}
-            </p>
-          </div>
-          <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-sm font-bold text-emerald-700">
-            {adherence}% Adherence
-          </span>
-        </div>
-        <div
-          aria-label={`${adherence}% of doses completed`}
-          aria-valuemax="100"
-          aria-valuemin="0"
-          aria-valuenow={adherence}
-          className="mt-3 h-3 overflow-hidden rounded-full bg-slate-100"
-          role="progressbar"
-        >
-          <span
-            className="block h-full rounded-full bg-blue-600 transition-[width] duration-500"
-            style={{ width: `${adherence}%` }}
-          />
-        </div>
-        <div className="mt-4 grid grid-cols-3 overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
-          <div className="flex min-h-[82px] flex-col items-center justify-center px-2 py-3 text-center">
-            <CheckCircle2 className="h-5 w-5 text-emerald-600" />
-            <strong className="mt-1 text-lg text-emerald-700">{completed}</strong>
-            <span className="text-xs font-semibold text-slate-600">Taken</span>
-          </div>
-          <div className="flex min-h-[82px] flex-col items-center justify-center border-x border-slate-200 px-2 py-3 text-center">
-            <Clock3 className="h-5 w-5 text-amber-600" />
-            <strong className="mt-1 text-lg text-amber-700">{upcoming}</strong>
-            <span className="text-xs font-semibold text-slate-600">Upcoming</span>
-          </div>
-          <div className="flex min-h-[82px] flex-col items-center justify-center px-2 py-3 text-center">
-            <AlertTriangle className="h-5 w-5 text-rose-600" />
-            <strong className="mt-1 text-lg text-rose-700">{overdue}</strong>
-            <span className="text-xs font-semibold text-slate-600">Overdue</span>
-          </div>
-        </div>
-        {snoozedUntil && (
-          <p className="mb-0 mt-3 rounded-lg bg-slate-50 px-3 py-2 text-center text-xs font-semibold text-slate-600">
-            Alerts snoozed until{' '}
-            {new Date(snoozedUntil).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}.
-          </p>
-        )}
-      </section>
-
-      <section className="cg-timeline-card rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <h2 className="m-0 text-lg font-bold tracking-tight text-slate-900">
-              Today’s Dose Checklist
-            </h2>
-            <p className="mb-0 mt-1 text-sm font-medium text-slate-600">
-              Chronological schedule for today
-            </p>
-          </div>
-          <span className="cg-checklist-icon">
-            <ClipboardCheck className="h-6 w-6" />
-          </span>
-        </div>
-        <div className="relative mt-4 grid gap-3 before:absolute before:bottom-5 before:left-[19px] before:top-5 before:w-px before:bg-slate-200">
-          {timeline.length ? (
-            timeline.map((dose) => {
-              const PeriodIcon = PERIOD_ICONS[dose.period] || SunMedium;
-              const overdue = dose.status === 'overdue';
-              return (
-                <article
-                  className={`relative grid grid-cols-[40px_minmax(0,1fr)] gap-3 rounded-2xl border p-3 ${overdue ? 'border-rose-200 bg-rose-50' : 'border-slate-100 bg-slate-50'}`}
-                  key={dose.id}
-                >
-                  <span
-                    className={`z-10 grid h-10 w-10 place-items-center rounded-xl border bg-white ${overdue ? 'border-rose-200 text-rose-600' : 'border-blue-100 text-blue-600'}`}
-                  >
-                    <PeriodIcon className="h-5 w-5 stroke-[2.2]" />
-                  </span>
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <p className="m-0 text-xs font-bold uppercase tracking-wide text-slate-500">
-                          {dose.period} • {dose.time}
-                        </p>
-                        <h3 className="mb-0 mt-1 truncate text-base font-bold text-slate-900">
-                          {dose.medicine}
-                        </h3>
-                      </div>
-                      <StatusBadge dose={dose} />
-                    </div>
-                    <p className="mb-0 mt-1 text-sm font-medium leading-5 text-slate-600">
-                      {dose.instructions}
-                    </p>
-                    {overdue && (
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        <button
-                          className="inline-flex min-h-[44px] items-center gap-1.5 rounded-xl bg-rose-600 px-3 text-xs font-semibold text-white hover:bg-rose-700"
-                          onClick={() => onVoiceReminder(dose)}
-                          type="button"
-                        >
-                          <Volume2 className="h-4 w-4" />
-                          Trigger Voice Reminder
-                        </button>
-                        <button
-                          className="inline-flex min-h-[44px] items-center gap-1.5 rounded-xl border border-rose-200 bg-white px-3 text-xs font-semibold text-rose-700 hover:bg-rose-100"
-                          onClick={() => onSnooze(dose)}
-                          type="button"
-                        >
-                          <BellOff className="h-4 w-4" />
-                          Snooze 15m
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </article>
-              );
-            })
-          ) : (
-            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-center">
-              <p className="m-0 text-sm font-semibold text-slate-700">
-                No medicine schedule for today.
-              </p>
-            </div>
-          )}
-        </div>
-      </section>
+      <CaregiverCareSummary key={selectedCode} patientCode={selectedCode} refreshKey={timeline} />
 
       {visibleStockAlerts.length > 0 && (
         <section className="cg-refill-section">

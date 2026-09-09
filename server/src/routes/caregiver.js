@@ -4,13 +4,7 @@ import { pool } from '../db/connection.js';
 import { requireAuth } from '../middleware/auth.js';
 import { requireRole } from '../middleware/role.js';
 import { caregiverAlerts } from '../services/alerts.js';
-import {
-  createCatalogOrder,
-  createRefill,
-  createDelivery,
-  listOrders,
-} from '../services/orders.js';
-import { uploadPrescription } from '../middleware/upload.js';
+import { createRefill, createDelivery, listOrders } from '../services/orders.js';
 import { openThread } from '../services/inquiry.js';
 import { failedAttemptLimit, rateLimit } from '../middleware/rateLimit.js';
 import { createPatientNotification } from '../services/patientNotifications.js';
@@ -22,27 +16,13 @@ import {
   legacyCaregiverCodeHash,
   normalizeCaregiverCode,
 } from '../utils/caregiverInvite.js';
-import { publishCaregiverEvent, subscribeCaregiver } from '../services/caregiverEvents.js';
+import { subscribeCaregiver } from '../services/caregiverEvents.js';
 import { publishUser } from '../services/realtimeEvents.js';
-import { parseFrequency } from '../../engine/frequencyParser.js';
-import { findRestricted, resolveDrug, searchDrugs } from '../services/formulary.js';
-import { confirmForPatient } from '../services/schedule.js';
 import { doseHistory, todayDoses } from '../services/doses.js';
 import { computeDoseStatus } from '../services/medicationSchedule.js';
-import { deriveScheduleDefinition } from '../services/scheduleDefinition.js';
 import { recordAudit } from '../services/audit.js';
 import { createPortalNotification } from '../services/portalNotifications.js';
-import {
-  inquiryChanged,
-  medicationChanged,
-  orderChanged,
-  scheduleChanged,
-} from '../services/domainEvents.js';
-import {
-  stopMedication,
-  updateMedication,
-  validateMedicationPatch,
-} from '../services/patientMedications.js';
+import { inquiryChanged, orderChanged } from '../services/domainEvents.js';
 
 const router = Router();
 
@@ -176,8 +156,7 @@ router.patch('/alerts/read-all', async (req, res) => {
 // The caregiver's linked patients, by patient_code only (no PII).
 router.get('/patients', async (req, res) => {
   const [rows] = await pool.execute(
-    `SELECT p.patient_code, cp.relationship, cp.linked_at,
-            cp.can_manage_medications
+    `SELECT p.patient_code, cp.relationship, cp.linked_at
      FROM caregiver_patients cp
      JOIN patients p ON p.id = cp.patient_id
      WHERE cp.caregiver_id = ? AND cp.status = 'active'
@@ -221,162 +200,6 @@ router.get('/patients/:code/doses/history', async (req, res) => {
   res.json(result);
 });
 
-router.get('/drugs', async (req, res) => {
-  res.json(await searchDrugs(req.query.q, req.query.limit || 20));
-});
-
-router.post('/patients/:code/medications', async (req, res) => {
-  const patientId = await medicationManagementPatient(req, res);
-  if (!patientId) return;
-  const drugName = String(req.body?.drug_name || '').trim();
-  const frequency = String(req.body?.frequency || '').trim();
-  const dosageInstruction = String(req.body?.dosage_instruction || '').trim();
-  if (!drugName || !frequency || !dosageInstruction) {
-    return res
-      .status(400)
-      .json({ error: 'Medicine, frequency, and dose instructions are required' });
-  }
-  if (await findRestricted(drugName)) {
-    return res.status(403).json({
-      error: 'restricted_substance',
-      message: 'This medicine must be handled in person at a pharmacy branch.',
-    });
-  }
-  const drug = await resolveDrug(drugName);
-  if (!drug) return res.status(400).json({ error: 'Choose a verified medicine from the list' });
-  const frequencyCode = parseFrequency(frequency);
-  const definition = deriveScheduleDefinition(req.body, frequencyCode);
-  const id = uuidv4();
-  await pool.execute(
-    `INSERT INTO medications
-       (id, patient_id, drug_id, drug_name_raw, source, is_prn, frequency,
-        frequency_code, schedule_type, schedule_times, interval_hours,
-        interval_start_time, schedule_days, schedule_status, schedule_updated_by,
-        schedule_updated_at, dosage_instruction, start_date, status)
-     VALUES (?, ?, ?, ?, 'OTC_SELF', 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(3), ?, ?, 'active')`,
-    [
-      id,
-      patientId,
-      drug.id,
-      drugName,
-      frequency,
-      frequencyCode,
-      definition.scheduleType,
-      JSON.stringify(definition.times),
-      definition.intervalHours,
-      definition.intervalStartTime,
-      JSON.stringify(definition.days),
-      definition.status,
-      req.user.sub,
-      dosageInstruction,
-      req.body?.start_date || new Date().toISOString().slice(0, 10),
-    ]
-  );
-  await recordAudit({
-    actor: { id: req.user.sub, role: 'caregiver' },
-    action: 'MEDICATION_CREATED',
-    entityType: 'medication',
-    entityId: id,
-    patientId,
-    metadata: { delegated: true },
-  });
-  await medicationChanged(patientId, 'MEDICATION_CREATED', id, drugName);
-  publishCaregiverEvent(req.user.sub, 'adherence-updated', { patient_code: req.params.code });
-  res
-    .status(201)
-    .json({ id, status: 'active', schedule_status: definition.status, rx_class: drug.rx_class });
-});
-
-router.post('/patients/:code/schedule/suggested', async (req, res) => {
-  const patientId = await medicationManagementPatient(req, res);
-  if (!patientId) return;
-  const result = await confirmForPatient(patientId, undefined, [], { actorId: req.user.sub });
-  if (result.error === 'invalid_layout') {
-    return res.status(409).json({ error: 'A medicine spacing rule could not be satisfied' });
-  }
-  if (result.error) return res.status(400).json({ error: result.error });
-  await recordAudit({
-    actor: { id: req.user.sub, role: 'caregiver' },
-    action: 'SCHEDULE_CONFIRMED',
-    entityType: 'schedule',
-    entityId: result.version,
-    patientId,
-  });
-  await scheduleChanged(patientId, result.version);
-  publishCaregiverEvent(req.user.sub, 'adherence-updated', { patient_code: req.params.code });
-  res.status(201).json({ message: 'Suggested schedule created', ...result });
-});
-
-async function medicationManagementPatient(req, res) {
-  const [[row]] = await pool.execute(
-    `SELECT p.id, cp.can_manage_medications
-     FROM caregiver_patients cp
-     JOIN patients p ON p.id = cp.patient_id
-     WHERE cp.caregiver_id = ? AND cp.status = 'active' AND p.patient_code = ?`,
-    [req.user.sub, String(req.params.code || '').toUpperCase()]
-  );
-  if (!row) {
-    res.status(404).json({ error: 'Patient not linked' });
-    return null;
-  }
-  if (!row.can_manage_medications) {
-    res.status(403).json({
-      error: 'Medication management is not authorized by the patient',
-      code: 'caregiver_medication_permission_required',
-    });
-    return null;
-  }
-  return row.id;
-}
-
-router.patch('/patients/:code/medications/:id', async (req, res) => {
-  const patientId = await medicationManagementPatient(req, res);
-  if (!patientId) return;
-  const parsed = validateMedicationPatch(req.body);
-  if (parsed.error) return res.status(parsed.error.status).json(parsed.error);
-  const result = await updateMedication(patientId, req.params.id, parsed);
-  if (result.error) return res.status(result.error.status).json(result.error);
-  await recordAudit({
-    actor: { id: req.user.sub, role: 'caregiver' },
-    action: 'MEDICATION_UPDATED',
-    entityType: 'medication',
-    entityId: req.params.id,
-    patientId,
-  });
-  await medicationChanged(
-    patientId,
-    'MEDICATION_UPDATED',
-    req.params.id,
-    result.medication?.drug_name_raw
-  );
-  publishCaregiverEvent(req.user.sub, 'adherence-updated', { patient_code: req.params.code });
-  res.json(result);
-});
-
-router.post('/patients/:code/medications/:id/stop', async (req, res) => {
-  const patientId = await medicationManagementPatient(req, res);
-  if (!patientId) return;
-  const result = await stopMedication(patientId, req.params.id, req.body?.expected_updated_at);
-  if (result.error) return res.status(result.error.status).json(result.error);
-  if (!result.already_stopped) {
-    await recordAudit({
-      actor: { id: req.user.sub, role: 'caregiver' },
-      action: 'MEDICATION_STOPPED',
-      entityType: 'medication',
-      entityId: req.params.id,
-      patientId,
-    });
-    await medicationChanged(
-      patientId,
-      'MEDICATION_STOPPED',
-      req.params.id,
-      result.medication?.drug_name_raw
-    );
-  }
-  publishCaregiverEvent(req.user.sub, 'adherence-updated', { patient_code: req.params.code });
-  res.json(result);
-});
-
 // Send a real reminder to the linked patient's notification inbox.
 router.post('/patients/:code/notify', async (req, res) => {
   const patientId = await linkedPatientId(req.user.sub, req.params.code);
@@ -393,13 +216,18 @@ router.post('/patients/:code/notify', async (req, res) => {
     [doseId, patientId]
   );
   if (!dose) return res.status(404).json({ error: 'Dose not found' });
-  if (dose.schedule_status !== 'APPROVED' || computeDoseStatus(dose) !== 'DUE') {
+  const doseStatus = computeDoseStatus(dose);
+  const reminderAllowed =
+    doseStatus === 'MISSED' || (doseStatus === 'DUE' && dose.schedule_status === 'APPROVED');
+  if (!reminderAllowed) {
     return res.status(409).json({
-      error: 'A reminder can only be sent while the dose is due',
+      error: 'A reminder can only be sent while the dose is due or missed',
       code: 'dose_not_due',
     });
   }
   const medicineName = dose.drug_name_raw;
+  const reminderMessage =
+    String(req.body?.voice_message || '').trim() || 'It is time to take your scheduled medicine.';
   const eventId = uuidv4();
   const result = await createPatientNotification({
     patientId,
@@ -407,6 +235,8 @@ router.post('/patients/:code/notify', async (req, res) => {
     medicineName,
     eventKey: `caregiver:${req.user.sub}:${patientId}:${doseId}:${Math.floor(Date.now() / 300000)}`,
     metadata: { schedule_id: doseId },
+    title: 'Caregiver medicine reminder',
+    message: reminderMessage,
   });
   let pushSent = false;
   if (result.created) {
@@ -414,9 +244,7 @@ router.post('/patients/:code/notify', async (req, res) => {
       reason: 'caregiver-reminder',
       reminder: {
         id: eventId,
-        message:
-          String(req.body?.voice_message || '').trim() ||
-          'It is time to take your scheduled medicine.',
+        message: reminderMessage,
         medicine: medicineName || 'scheduled medicine',
         caregiverName: 'your caregiver',
         createdAt: new Date().toISOString(),
@@ -445,7 +273,12 @@ router.post('/patients/:code/notify', async (req, res) => {
       }
     }
   }
-  res.status(201).json({ notified: result.created, push_sent: pushSent });
+  res.status(201).json({
+    notified: result.created,
+    reminders_enabled: result.remindersEnabled,
+    already_sent: result.duplicate,
+    push_sent: pushSent,
+  });
 });
 
 // ── GET /api/caregiver/patients/:code/orders ──────────────────────────────────
@@ -456,31 +289,11 @@ router.get('/patients/:code/orders', async (req, res) => {
   res.json(await listOrders(patientId));
 });
 
-router.post('/patients/:code/orders', async (req, res, next) => {
-  const patientId = await linkedPatientId(req.user.sub, req.params.code);
-  if (!patientId) return res.status(404).json({ error: 'Patient not linked' });
-  uploadPrescription(req, res, async (uploadError) => {
-    if (uploadError) return res.status(400).json({ error: uploadError.message });
-    try {
-      const result = await createCatalogOrder(
-        patientId,
-        { id: req.user.sub, role: 'caregiver' },
-        req.body || {},
-        req.file?.filename || null
-      );
-      if (result.error) return res.status(400).json({ error: result.error, code: result.error });
-      await orderChanged({
-        patientId,
-        kind: result.kind,
-        orderId: result.id,
-        status: result.status,
-        created: true,
-      });
-      return res.status(201).json(result);
-    } catch (error) {
-      return next(error);
-    }
-  });
+// Caregivers can track patient orders, but cannot place them.
+router.post('/patients/:code/orders', (_req, res) => {
+  res
+    .status(403)
+    .json({ error: 'Caregiver access is tracking-only. Orders must be placed by the patient.' });
 });
 
 // ── POST /api/caregiver/patients/:code/refills ────────────────────────────────

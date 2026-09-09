@@ -408,8 +408,7 @@ router.delete('/invites/:id', async (req, res) => {
 
 router.get('/caregivers', async (req, res) => {
   const [rows] = await pool.execute(
-    `SELECT cp.id, u.email, cp.relationship, cp.linked_at, cp.status,
-            cp.can_manage_medications
+    `SELECT cp.id, u.email, cp.relationship, cp.linked_at, cp.status
      FROM caregiver_patients cp
      JOIN users u ON u.id = cp.caregiver_id
      WHERE cp.patient_id = ? AND cp.status = 'active'
@@ -481,37 +480,6 @@ router.post('/caregiver-requests/:linkId/decision', async (req, res) => {
   } finally {
     conn.release();
   }
-});
-
-router.patch('/caregivers/:linkId/permissions', async (req, res) => {
-  if (typeof req.body?.can_manage_medications !== 'boolean') {
-    return res.status(400).json({ error: 'can_manage_medications must be true or false' });
-  }
-  const [result] = await pool.execute(
-    `UPDATE caregiver_patients
-     SET can_manage_medications = ?
-     WHERE id = ? AND patient_id = ? AND status = 'active'`,
-    [req.body.can_manage_medications ? 1 : 0, req.params.linkId, req.user.sub]
-  );
-  if (!result.affectedRows) return res.status(404).json({ error: 'Caregiver link not found' });
-  const [[link]] = await pool.execute(
-    'SELECT caregiver_id FROM caregiver_patients WHERE id=? AND patient_id=?',
-    [req.params.linkId, req.user.sub]
-  );
-  await recordAudit({
-    actor: { id: req.user.sub, role: 'patient' },
-    action: 'CAREGIVER_PERMISSION_UPDATED',
-    entityType: 'caregiver_link',
-    entityId: req.params.linkId,
-    patientId: req.user.sub,
-    metadata: { can_manage_medications: req.body.can_manage_medications },
-  });
-  if (link)
-    publishUser(link.caregiver_id, 'CAREGIVER_LINK_UPDATED', {
-      action: 'permissions',
-      can_manage_medications: req.body.can_manage_medications,
-    });
-  res.json({ can_manage_medications: req.body.can_manage_medications });
 });
 
 router.delete('/caregivers/:linkId', async (req, res) => {
@@ -784,6 +752,12 @@ router.get('/medications', async (req, res) => {
             dr.rx_class, dr.meal_instruction, dr.administration_instruction,
             dr.guidance_do, dr.guidance_dont, dr.evidence_source_url,
             pp.status AS prescription_status, pp.decision_reason AS prescription_reason,
+            pp.prescribed_quantity,
+            COALESCE((SELECT SUM(rr.quantity) FROM refill_requests rr
+              WHERE rr.medication_id=m.id AND rr.status <> 'cancelled'),0)
+              + COALESCE((SELECT SUM(drq.quantity) FROM delivery_requests drq
+              WHERE drq.medication_id=m.id AND drq.status <> 'cancelled'),0)
+              AS purchased_quantity,
             pp.review_stage AS prescription_review_stage
      FROM medications m
      LEFT JOIN drug_reference dr ON dr.id = m.drug_id
@@ -857,6 +831,7 @@ router.post(
     const result = await attachPhoto(req.user.sub, req.params.id, req.file.filename, {
       text: req.body?.ocr_text,
       confidence: req.body?.ocr_confidence,
+      prescribedQuantity: req.body?.prescribed_quantity,
     });
     if (result.error === 'not_found')
       return res.status(404).json({ error: 'Medication not found' });
@@ -1195,6 +1170,12 @@ router.post('/refills', async (req, res) => {
   }
   if (result.error === 'medication_not_found') {
     return res.status(404).json({ error: 'Medication not found' });
+  }
+  if (result.error === 'invalid_quantity') {
+    return res.status(400).json({ error: 'Enter a valid requested quantity' });
+  }
+  if (result.error === 'quantity_exceeds_prescription') {
+    return res.status(409).json({ error: 'Quantity exceeds the remaining prescription balance' });
   }
   if (result.error === 'invalid_payment_method')
     return res.status(400).json({ error: 'Invalid payment method' });

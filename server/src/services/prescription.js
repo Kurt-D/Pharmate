@@ -53,15 +53,18 @@ export async function attachPhoto(patientId, medicationId, storedFilename, ocr =
     await conn.beginTransaction();
     await conn.execute(
       `INSERT INTO prescription_photos
-         (id, medication_id, redacted_path, ocr_text, ocr_confidence,
+         (id, medication_id, redacted_path, ocr_text, ocr_confidence, prescribed_quantity,
           schedule_draft_json, review_stage, status)
-       VALUES (?, ?, ?, ?, ?, ?, 'prescription', 'pending')`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'prescription', 'pending')`,
       [
         photoId,
         medicationId,
         storedFilename,
         ocr.text || null,
         Number.isFinite(Number(ocr.confidence)) ? Number(ocr.confidence) : null,
+        Number.isInteger(Number(ocr.prescribedQuantity)) && Number(ocr.prescribedQuantity) > 0
+          ? Number(ocr.prescribedQuantity)
+          : null,
         JSON.stringify(draft),
       ]
     );
@@ -86,7 +89,8 @@ export async function pendingValidations(pharmacistId) {
               THEN 'claimed_by_you' ELSE 'unclaimed' END AS claim_status,
             CASE WHEN pp.claimed_by=? AND pp.claim_expires_at>NOW(3)
               THEN pp.claim_expires_at ELSE NULL END AS claim_expires_at,
-            pp.review_stage, pp.ocr_text, pp.ocr_confidence, pp.schedule_draft_json,
+            pp.review_stage, pp.ocr_text, pp.ocr_confidence, pp.prescribed_quantity,
+            pp.schedule_draft_json,
             m.drug_name_raw, m.frequency, m.dosage_instruction, m.schedule_type,
             m.schedule_times, m.interval_hours, m.interval_start_time, m.schedule_days,
             m.schedule_status, m.start_date, m.end_date, p.patient_code

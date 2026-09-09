@@ -1,0 +1,24 @@
+.cg-portal .cg-patient-info-screen { display:grid; gap:20px; padding:22px 16px 28px; color:#193754; }
+.cg-patient-info-screen * { box-sizing:border-box; }
+.cg-portal .cg-patient-info-screen > section { border:1px solid #dce7f4; border-radius:22px; padding:20px; background:white; box-shadow:0 5px 20px #254f790a; min-width:0; }
+.cg-portal .cg-patient-info-screen h1 { font-size:25px; line-height:1.35; }
+.cg-portal .cg-patient-info-screen h2 { font-size:19px; line-height:1.45; }
+.cg-portal .cg-patient-info-screen p { font-size:15px; line-height:1.7; color:#536d89; }
+.cg-portal .cg-patient-info-screen button { appearance:none; font-family:inherit; cursor:pointer; min-height:48px; line-height:1.5; }
+.cg-portal .cg-patient-info-screen button:focus-visible,.cg-portal .cg-patient-info-screen textarea:focus-visible { outline:3px solid #86b7fa; outline-offset:3px; }
+.cg-portal .cg-patient-info-screen .cg-observation-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; margin-top:20px; }
+.cg-portal .cg-observation-grid button { position:relative; display:flex; align-items:center; flex-wrap:wrap; gap:7px; text-align:left; padding:12px; border:1px solid #ccdcef; border-radius:14px; background:white; color:#385675; font-size:14px; min-height:70px; }
+.cg-portal .cg-observation-grid button svg { flex-shrink:0; }
+.cg-portal .cg-observation-grid button[aria-pressed='true'] { background:#edf5ff; border-color:#2972dc; color:#175bb8; box-shadow:inset 0 0 0 1px #2972dc; }
+.cg-portal .cg-patient-info-screen label { margin-top:22px; font-size:16px; }
+.cg-portal .cg-patient-info-screen textarea { width:100%; min-height:135px; padding:14px; border:1px solid #c8d9ed; border-radius:14px; font-family:inherit; font-size:16px; line-height:1.7; background:#fcfdff; }
+.cg-portal .cg-patient-info-screen textarea::placeholder { color:#6a8099; opacity:1; }
+.cg-portal .cg-patient-info-screen button:disabled { background:#e6edf6; color:#526b87; border:1px solid #d5e0ef; cursor:not-allowed; box-shadow:none; }
+.cg-portal .cg-patient-info-screen .cg-note-help { font-size:13px; color:#5a718d; }
+.cg-portal .cg-patient-info-screen .cg-note-success:not(:empty) { background:#edf8f1; color:#286841; padding:10px; border-radius:10px; }
+.cg-portal .cg-patient-info-screen .cg-note-error { background:#fff2f4; color:#a13e4d; padding:10px; border-radius:10px; }
+.cg-portal .cg-patient-info-screen .cg-note-success:empty { display:none; }
+.cg-portal .cg-patient-info-screen time { font-size:13px; line-height:1.7; }
+.cg-portal .cg-patient-info-screen article p { overflow-wrap:anywhere; }
+.cg-portal .cg-patient-info-screen > section:last-child { background:transparent; border:0; padding:0; box-shadow:none; }
+@media(max-width:350px) { .cg-portal .cg-patient-info-screen { padding-inline:12px; }.cg-portal .cg-patient-info-screen > section { padding:16px; }.cg-portal .cg-observation-grid { gap:8px; } }

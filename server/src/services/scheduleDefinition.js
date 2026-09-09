@@ -32,6 +32,8 @@ export function frequencyRule(value, intervalHours = null) {
   if (type === 'ONCE_DAILY') return { code: 'QD', frequencyType: type, count: 1 };
   if (type === 'TWICE_DAILY') return { code: 'BID', frequencyType: type, count: 2 };
   if (type === 'THREE_TIMES_DAILY') return { code: 'TID', frequencyType: type, count: 3 };
+  if (type === 'FOUR_TIMES_DAILY' || type === 'FOUR_TIMES_A_DAY')
+    return { code: 'QID', ...FREQUENCY_TYPES.QID };
   if (type === 'EVERY_N_HOURS') {
     const interval = Number(intervalHours);
     return {
@@ -68,21 +70,27 @@ export function validateMedicationSchedule({
   scheduleTimes = [],
   startDate,
   endDate,
+  scheduleMode,
 } = {}) {
-  const rule = frequencyRule(frequencyType || frequencyCode, intervalHours);
-  if (!rule)
+  // SPECIFIC_TIMES describes timing, not dose count. Preserve the explicit code.
+  const rule = frequencyRule(
+    frequencyType === 'SPECIFIC_TIMES' ? frequencyCode : frequencyType || frequencyCode,
+    intervalHours
+  );
+  if (!rule && scheduleMode !== 'MANUAL')
     return {
       valid: false,
       code: 'UNSUPPORTED_FREQUENCY',
-      message: 'Choose a supported medication frequency.',
+      message:
+        'We could not recognize the saved frequency. Ask your pharmacist to review the directions before saving reminders.',
     };
   if (!startDate || (endDate && endDate < startDate))
     return {
       valid: false,
       code: 'INVALID_DATE_RANGE',
-      message: 'The medication date range is invalid.',
+      message: 'Check the start and end dates. The end date must not be before the start date.',
     };
-  if (rule.frequencyType === 'AS_NEEDED')
+  if (rule?.frequencyType === 'AS_NEEDED')
     return {
       valid: scheduleTimes.length === 0,
       code: scheduleTimes.length ? 'AS_NEEDED_HAS_FIXED_TIMES' : null,
@@ -95,8 +103,19 @@ export function validateMedicationSchedule({
     return {
       valid: false,
       code: 'INVALID_OR_DUPLICATE_TIME',
-      message: 'Reminder times must be valid and unique.',
+      message:
+        'Check your reminder times. Enter a valid time for each reminder and remove repeated times.',
     };
+  // Manual reminders are patient-selected times, not a generated dose count.
+  // Final save still enforces patient/prescription and dose-limit safeguards.
+  if (scheduleMode === 'MANUAL')
+    return times.length
+      ? { valid: true, code: null, message: null }
+      : {
+          valid: false,
+          code: 'INVALID_OR_DUPLICATE_TIME',
+          message: 'Choose at least one reminder time.',
+        };
   if (!Number.isInteger(rule.count))
     return {
       valid: false,

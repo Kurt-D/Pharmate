@@ -74,6 +74,14 @@ export function extractMedicineFields(text) {
   };
 }
 
+export function extractPrescriptionQuantity(text) {
+  const clean = String(text || '').replaceAll('\u00a0', ' ');
+  const explicit = clean.match(/(?:dispense|quantity|qty\.?|total)\s*(?::|#|-)?\s*(\d{1,4})\b/i);
+  if (explicit) return Number(explicit[1]);
+  const unitCount = clean.match(/\b(\d{1,4})\s*(?:tablets?|capsules?|caps?|tabs?)\b/i);
+  return unitCount ? Number(unitCount[1]) : null;
+}
+
 export function classifyImageQuality({ width, height, brightness, contrast, sharpness }) {
   if (Math.min(Number(width) || 0, Number(height) || 0) < 480) {
     return {

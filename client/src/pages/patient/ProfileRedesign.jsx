@@ -6,6 +6,79 @@ import { useLanguage } from '../../context/LanguageContext.jsx';
 import '../../styles/profile-page.css';
 import '../../styles/lively-blue.css';
 
+const EMPTY_SAFETY_PROFILE = {
+  date_of_birth: '',
+  weight_kg: '',
+  allergies: '',
+  conditions: '',
+  kidney_status: 'UNANSWERED',
+  liver_status: 'UNANSWERED',
+  pregnancy_status: 'UNANSWERED',
+  current_medicines: '',
+  caregiver_alerts: false,
+};
+
+const EMPTY_ANCHORS = {
+  wake_anchor: '',
+  breakfast_anchor: '',
+  lunch_anchor: '',
+  dinner_anchor: '',
+  sleep_anchor: '',
+};
+
+const GUIDED_HEALTH_OPTIONS = {
+  allergies: [
+    'No known medicine allergies',
+    'Penicillin or amoxicillin',
+    'Aspirin or anti-inflammatory medicines',
+    'Sulfa medicines',
+    'I am not sure',
+    'Something else — ask my caregiver or pharmacist',
+  ],
+  conditions: [
+    'No known health conditions',
+    'High blood pressure',
+    'Diabetes',
+    'Asthma or breathing problems',
+    'Heart condition',
+    'I am not sure',
+    'Something else — ask my caregiver or health professional',
+  ],
+  current_medicines: [
+    'I do not currently take medicines or supplements',
+    'Blood pressure medicine',
+    'Diabetes medicine',
+    'Pain or fever medicine',
+    'Vitamins or supplements',
+    'I am not sure — check my medicine packaging',
+    'Something else — ask my caregiver or pharmacist',
+  ],
+};
+
+const EXCLUSIVE_GUIDED_ANSWERS = new Set([
+  'No known medicine allergies',
+  'No known health conditions',
+  'I do not currently take medicines or supplements',
+  'I am not sure',
+  'I am not sure — check my medicine packaging',
+]);
+
+function readableStatus(value) {
+  if (!value || value === 'UNANSWERED') return 'Not provided';
+  return value
+    .toLowerCase()
+    .replaceAll('_', ' ')
+    .replace(/^./, (letter) => letter.toUpperCase());
+}
+
+function readableTime(value) {
+  if (!value) return 'Not provided';
+  const [hours, minutes] = String(value).slice(0, 5).split(':').map(Number);
+  if (!Number.isInteger(hours) || !Number.isInteger(minutes)) return String(value);
+  const suffix = hours >= 12 ? 'PM' : 'AM';
+  return `${hours % 12 || 12}:${String(minutes).padStart(2, '0')} ${suffix}`;
+}
+
 function Icon({ name, size = 22 }) {
   const paths = {
     calendar: (
@@ -146,6 +219,11 @@ export default function ProfileRedesign() {
     created_at: null,
   });
   const [draft, setDraft] = useState({ full_name: '', medical_condition: '' });
+  const [safetyProfile, setSafetyProfile] = useState(EMPTY_SAFETY_PROFILE);
+  const [anchors, setAnchors] = useState(EMPTY_ANCHORS);
+  const [healthDraft, setHealthDraft] = useState(EMPTY_SAFETY_PROFILE);
+  const [anchorsDraft, setAnchorsDraft] = useState(EMPTY_ANCHORS);
+  const [editingHealth, setEditingHealth] = useState('');
   const [preferences, setPreferences] = useState(null);
   const [caregivers, setCaregivers] = useState([]);
   const [caregiverRequests, setCaregiverRequests] = useState([]);
@@ -159,13 +237,21 @@ export default function ProfileRedesign() {
   const [errorTitle, setErrorTitle] = useState('');
   const [busy, setBusy] = useState(false);
   const load = useCallback(async () => {
-    const [profileResult, preferencesResult, caregiversResult, requestsResult] =
-      await Promise.allSettled([
-        api('/api/patient/profile'),
-        api('/api/patient/preferences'),
-        api('/api/patient/caregivers'),
-        api('/api/patient/caregiver-requests'),
-      ]);
+    const [
+      profileResult,
+      preferencesResult,
+      caregiversResult,
+      requestsResult,
+      safetyResult,
+      anchorsResult,
+    ] = await Promise.allSettled([
+      api('/api/patient/profile'),
+      api('/api/patient/preferences'),
+      api('/api/patient/caregivers'),
+      api('/api/patient/caregiver-requests'),
+      api('/api/patient/safety-profile'),
+      api('/api/patient/anchors'),
+    ]);
 
     if (profileResult.status === 'rejected') {
       setErrorTitle(
@@ -192,6 +278,16 @@ export default function ProfileRedesign() {
     }
     if (requestsResult.status === 'fulfilled') {
       setCaregiverRequests(requestsResult.value.data);
+    }
+    if (safetyResult.status === 'fulfilled') {
+      const nextSafety = { ...EMPTY_SAFETY_PROFILE, ...safetyResult.value.data };
+      setSafetyProfile(nextSafety);
+      setHealthDraft(nextSafety);
+    }
+    if (anchorsResult.status === 'fulfilled') {
+      const nextAnchors = { ...EMPTY_ANCHORS, ...anchorsResult.value.data };
+      setAnchors(nextAnchors);
+      setAnchorsDraft(nextAnchors);
     }
   }, [tr]);
   useEffect(() => {
@@ -223,30 +319,6 @@ export default function ProfileRedesign() {
       setMessage('A new single-use caregiver code was generated.');
     } catch (e) {
       setErrorTitle(tr('Unable to generate a caregiver code', 'Hindi makagawa ng caregiver code'));
-      setError(e.message);
-    } finally {
-      setBusy(false);
-    }
-  }
-  async function setMedicationPermission(linkId, allowed) {
-    setBusy(true);
-    setError('');
-    try {
-      await api(`/api/patient/caregivers/${linkId}/permissions`, {
-        method: 'PATCH',
-        body: { can_manage_medications: allowed },
-      });
-      setCaregivers((current) =>
-        current.map((item) =>
-          item.id === linkId ? { ...item, can_manage_medications: allowed ? 1 : 0 } : item
-        )
-      );
-      setMessage(
-        allowed
-          ? 'This caregiver can now edit your OTC medicines and schedules.'
-          : 'Medication editing access was removed.'
-      );
-    } catch (e) {
       setError(e.message);
     } finally {
       setBusy(false);
@@ -310,6 +382,57 @@ export default function ProfileRedesign() {
       setBusy(false);
     }
   }
+  function startHealthEdit(field) {
+    setHealthDraft({ ...safetyProfile });
+    setAnchorsDraft({ ...anchors });
+    setEditingHealth(field);
+    setError('');
+    setMessage('');
+  }
+  function toggleGuidedAnswer(field, answer) {
+    setHealthDraft((current) => {
+      const selected = String(current[field] || '')
+        .split(', ')
+        .filter(Boolean);
+      const guidedOptions = GUIDED_HEALTH_OPTIONS[field];
+      if (selected.includes(answer)) {
+        return { ...current, [field]: selected.filter((item) => item !== answer).join(', ') };
+      }
+      if (EXCLUSIVE_GUIDED_ANSWERS.has(answer)) return { ...current, [field]: answer };
+      return {
+        ...current,
+        [field]: [
+          ...selected.filter(
+            (item) => guidedOptions.includes(item) && !EXCLUSIVE_GUIDED_ANSWERS.has(item)
+          ),
+          answer,
+        ].join(', '),
+      };
+    });
+  }
+  async function saveHealthDetail(field) {
+    setBusy(true);
+    setError('');
+    try {
+      if (field === 'routine') {
+        await api('/api/patient/anchors', { method: 'PUT', body: anchorsDraft });
+        setAnchors({ ...anchorsDraft });
+      } else {
+        const response = await api('/api/patient/safety-profile', {
+          method: 'PUT',
+          body: { [field]: healthDraft[field] },
+        });
+        setSafetyProfile((current) => ({ ...current, ...response.data }));
+      }
+      setEditingHealth('');
+      setMessage('Health and scheduling profile updated.');
+    } catch (e) {
+      setErrorTitle('Unable to update your health profile');
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  }
   async function updatePreference(key, value) {
     try {
       const response = await api('/api/patient/preferences', {
@@ -337,6 +460,43 @@ export default function ProfileRedesign() {
     ? Math.max(0, Math.ceil((new Date(invite.expires_at).getTime() - inviteClock) / 1000))
     : 0;
   const inviteTime = `${Math.floor(inviteSeconds / 60)}:${String(inviteSeconds % 60).padStart(2, '0')}`;
+  const healthDetails = [
+    ['Date of birth', safetyProfile.date_of_birth || 'Not provided', 'date_of_birth', 'date'],
+    [
+      'Current weight',
+      safetyProfile.weight_kg ? `${safetyProfile.weight_kg} kg` : 'Not provided',
+      'weight_kg',
+      'number',
+    ],
+    ['Medicine allergies', safetyProfile.allergies || 'Not provided', 'allergies', 'guided'],
+    ['Health conditions', safetyProfile.conditions || 'Not provided', 'conditions', 'guided'],
+    ['Kidney status', readableStatus(safetyProfile.kidney_status), 'kidney_status', 'status'],
+    ['Liver status', readableStatus(safetyProfile.liver_status), 'liver_status', 'status'],
+    [
+      'Pregnancy or breastfeeding',
+      readableStatus(safetyProfile.pregnancy_status),
+      'pregnancy_status',
+      'pregnancy',
+    ],
+    [
+      'Current medicines and supplements',
+      safetyProfile.current_medicines || 'Not provided',
+      'current_medicines',
+      'guided',
+    ],
+    [
+      'Daily routine',
+      `Wake ${readableTime(anchors.wake_anchor)} · Breakfast ${readableTime(anchors.breakfast_anchor)} · Lunch ${readableTime(anchors.lunch_anchor)} · Dinner ${readableTime(anchors.dinner_anchor)} · Sleep ${readableTime(anchors.sleep_anchor)}`,
+      'routine',
+      'routine',
+    ],
+    [
+      'Caregiver safety alerts',
+      safetyProfile.caregiver_alerts ? 'Enabled' : 'Not enabled',
+      'caregiver_alerts',
+      'boolean',
+    ],
+  ];
   return (
     <main className="pm-profile-page">
       <header>
@@ -430,6 +590,192 @@ export default function ProfileRedesign() {
                     tr('No medical condition added', 'Walang medical condition na inilagay')}
                 </strong>
               </p>
+            </div>
+            <div className="pm-profile-health-heading">
+              <span>
+                <Icon name="shield" size={20} />
+              </span>
+              <p>
+                <small>{tr('Editable health information', 'Nae-edit na health information')}</small>
+                <strong>
+                  {tr('Health & Scheduling Profile', 'Profile sa Kalusugan at Iskedyul')}
+                </strong>
+              </p>
+            </div>
+            <div className="pm-profile-health-details">
+              {healthDetails.map(([label, value, field, type]) => (
+                <div className={editingHealth === field ? 'is-editing' : ''} key={field}>
+                  <p>
+                    <small>{label}</small>
+                    {editingHealth !== field && <strong>{value}</strong>}
+                  </p>
+                  {editingHealth !== field && (
+                    <button
+                      aria-label={`Edit ${label}`}
+                      onClick={() => startHealthEdit(field)}
+                      type="button"
+                    >
+                      <Icon name="edit" size={17} />
+                    </button>
+                  )}
+                  {editingHealth === field && (
+                    <div className="pm-profile-inline-editor">
+                      {type === 'date' && (
+                        <label className="pm-profile-guided-field">
+                          <span>Choose the date from the calendar</span>
+                          <input
+                            type="date"
+                            value={healthDraft[field]}
+                            onChange={(event) =>
+                              setHealthDraft((current) => ({
+                                ...current,
+                                [field]: event.target.value,
+                              }))
+                            }
+                          />
+                        </label>
+                      )}
+                      {type === 'number' && (
+                        <label className="pm-profile-guided-field">
+                          <span>Choose your nearest weight</span>
+                          <select
+                            value={healthDraft[field]}
+                            onChange={(event) =>
+                              setHealthDraft((current) => ({
+                                ...current,
+                                [field]: event.target.value,
+                              }))
+                            }
+                          >
+                            <option value="">I am not sure</option>
+                            {Array.from({ length: 249 }, (_, index) => index + 2).map((weight) => (
+                              <option key={weight} value={weight}>
+                                {weight} kg
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      )}
+                      {type === 'guided' && (
+                        <div className="pm-profile-guided-choices">
+                          <p>Choose every option that applies to you:</p>
+                          {GUIDED_HEALTH_OPTIONS[field].map((answer) => {
+                            const selected = String(healthDraft[field] || '')
+                              .split(', ')
+                              .includes(answer);
+                            return (
+                              <button
+                                aria-pressed={selected}
+                                className={selected ? 'is-selected' : ''}
+                                key={answer}
+                                onClick={() => toggleGuidedAnswer(field, answer)}
+                                type="button"
+                              >
+                                {selected && <Icon name="check" size={17} />}
+                                {answer}
+                              </button>
+                            );
+                          })}
+                          {healthDraft[field] &&
+                            !String(healthDraft[field])
+                              .split(', ')
+                              .every((answer) => GUIDED_HEALTH_OPTIONS[field].includes(answer)) && (
+                              <small className="pm-profile-existing-answer">
+                                Your previous answer is kept until you choose a guided option:{' '}
+                                <strong>{healthDraft[field]}</strong>
+                              </small>
+                            )}
+                        </div>
+                      )}
+                      {type === 'status' && (
+                        <select
+                          value={healthDraft[field]}
+                          onChange={(event) =>
+                            setHealthDraft((current) => ({
+                              ...current,
+                              [field]: event.target.value,
+                            }))
+                          }
+                        >
+                          <option value="UNANSWERED">Not provided</option>
+                          <option value="YES">Yes</option>
+                          <option value="NO">No</option>
+                          <option value="UNSURE">Unsure</option>
+                        </select>
+                      )}
+                      {type === 'pregnancy' && (
+                        <select
+                          value={healthDraft[field]}
+                          onChange={(event) =>
+                            setHealthDraft((current) => ({
+                              ...current,
+                              [field]: event.target.value,
+                            }))
+                          }
+                        >
+                          <option value="UNANSWERED">Not provided</option>
+                          <option value="PREGNANT">Pregnant</option>
+                          <option value="BREASTFEEDING">Breastfeeding</option>
+                          <option value="NEITHER">Neither</option>
+                          <option value="NOT_APPLICABLE">Not applicable</option>
+                          <option value="UNSURE">Unsure</option>
+                        </select>
+                      )}
+                      {type === 'boolean' && (
+                        <select
+                          value={healthDraft[field] ? 'true' : 'false'}
+                          onChange={(event) =>
+                            setHealthDraft((current) => ({
+                              ...current,
+                              [field]: event.target.value === 'true',
+                            }))
+                          }
+                        >
+                          <option value="true">Enabled</option>
+                          <option value="false">Not enabled</option>
+                        </select>
+                      )}
+                      {type === 'routine' && (
+                        <div className="pm-profile-inline-routine">
+                          {Object.entries({
+                            wake_anchor: 'Wake',
+                            breakfast_anchor: 'Breakfast',
+                            lunch_anchor: 'Lunch',
+                            dinner_anchor: 'Dinner',
+                            sleep_anchor: 'Sleep',
+                          }).map(([anchor, anchorLabel]) => (
+                            <label key={anchor}>
+                              <span>{anchorLabel}</span>
+                              <input
+                                type="time"
+                                value={String(anchorsDraft[anchor] || '').slice(0, 5)}
+                                onChange={(event) =>
+                                  setAnchorsDraft((current) => ({
+                                    ...current,
+                                    [anchor]: event.target.value,
+                                  }))
+                                }
+                              />
+                            </label>
+                          ))}
+                        </div>
+                      )}
+                      <div className="pm-profile-inline-actions">
+                        <button disabled={busy} onClick={() => setEditingHealth('')} type="button">
+                          Cancel
+                        </button>
+                        <button
+                          disabled={busy}
+                          onClick={() => saveHealthDetail(field)}
+                          type="button"
+                        >
+                          {busy ? 'Saving…' : 'Save'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
             </div>
             <div>
               <span>
@@ -561,17 +907,6 @@ export default function ProfileRedesign() {
                   <b>{item.email}</b>
                   <small>{item.relationship || tr('Caregiver', 'Caregiver')}</small>
                 </span>
-                <button
-                  className={item.can_manage_medications ? 'is-authorized' : ''}
-                  disabled={busy}
-                  onClick={() => setMedicationPermission(item.id, !item.can_manage_medications)}
-                  type="button"
-                >
-                  <Icon name={item.can_manage_medications ? 'check' : 'lock'} size={16} />
-                  {item.can_manage_medications
-                    ? tr('Medication access on', 'May access sa gamot')
-                    : tr('Allow medication edits', 'Payagan mag-edit ng gamot')}
-                </button>
                 <button disabled={busy} onClick={() => revokeCaregiver(item.id)} type="button">
                   <Icon name="lock" size={16} /> {tr('Revoke access', 'Bawiin ang access')}
                 </button>
@@ -581,23 +916,6 @@ export default function ProfileRedesign() {
         )}
       </section>
       <section className="pm-profile-menu">
-        <button onClick={() => navigate('/patient/onboarding')}>
-          <i>
-            <Icon name="shield" />
-          </i>
-          <span>
-            <strong>{tr('Health & Scheduling Profile', 'Profile sa Kalusugan at Iskedyul')}</strong>
-            <small>
-              {tr(
-                'Update safety answers, medicines, and daily routine',
-                'I-update ang safety answers, mga gamot, at araw-araw na routine'
-              )}
-            </small>
-          </span>
-          <b>
-            <Icon name="chevron" size={20} />
-          </b>
-        </button>
         <button onClick={() => setPanel(panel === 'edit' ? '' : 'edit')}>
           <i>
             <Icon name="edit" />
@@ -839,8 +1157,8 @@ export default function ProfileRedesign() {
             <p id="caregiver-confirm-description">
               {caregiverDecision.approve
                 ? tr(
-                    `${caregiverDecision.request.email} will be able to view the health information you share. Medication editing stays off unless you enable it separately.`,
-                    `Makikita ni ${caregiverDecision.request.email} ang health information na ibabahagi mo. Mananatiling naka-off ang medication editing maliban kung hiwalay mo itong pahihintulutan.`
+                    `${caregiverDecision.request.email} will be able to view your shared medicine schedule and send reminders for due doses.`,
+                    `Makikita ni ${caregiverDecision.request.email} ang ibinahagi mong iskedyul ng gamot at makakapagpadala ng paalala para sa dosis na oras nang inumin.`
                   )
                 : tr(
                     `${caregiverDecision.request.email} will not receive access to your health information.`,
