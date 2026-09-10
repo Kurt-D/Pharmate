@@ -96,21 +96,29 @@ describe('Adherence computation (D-6)', () => {
 
 describe('Caregiver missed-dose alert (UC-08) — no PII', () => {
   test('a missed dose alerts the linked caregiver by patient_code only', async () => {
-    // Link caregiver ↔ patient directly.
+    // Link caregiver ↔ patient directly. This test bypasses the patient-approval
+    // UI, so explicitly establish an active link before checking the alert.
     await pool.execute(
-      `INSERT IGNORE INTO caregiver_patients (id, caregiver_id, patient_id, status)
+      `INSERT INTO caregiver_patients (id, caregiver_id, patient_id, status)
        VALUES (UUID(), ?, ?, 'active')`,
       [caregiverId, patientId]
     );
-    // Re-confirm to get fresh 'scheduled' rows, then sweep them to missed.
-    await request(app)
-      .post('/api/patient/schedule/confirm')
-      .set({ Authorization: `Bearer ${patientToken}` });
-    // Sweep 3 days out so it clears every generated dose regardless of the UTC
-    // time-of-day (manilaToday() can roll the plan to "tomorrow", putting doses
-    // hours in the future — a 3h sweep would miss them and raise no alert).
-    const when = new Date(Date.now() + 3 * 24 * 3600 * 1000);
-    await sweepMissed(when);
+    // Create one approved, overdue reminder. This isolates UC-08 from the
+    // separate schedule-generation tests and proves that a missed dose reaches
+    // an active linked caregiver.
+    const [[medicine]] = await pool.execute(
+      `SELECT id FROM medications WHERE patient_id=? AND status='active'
+       ORDER BY created_at DESC LIMIT 1`,
+      [patientId]
+    );
+    await pool.execute(
+      `INSERT INTO medication_schedules
+         (id, medication_id, patient_id, scheduled_time, generated_reason,
+          is_confirmed, schedule_version, status)
+       VALUES (UUID(), ?, ?, DATE_SUB(NOW(3), INTERVAL 1 HOUR), 'UC-08 test reminder', 1, 99, 'scheduled')`,
+      [medicine.id, patientId]
+    );
+    await sweepMissed(new Date());
 
     const res = await request(app)
       .get('/api/caregiver/alerts')

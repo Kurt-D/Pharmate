@@ -162,10 +162,9 @@ async function invalidateActiveReminders(conn, row) {
   const [result] = await conn.execute(
     `DELETE ms FROM medication_schedules ms
      WHERE ms.medication_id = ? AND ms.patient_id = ?
-       AND ms.scheduled_time > ?
        AND ms.status IN ('scheduled','snoozed')
        AND NOT EXISTS (SELECT 1 FROM dose_logs dl WHERE dl.schedule_id = ms.id)`,
-    [row.id, row.patient_id, new Date()]
+    [row.id, row.patient_id]
   );
   return result.affectedRows;
 }
