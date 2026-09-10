@@ -215,7 +215,7 @@ describe('stop and history', () => {
     await pool.execute(
       `INSERT INTO medication_schedules
        (id,medication_id,patient_id,scheduled_time,generated_reason,is_confirmed,status)
-       VALUES (?, ?, ?, NOW(3), 'active reminder', 1, 'scheduled'),
+       VALUES (?, ?, ?, DATE_ADD(NOW(3), INTERVAL 1 HOUR), 'active reminder', 1, 'scheduled'),
               (?, ?, ?, DATE_SUB(NOW(3), INTERVAL 1 HOUR), 'taken history', 1, 'taken'),
               (?, ?, ?, DATE_SUB(NOW(3), INTERVAL 2 HOUR), 'missed history', 1, 'missed')`,
       [scheduledId, med.id, patientId, takenId, med.id, patientId, missedId, med.id, patientId]

@@ -98,7 +98,8 @@ describe('Caregiver missed-dose alert (UC-08) — no PII', () => {
   test('a missed dose alerts the linked caregiver by patient_code only', async () => {
     // Link caregiver ↔ patient directly.
     await pool.execute(
-      `INSERT IGNORE INTO caregiver_patients (id, caregiver_id, patient_id) VALUES (UUID(), ?, ?)`,
+      `INSERT IGNORE INTO caregiver_patients (id, caregiver_id, patient_id, status)
+       VALUES (UUID(), ?, ?, 'active')`,
       [caregiverId, patientId]
     );
     // Re-confirm to get fresh 'scheduled' rows, then sweep them to missed.
