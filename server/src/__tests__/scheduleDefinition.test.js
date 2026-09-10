@@ -32,8 +32,8 @@ describe('structured medication schedule rules', () => {
   });
   test.each([
     ['QD', '08:00', ['08:00']],
-    ['BID', '08:00', ['08:00', '20:00']],
-    ['TID', '06:00', ['06:00', '14:00', '22:00']],
+    ['BID', '08:00', []],
+    ['TID', '06:00', []],
     ['Q6H', '06:00', ['06:00', '12:00', '18:00', '00:00']],
   ])('%s produces deterministic slots', (frequency, start, expected) => {
     expect(suggestedTimes(frequency, start).map((slot) => slot.time)).toEqual(expected);

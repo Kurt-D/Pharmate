@@ -2,6 +2,7 @@ import { Router } from 'express';
 import path from 'node:path';
 import { v4 as uuidv4 } from 'uuid';
 import { pool } from '../db/connection.js';
+import { getSharedScheduleReview } from '../services/medicationSchedule.js';
 import { requireAuth } from '../middleware/auth.js';
 import { requireRole } from '../middleware/role.js';
 import { canonicalName, searchDrugs } from '../services/formulary.js';
@@ -222,6 +223,16 @@ router.post('/followups/:id/resolve', async (req, res) => {
 // Roster for the pharmacist console (PART 3). patient_code only, with columns:
 // priority badge (boolean), active meds, adherence. Never a name or the clinical
 // condition itself (TC-05).
+router.get('/patients/:code/schedule', async (req, res) => {
+  // Same pharmacist-roster access boundary as /patients; never accept a raw
+  // patient id from another portal or grant caregiver editing permissions.
+  const [[patient]] = await pool.execute('SELECT id FROM patients WHERE patient_code=?', [
+    req.params.code,
+  ]);
+  if (!patient) return res.status(404).json({ error: 'Patient not found' });
+  res.json(await getSharedScheduleReview(patient.id, { date: req.query.date }));
+});
+
 router.get('/patients', async (_req, res) => {
   const [rows] = await pool.execute(
     `SELECT p.patient_code,

@@ -112,10 +112,10 @@ export async function loadEngineInput(patientId) {
   };
 
   const [meds] = await pool.execute(
-    `SELECT m.id, m.drug_id, m.drug_name_raw, m.frequency, m.frequency_code,
+    `SELECT m.id, m.drug_id, m.drug_name_raw, m.source, m.frequency, m.frequency_code,
             m.dosage_instruction, m.label_direction, m.food_instruction, m.timing_note, m.is_prn,
             m.start_date, m.end_date, m.schedule_type, m.schedule_times,
-            m.interval_hours, m.interval_start_time, m.schedule_days, m.schedule_status,
+            m.interval_hours, m.interval_start_time, m.schedule_days, m.schedule_status, m.schedule_updated_at,
             COALESCE(m.min_interval_hours_snapshot,dr.min_interval_hours,dr.default_interval_hours)
               AS min_interval_hours,
             COALESCE(m.max_daily_doses_snapshot,dr.max_daily_doses) AS max_daily_doses,
@@ -145,6 +145,7 @@ export async function loadEngineInput(patientId) {
       id: m.id,
       drugId: m.drug_id,
       drugName: m.drug_name_raw,
+      source: m.source,
       frequencyCode: mealAnchoredFrequency(m.frequency_code, foodInstruction),
       originalFrequencyCode: m.frequency_code,
       frequency: m.frequency,
@@ -160,6 +161,7 @@ export async function loadEngineInput(patientId) {
       intervalStartTime: m.interval_start_time ? toClock(m.interval_start_time) : null,
       scheduleDays: jsonArray(m.schedule_days),
       scheduleStatus: m.schedule_status,
+      scheduleUpdatedAt: m.schedule_updated_at,
       isPrn: !!m.is_prn,
       minIntervalHours: m.min_interval_hours != null ? Number(m.min_interval_hours) : null,
       maxDailyDoses: m.max_daily_doses != null ? Number(m.max_daily_doses) : null,
@@ -495,14 +497,32 @@ export async function proposeForPatient(patientId, targetMedicationIds = []) {
       ...medicine,
       frequencyCode: `q${medicine.intervalHours}h`,
     }));
-  const intervalResults = intervalMedicines.map((medicine) =>
-    generateSchedule({
-      ...generationInput,
-      anchors: { ...generationInput.anchors, wake: medicine.intervalStartTime },
-      medications: [medicine],
-      version: 1,
-    })
-  );
+  const intervalResults = intervalMedicines.map((medicine) => {
+    const start =
+      Number(medicine.intervalStartTime.slice(0, 2)) * 60 +
+      Number(medicine.intervalStartTime.slice(3, 5));
+    const valid =
+      Number.isInteger(medicine.intervalHours) &&
+      medicine.intervalHours >= 1 &&
+      medicine.intervalHours <= 24;
+    return {
+      unresolved: [],
+      slots: valid
+        ? Array.from({ length: Math.ceil(24 / medicine.intervalHours) }, (_, index) => {
+            const minute = start + index * medicine.intervalHours * 60;
+            return {
+              medicationId: medicine.id,
+              drugId: medicine.drugId,
+              drugName: medicine.drugName,
+              time: `${String(Math.floor(minute / 60) % 24).padStart(2, '0')}:${String(minute % 60).padStart(2, '0')}`,
+              minuteOfDay: minute,
+              dayOffset: Math.floor(minute / 1440),
+              reason: 'Explicit interval and entered starting time',
+            };
+          })
+        : [],
+    };
+  });
   const result = {
     slots: intervalResults.flatMap((item) => item.slots),
     prn: medications
@@ -516,6 +536,12 @@ export async function proposeForPatient(patientId, targetMedicationIds = []) {
     solver: intervalResults.some((item) => item.solver === 'csp') ? 'csp' : 'direct',
   };
   const explicitSlots = medications.flatMap((medicine) => {
+    if (
+      medicine.isPrn ||
+      medicine.scheduleType === 'AS_NEEDED' ||
+      (['SPECIFIC_DAYS', 'WEEKLY'].includes(medicine.scheduleType) && !medicine.scheduleDays.length)
+    )
+      return [];
     if (!medicine.scheduleTimes.length) return [];
     return medicine.scheduleTimes.map((time) => {
       const [hour, minute] = String(time).split(':').map(Number);
@@ -751,6 +777,11 @@ export async function confirmForPatient(
     for (const dose of adjusted) {
       const m = byId.get(dose.medication_id);
       if (!m) return { error: 'unknown_medication' };
+      if (m.isPrn || m.scheduleType === 'AS_NEEDED') return { error: 'invalid_time' };
+      if (m.source !== 'OTC_SELF' && options.actorRole !== 'pharmacist') {
+        const clock = `${String(Math.floor(dose.minute / 60) % 24).padStart(2, '0')}:${String(dose.minute % 60).padStart(2, '0')}`;
+        if (!m.scheduleTimes.includes(clock)) return { error: 'prescription_review_required' };
+      }
       if (!Number.isInteger(dose.minute) || dose.minute < 0 || dose.minute >= 2880) {
         return { error: 'invalid_time' };
       }
@@ -811,8 +842,26 @@ export async function confirmForPatient(
     const proposal = await proposeForPatient(patientId, selectedIds);
     generationDate = proposal.generation_date;
     const { byId } = await loadLookup(patientId);
+    const expandedIntervals = new Set();
     slots = proposal.slots.flatMap((slot) => {
       const medicine = byId.get(slot.medication_id);
+      if (medicine.scheduleType === 'EVERY_N_HOURS' && !medicine.scheduleTimes.length) {
+        if (expandedIntervals.has(medicine.id)) return [];
+        expandedIntervals.add(medicine.id);
+        const dates = treatmentDateKeys(medicine.startDate, medicine.endDate);
+        const startMinute =
+          Number(medicine.intervalStartTime.slice(0, 2)) * 60 +
+          Number(medicine.intervalStartTime.slice(3, 5));
+        const continuous = [];
+        for (
+          let minute = startMinute;
+          minute < dates.length * 1440;
+          minute += medicine.intervalHours * 60
+        ) {
+          continuous.push({ ...slot, scheduled_time: wallClock(dates[0], minute) });
+        }
+        return continuous;
+      }
       return treatmentDatesForMedicine(medicine).map((date) => ({
         ...slot,
         scheduled_time: wallClock(
@@ -832,6 +881,71 @@ export async function confirmForPatient(
   try {
     await conn.beginTransaction();
 
+    // Serialize confirmations for a patient so retries cannot create new versions
+    // of an identical set of dose instances.
+    await conn.execute('SELECT id FROM patients WHERE id=? FOR UPDATE', [patientId]);
+    const affectedIds = [...new Set(slots.map((slot) => String(slot.medication_id)))];
+    const affectedPlaceholders = affectedIds.map(() => '?').join(',');
+    const [definitions] = await conn.execute(
+      `SELECT id,schedule_status,schedule_times,schedule_updated_at FROM medications
+       WHERE patient_id=? AND id IN (${affectedPlaceholders}) FOR UPDATE`,
+      [patientId, ...affectedIds]
+    );
+    const revision = (value) => (value ? new Date(value).getTime() : null);
+    if (
+      definitions.length !== affectedIds.length ||
+      definitions.some(
+        (row) =>
+          revision(row.schedule_updated_at) !== revision(lookup.byId.get(row.id)?.scheduleUpdatedAt)
+      )
+    ) {
+      await conn.rollback();
+      return { error: 'schedule_changed' };
+    }
+    const [existing] = await conn.execute(
+      `SELECT id,medication_id,scheduled_time,status,schedule_version FROM medication_schedules
+       WHERE patient_id=? AND medication_id IN (${affectedPlaceholders}) FOR UPDATE`,
+      [patientId, ...affectedIds]
+    );
+    const doseKey = (row) => {
+      const value = row.scheduled_time;
+      const instant =
+        typeof value === 'string' && /^\d{4}-\d{2}-\d{2} /.test(value)
+          ? `${value.replace(' ', 'T')}+08:00`
+          : value;
+      return `${row.medication_id}:${new Date(instant).getTime()}`;
+    };
+    const wanted = new Set(slots.map(doseKey));
+    if (wanted.size !== slots.length) {
+      await conn.rollback();
+      return { error: 'invalid_time' };
+    }
+    const present = new Set(existing.map(doseKey));
+    if (
+      definitions.every((row) => row.schedule_status === 'APPROVED') &&
+      wanted.size === present.size &&
+      [...wanted].every((key) => present.has(key))
+    ) {
+      await conn.commit();
+      return {
+        version: Math.max(...existing.map((row) => Number(row.schedule_version))),
+        count: existing.length,
+        generation_date: generationDate,
+        schedule_status: 'APPROVED',
+        unchanged: true,
+      };
+    }
+
+    // Materialize elapsed doses before replacing pending reminders. Never erase
+    // an untaken past dose just because the missed-dose sweep has not run yet.
+    await conn.execute(
+      `UPDATE medication_schedules SET status='missed'
+       WHERE patient_id=? AND medication_id IN (${affectedPlaceholders})
+         AND status IN ('scheduled','snoozed') AND scheduled_time < ?
+         AND NOT EXISTS (SELECT 1 FROM dose_logs dl WHERE dl.schedule_id=medication_schedules.id)`,
+      [patientId, ...affectedIds, new Date(Date.now() - 30 * 60000)]
+    );
+
     const [[v]] = await conn.execute(
       `SELECT COALESCE(MAX(schedule_version), 0) + 1 AS next
        FROM medication_schedules WHERE patient_id = ?`,
@@ -841,7 +955,6 @@ export async function confirmForPatient(
     // API stable and numeric so clients can compare schedule versions safely.
     const version = Number(v.next);
 
-    const affectedIds = [...new Set(slots.map((slot) => String(slot.medication_id)))];
     if (affectedIds.length) {
       const affectedPlaceholders = affectedIds.map(() => '?').join(',');
       await conn.execute(
@@ -852,17 +965,32 @@ export async function confirmForPatient(
         [options.actorId || patientId, options.actorId || patientId, patientId, ...affectedIds]
       );
       for (const medicationId of affectedIds) {
+        const medicineSlots = slots.filter((slot) => slot.medication_id === medicationId);
+        const times = [
+          ...new Set(medicineSlots.map((slot) => String(slot.scheduled_time).slice(11, 16))),
+        ].sort();
+        if (Array.isArray(adjusted) && adjusted.length) {
+          await conn.execute(
+            "UPDATE medications SET schedule_type='SPECIFIC_TIMES',schedule_times=?,interval_hours=NULL,interval_start_time=NULL WHERE id=? AND patient_id=?",
+            [JSON.stringify(times), medicationId, patientId]
+          );
+        }
         await conn.execute(
           `INSERT INTO medication_schedule_audit
              (id, medication_id, patient_id, actor_id, actor_role, before_info, after_info)
-           VALUES (?, ?, ?, ?, ?, NULL, ?)`,
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
           [
             uuidv4(),
             medicationId,
             patientId,
             options.actorId || patientId,
             options.actorRole || (options.actorId ? 'caregiver' : 'patient'),
-            JSON.stringify({ schedule_status: 'APPROVED', schedule_version: version }),
+            JSON.stringify(definitions.find((row) => row.id === medicationId)),
+            JSON.stringify({
+              schedule_status: 'APPROVED',
+              schedule_version: version,
+              scheduled_times: medicineSlots.map((slot) => slot.scheduled_time),
+            }),
           ]
         );
       }
@@ -873,17 +1001,24 @@ export async function confirmForPatient(
       const placeholders = selectedIds.map(() => '?').join(',');
       await conn.execute(
         `DELETE FROM medication_schedules
-         WHERE patient_id = ? AND status = 'scheduled' AND medication_id IN (${placeholders})`,
+         WHERE patient_id = ? AND status IN ('scheduled','snoozed') AND medication_id IN (${placeholders})
+           AND NOT EXISTS (SELECT 1 FROM dose_logs dl WHERE dl.schedule_id=medication_schedules.id)`,
         [patientId, ...selectedIds]
       );
     } else {
       await conn.execute(
-        `DELETE FROM medication_schedules WHERE patient_id = ? AND status = 'scheduled'`,
+        `DELETE FROM medication_schedules WHERE patient_id = ? AND status IN ('scheduled','snoozed')
+           AND NOT EXISTS (SELECT 1 FROM dose_logs dl WHERE dl.schedule_id=medication_schedules.id)`,
         [patientId]
       );
     }
 
     for (const s of slots) {
+      const [[retained]] = await conn.execute(
+        'SELECT id FROM medication_schedules WHERE patient_id=? AND medication_id=? AND scheduled_time=? LIMIT 1',
+        [patientId, s.medication_id, s.scheduled_time]
+      );
+      if (retained) continue;
       await conn.execute(
         `INSERT IGNORE INTO medication_schedules
            (id, medication_id, patient_id, scheduled_time, generated_reason,

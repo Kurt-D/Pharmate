@@ -3,6 +3,11 @@ import app from '../index.js';
 import { pool } from '../db/connection.js';
 import { sweepMissed } from '../services/doses.js';
 import { computeDoseStatus } from '../services/medicationSchedule.js';
+import {
+  createPatientTestUser,
+  createAccessToken,
+  createPrivilegedTestUser,
+} from './helpers/testUsers.js';
 
 const password = 'TestPass@123';
 let token;
@@ -23,12 +28,8 @@ async function createMedication(body) {
 
 beforeAll(async () => {
   const email = `shared-schedule.${Date.now()}@test.pharmate`;
-  await request(app)
-    .post('/api/auth/register')
-    .send({ email, password, role: 'patient', full_name: 'Schedule Test' });
-  const login = await request(app).post('/api/auth/login').send({ email, password });
-  token = login.body.accessToken;
-  patientId = login.body.user.id;
+  patientId = await createPatientTestUser({ email, password });
+  token = await createAccessToken(patientId);
 });
 
 afterAll(async () => pool.end());
@@ -103,6 +104,18 @@ test('exact times are preserved and one stored schedule drives medication and da
     await request(app).get(`/api/patient/doses/history?startDate=${day}&endDate=${day}`).set(auth())
   ).body;
   expect(history.find((dose) => dose.dose_id === first.dose_id)).toMatchObject({ status: 'TAKEN' });
+  const retry = await request(app)
+    .post('/api/patient/schedule/confirm')
+    .set(auth())
+    .send({ medication_ids: [created.body.id] })
+    .expect(201);
+  expect(retry.body.unchanged).toBe(true);
+  const afterRetry = (await request(app).get('/api/patient/doses/today').set(auth())).body.filter(
+    (dose) => dose.medication_id === created.body.id
+  );
+  expect(afterRetry.map((dose) => dose.dose_id)).toEqual(
+    medicationDoses.map((dose) => dose.dose_id)
+  );
 });
 
 test('ambiguous daily frequency remains review-only and creates no dose reminders', async () => {
@@ -161,4 +174,62 @@ test('missed doses stay in range history but another local day is absent from to
       .set(auth())
   ).body;
   expect(dashboard.doses.some((item) => item.dose_id === dose.id)).toBe(false);
+});
+
+test('patient, linked caregiver and pharmacist receive the same definitions and dose IDs', async () => {
+  const [[patient]] = await pool.execute('SELECT patient_code FROM patients WHERE id=?', [
+    patientId,
+  ]);
+  const caregiverId = await createPrivilegedTestUser({
+    email: `schedule-care.${Date.now()}@test.pharmate`,
+    password,
+    role: 'caregiver',
+  });
+  const pharmacistId = await createPrivilegedTestUser({
+    email: `schedule-pharm.${Date.now()}@test.pharmate`,
+    password,
+    role: 'pharmacist',
+  });
+  await pool.execute(
+    "INSERT INTO caregiver_patients (caregiver_id,patient_id,status) VALUES (?,?,'active')",
+    [caregiverId, patientId]
+  );
+  const own = await request(app).get('/api/patient/schedule/records').set(auth()).expect(200);
+  const care = await request(app)
+    .get(`/api/caregiver/patients/${patient.patient_code}/schedule`)
+    .set({ Authorization: `Bearer ${await createAccessToken(caregiverId)}` })
+    .expect(200);
+  const pharmacist = await request(app)
+    .get(`/api/pharmacist/patients/${patient.patient_code}/schedule`)
+    .set({ Authorization: `Bearer ${await createAccessToken(pharmacistId)}` })
+    .expect(200);
+  expect(care.body.definitions).toEqual(own.body.definitions);
+  expect(pharmacist.body.definitions).toEqual(own.body.definitions);
+  expect(care.body.doses.map((dose) => dose.dose_id)).toEqual(
+    own.body.doses.map((dose) => dose.dose_id)
+  );
+  expect(pharmacist.body.doses.map((dose) => dose.dose_id)).toEqual(
+    own.body.doses.map((dose) => dose.dose_id)
+  );
+  expect(
+    own.body.definitions.some((definition) => definition.schedule_status === 'NEEDS_REVIEW')
+  ).toBe(true);
+});
+
+test('historical dose deletion is rejected without erasing its dose log', async () => {
+  const [[dose]] = await pool.execute(
+    "SELECT ms.id FROM medication_schedules ms WHERE patient_id=? AND status='taken' LIMIT 1",
+    [patientId]
+  );
+  const removed = await request(app)
+    .delete('/api/patient/schedule/items')
+    .set(auth())
+    .send({ schedule_ids: [dose.id] });
+  expect(removed.status).toBe(409);
+  expect(removed.body.code).toBe('DOSE_HISTORY_PROTECTED');
+  const [[logged]] = await pool.execute(
+    'SELECT COUNT(*) AS count FROM dose_logs WHERE schedule_id=?',
+    [dose.id]
+  );
+  expect(Number(logged.count)).toBeGreaterThan(0);
 });

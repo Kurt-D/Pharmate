@@ -81,6 +81,36 @@ function keepsMinimumGap(times, minimum) {
 }
 
 function domainsFor(item) {
+  // Entered clock times and explicit intervals are fixed facts, not solver
+  // candidates that can be shifted to make a conflict disappear.
+  const explicit = item.schedule_times;
+  if (Array.isArray(explicit) && explicit.length) {
+    if (
+      new Set(explicit).size !== explicit.length ||
+      explicit.some((time) => !/^([01]\d|2[0-3]):[0-5]\d$/.test(time))
+    )
+      return [];
+    const times = explicit.map((time) => Number(time.slice(0, 2)) * 60 + Number(time.slice(3)));
+    if (
+      !keepsMinimumGap(times, Number(item.min_interval_hours || 0) * 60) ||
+      times.length > Number(item.max_daily_doses)
+    )
+      return [];
+    return [{ shift: 0, times, deviation: 0 }];
+  }
+  if (item.require_entered_timing) {
+    const interval = String(item.standard_frequency || '').match(/^Q(\d{1,2})H$/i);
+    if (!interval || !/^([01]\d|2[0-3]):[0-5]\d$/.test(item.first_dose_time || '')) return [];
+    const hours = Number(interval[1]);
+    // Non-divisor intervals need continuous multi-day expansion, not a repeated
+    // daily clock pattern. Keep those in review until that path is supported.
+    if (hours < 1 || hours > 24 || 24 % hours !== 0) return [];
+    const start =
+      Number(item.first_dose_time.slice(0, 2)) * 60 + Number(item.first_dose_time.slice(3));
+    const times = Array.from({ length: 24 / hours }, (_, index) => start + index * hours * 60);
+    if (times.length > Number(item.max_daily_doses)) return [];
+    return [{ shift: 0, times, deviation: 0 }];
+  }
   const base = baseTimes(item).map((time) => time + foodOffset(item));
   if (!base.length) return [];
   const minimum = Number(item.min_interval_hours || 0) * 60;
@@ -336,7 +366,10 @@ export function generateClinicalSchedule(items = [], interactions = []) {
         guidance_do: item.guidance_do,
         guidance_dont: item.guidance_dont,
       },
-      rationale: explanation(item, time, candidate.shift),
+      rationale:
+        item.require_entered_timing || item.schedule_times?.length
+          ? 'Preserved entered medication timing; any conflicting constraints require review.'
+          : explanation(item, time, candidate.shift),
     }))
   );
   doses.sort((a, b) => a.minute - b.minute || a.medicine.name.localeCompare(b.medicine.name));

@@ -1,0 +1,180 @@
+*** Begin Patch
+*** Update File: C:/xampp/htdocs/Pharmate/client/src/pages/AnchorOnboarding.jsx
+@@
+-import { useNavigate } from 'react-router-dom';
++import { useLocation, useNavigate } from 'react-router-dom';
+@@
+ export default function AnchorOnboarding() {
+   const navigate = useNavigate();
++  const location = useLocation();
++  const editingFromProfile = location.state?.fromProfile === true;
+@@
+-      navigate('/patient/today', { replace: true });
++      navigate(editingFromProfile ? '/patient/profile' : '/patient/today', { replace: true });
+@@
+         <button
+           className="pm-safety-back"
+-          disabled={step === 0 || saving}
+-          onClick={() => setStep((value) => value - 1)}
++          disabled={saving || (step === 0 && !editingFromProfile)}
++          onClick={() => {
++            if (step === 0 && editingFromProfile) navigate('/patient/profile');
++            else setStep((value) => value - 1);
++          }}
+@@
+           <button className="pm-safety-skip" disabled={saving} onClick={next}>
+-            Skip for now
++            {editingFromProfile ? 'Keep current answer' : 'Skip for now'}
+*** Update File: C:/xampp/htdocs/Pharmate/client/src/pages/patient/ProfileRedesign.jsx
+@@
+         </div>
++        <button
++          className="pm-profile-health-button"
++          onClick={() => navigate('/patient/onboarding', { state: { fromProfile: true } })}
++          type="button"
++        >
++          <i>
++            <Icon name="shield" size={21} />
++          </i>
++          <span>
++            <strong>{tr('Health & Scheduling Profile', 'Profile sa Kalusugan at Iskedyul')}</strong>
++            <small>
++              {tr(
++                'Update safety answers and daily routine',
++                'I-update ang safety answers at araw-araw na routine'
++              )}
++            </small>
++          </span>
++          <Icon name="chevron" size={20} />
++        </button>
+         <button
+@@
+       </section>
+@@
+       <section className="pm-profile-menu">
+-        <button onClick={() => navigate('/patient/onboarding')}>
+-          <i>
+-            <Icon name="shield" />
+-          </i>
+-          <span>
+-            <strong>{tr('Health & Scheduling Profile', 'Profile sa Kalusugan at Iskedyul')}</strong>
+-            <small>
+-              {tr(
+-                'Update safety answers, medicines, and daily routine',
+-                'I-update ang safety answers, mga gamot, at araw-araw na routine'
+-              )}
+-            </small>
+-          </span>
+-          <b>
+-            <Icon name="chevron" size={20} />
+-          </b>
+-        </button>
+         <button onClick={() => setPanel(panel === 'edit' ? '' : 'edit')}>
+*** Update File: C:/xampp/htdocs/Pharmate/client/src/styles/profile-page.css
+@@
+ .pm-profile-identity .pm-profile-email {
+   grid-column: 1/-1;
+ }
++.pm-profile-health-button {
++  align-items: center;
++  background: #fff;
++  border: 1.5px solid #a9c8ef;
++  border-radius: 0.7rem;
++  color: #1e2e4a;
++  display: grid;
++  font-family: inherit;
++  gap: 0.65rem;
++  grid-column: 1/-1;
++  grid-template-columns: 38px minmax(0, 1fr) 20px;
++  min-height: 64px;
++  padding: 0.65rem 0.8rem;
++  text-align: left;
++  width: 100%;
++}
++.pm-profile-health-button:hover {
++  background: #eef5ff;
++}
++.pm-profile-health-button > i {
++  align-items: center;
++  background: #e8f1ff;
++  border-radius: 0.6rem;
++  color: #1769f5;
++  display: flex;
++  height: 38px;
++  justify-content: center;
++  width: 38px;
++}
++.pm-profile-health-button > span {
++  display: grid;
++  gap: 0.15rem;
++}
++.pm-profile-health-button strong {
++  color: #1e2e4a;
++  font-size: 0.82rem;
++}
++.pm-profile-health-button small {
++  color: #64748b;
++  font-size: 0.68rem;
++  line-height: 1.3;
++}
++.pm-profile-health-button > svg {
++  color: #2a67b8;
++}
+ .pm-profile-details-toggle {
+*** Update File: C:/xampp/htdocs/Pharmate/server/src/__tests__/auth.test.js
+@@
+     expect(identity.role).toBe('patient');
++    const [safetyProfiles] = await pool.execute(
++      'SELECT patient_id, profile_completed FROM patient_safety_profiles WHERE patient_id=?',
++      [identity.id]
++    );
++    expect(safetyProfiles).toEqual([
++      expect.objectContaining({ patient_id: identity.id, profile_completed: 0 }),
++    ]);
+@@
+ describe('Patient anchors', () => {
+@@
+ });
++
++describe('Patient safety profile', () => {
++  test('patient can save and reload safety answers in the same profile record', async () => {
++    const update = await request(app)
++      .put('/api/patient/safety-profile')
++      .set('Authorization', `Bearer ${patientToken}`)
++      .send({
++        date_of_birth: '1998-04-12',
++        weight_kg: 61.5,
++        allergies: 'Penicillin',
++        conditions: 'None',
++        kidney_status: 'NO',
++        liver_status: 'NO',
++        pregnancy_status: 'NOT_APPLICABLE',
++        current_medicines: 'Vitamin C',
++        caregiver_alerts: true,
++        profile_completed: true,
++      });
++    expect(update.status).toBe(200);
++
++    const saved = await request(app)
++      .get('/api/patient/safety-profile')
++      .set('Authorization', `Bearer ${patientToken}`);
++    expect(saved.status).toBe(200);
++    expect(saved.body).toEqual(
++      expect.objectContaining({
++        date_of_birth: '1998-04-12',
++        weight_kg: 61.5,
++        allergies: 'Penicillin',
++        current_medicines: 'Vitamin C',
++        caregiver_alerts: true,
++        profile_completed: true,
++      })
++    );
++
++    const [[count]] = await pool.execute(
++      'SELECT COUNT(*) AS total FROM patient_safety_profiles WHERE patient_id=?',
++      [patientId]
++    );
++    expect(Number(count.total)).toBe(1);
++  });
++});
+*** End Patch

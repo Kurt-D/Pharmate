@@ -1,0 +1,16 @@
+*** Begin Patch
+*** Update File: C:/xampp/htdocs/Pharmate/client/src/pages/AnchorOnboarding.jsx
+@@
+-import { useLocation, useNavigate } from 'react-router-dom';
++import { useNavigate, useSearchParams } from 'react-router-dom';
+@@
+   const navigate = useNavigate();
+-  const location = useLocation();
+-  const editingFromProfile = location.state?.fromProfile === true;
++  const [searchParams] = useSearchParams();
++  const editingFromProfile = searchParams.get('from') === 'profile';
+*** Update File: C:/xampp/htdocs/Pharmate/client/src/pages/patient/ProfileRedesign.jsx
+@@
+-          onClick={() => navigate('/patient/onboarding', { state: { fromProfile: true } })}
++          onClick={() => navigate('/patient/onboarding?from=profile')}
+*** End Patch

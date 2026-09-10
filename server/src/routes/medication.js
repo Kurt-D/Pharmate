@@ -258,6 +258,7 @@ async function loadApprovedPrescriptionDirections(patientId, items, executor = p
        SELECT medication.id,medication.drug_id,medication.frequency_code,
               medication.dosage_instruction,medication.label_direction,
               medication.food_instruction,medication.start_date,medication.end_date,
+              medication.schedule_times,medication.interval_start_time,
               medication.strength_value,medication.strength_unit,
               medication.dosage_form_snapshot,medication.quantity_on_hand,
               medication.quantity_unit,medication.purpose,
@@ -382,6 +383,7 @@ async function generateFromRequest(body, executor = pool, patientId = null) {
     };
   }
   const rules = await loadRules(requested, executor);
+  for (const rule of rules) rule.require_entered_timing = true;
   const approvedPrescriptions = await loadApprovedPrescriptionDirections(
     patientId,
     rules,
@@ -415,6 +417,9 @@ async function generateFromRequest(body, executor = pool, patientId = null) {
       if (!prescription) {
         return {
           error: `${rule.generic_name} can only use exact directions from an approved prescription. Upload the prescription or ask your pharmacist to validate it first.`,
+          code: 'APPROVED_PRESCRIPTION_REQUIRED',
+          drug_id: rule.drug_id,
+          medicine_name: rule.generic_name,
           status: 422,
         };
       }
@@ -439,6 +444,12 @@ async function generateFromRequest(body, executor = pool, patientId = null) {
         dosage_instruction: prescription.dosage_instruction,
         label_direction: prescriptionDirections,
         prescription_directions: prescriptionDirections,
+        schedule_times: Array.isArray(prescription.schedule_times)
+          ? prescription.schedule_times
+          : JSON.parse(prescription.schedule_times || '[]'),
+        first_dose_time: prescription.interval_start_time
+          ? String(prescription.interval_start_time).slice(0, 5)
+          : rule.first_dose_time,
         start_date: prescription.start_date,
         end_date: prescription.end_date,
         strength_value: prescription.strength_value,
@@ -509,11 +520,7 @@ async function generateFromRequest(body, executor = pool, patientId = null) {
         status: 400,
       };
     }
-    if (
-      ['QD', 'BID', 'TID', 'QID'].includes(rule.label_frequency) &&
-      rule.frequency_source !== 'PATIENT_SELECTED' &&
-      !rule.schedule_times.length
-    ) {
+    if (['QD', 'BID', 'TID', 'QID'].includes(rule.label_frequency) && !rule.schedule_times.length) {
       return {
         error: `${rule.generic_name} has a daily frequency without exact medication times. Save it for pharmacist review or enter the exact label times; no active reminders were created.`,
         status: 422,
@@ -538,15 +545,7 @@ async function generateFromRequest(body, executor = pool, patientId = null) {
       : 0;
     rule.standard_frequency = rule.label_frequency;
     rule.max_daily_doses = labelRule.daily;
-    const mathematicalGap =
-      rule.frequency_source === 'PATIENT_SELECTED' && !labelRule.interval
-        ? 24 / labelRule.daily
-        : 0;
-    rule.min_interval_hours = Math.max(
-      labelRule.interval,
-      mathematicalGap,
-      verifiedMinimumInterval
-    );
+    rule.min_interval_hours = Math.max(labelRule.interval, verifiedMinimumInterval);
     rule.rule_kind = labelRule.prn ? 'PRN' : rule.rule_kind;
     rule.food_rule = verifiedFoodRule ? rule.food_rule : rule.label_food_instruction;
     rule.food_instruction = verifiedFoodRule
@@ -632,7 +631,12 @@ async function intakeFromRequest(body, executor = pool, patientId = null) {
   return { rules };
 }
 
-async function upsertMedicationIntakes(executor, patientId, rules) {
+async function upsertMedicationIntakes(
+  executor,
+  patientId,
+  rules,
+  { preserveSchedules = false } = {}
+) {
   const ids = rules.map((rule) => rule.drug_id);
   const placeholders = ids.map(() => '?').join(',');
   const [existing] = await executor.execute(
@@ -733,12 +737,13 @@ async function upsertMedicationIntakes(executor, patientId, rules) {
           patientId,
         ]
       );
-      await executor.execute(
-        `DELETE FROM medication_schedules
-          WHERE medication_id=? AND patient_id=? AND status IN ('scheduled','snoozed')
+      if (!preserveSchedules)
+        await executor.execute(
+          `DELETE FROM medication_schedules
+          WHERE medication_id=? AND patient_id=? AND status IN ('scheduled','snoozed') AND scheduled_time > ?
             AND NOT EXISTS (SELECT 1 FROM dose_logs dl WHERE dl.schedule_id=medication_schedules.id)`,
-        [current.id, patientId]
-      );
+          [current.id, patientId, new Date()]
+        );
       continue;
     }
     const medicationId = uuidv4();
@@ -841,7 +846,15 @@ router.get('/search', async (req, res) => {
 
 router.post('/generate-schedule', async (req, res) => {
   const generated = await generateFromRequest(req.body, pool, req.user.sub);
-  if (generated.error) return res.status(generated.status).json({ error: generated.error });
+  if (generated.error)
+    return res
+      .status(generated.status)
+      .json({
+        error: generated.error,
+        code: generated.code,
+        drug_id: generated.drug_id,
+        medicine_name: generated.medicine_name,
+      });
   if (!generated.result.can_save) {
     const blocking = generated.result.warnings?.find((item) => item.severity === 'blocking');
     return res.status(422).json({
@@ -907,6 +920,7 @@ router.post('/save-reminders', async (req, res) => {
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
+    await conn.execute('SELECT id FROM patients WHERE id=? FOR UPDATE', [req.user.sub]);
     const generated = await generateFromRequest(req.body, conn, req.user.sub);
     if (generated.error) {
       await conn.rollback();
@@ -934,7 +948,8 @@ router.post('/save-reminders', async (req, res) => {
     const { medicationIds, createdMedicationIds } = await upsertMedicationIntakes(
       conn,
       req.user.sub,
-      generated.rules
+      generated.rules,
+      { preserveSchedules: true }
     );
     const [[versionRow]] = await conn.execute(
       'SELECT COALESCE(MAX(schedule_version),0)+1 AS version FROM medication_schedules WHERE patient_id=?',
@@ -942,15 +957,35 @@ router.post('/save-reminders', async (req, res) => {
     );
     const persistedIds = [...medicationIds.values()];
     if (persistedIds.length) {
-      await conn.execute(
-        `DELETE FROM medication_schedules
-         WHERE patient_id=? AND medication_id IN (${persistedIds.map(() => '?').join(',')})
-           AND status IN ('scheduled','snoozed')
-           AND NOT EXISTS (
-             SELECT 1 FROM dose_logs dl WHERE dl.schedule_id=medication_schedules.id
-           )`,
-        [req.user.sub, ...persistedIds]
+      const desired = new Set();
+      for (const group of generated.result.schedule) {
+        for (const medicine of group.medicines) {
+          const rule = generated.rules.find((item) => item.drug_id === medicine.drug_id);
+          for (const date of treatmentDateKeys(rule.start_date, rule.end_date)) {
+            desired.add(`${medicationIds.get(medicine.drug_id)}:${date} ${group.time}:00`);
+          }
+        }
+      }
+      const [pending] = await conn.execute(
+        `SELECT id,medication_id,DATE_FORMAT(scheduled_time,'%Y-%m-%d %H:%i:%s') AS clock
+         FROM medication_schedules WHERE patient_id=? AND medication_id IN (${persistedIds.map(() => '?').join(',')})
+           AND status IN ('scheduled','snoozed') AND scheduled_time > ?
+           AND NOT EXISTS (SELECT 1 FROM dose_logs dl WHERE dl.schedule_id=medication_schedules.id) FOR UPDATE`,
+        [req.user.sub, ...persistedIds, new Date()]
       );
+      for (const row of pending) {
+        if (!desired.has(`${row.medication_id}:${row.clock}`)) {
+          await conn.execute('DELETE FROM medication_schedules WHERE id=? AND patient_id=?', [
+            row.id,
+            req.user.sub,
+          ]);
+        } else {
+          await conn.execute(
+            'UPDATE medication_schedules SET schedule_version=? WHERE id=? AND patient_id=?',
+            [Number(versionRow.version), row.id, req.user.sub]
+          );
+        }
+      }
     }
     const rulesByDrug = new Map(generated.rules.map((rule) => [rule.drug_id, rule]));
     for (const rule of generated.rules) {
@@ -964,12 +999,17 @@ router.post('/save-reminders', async (req, res) => {
           BEDTIME: 'SPECIFIC_TIMES',
         }[rule.label_frequency] || 'EVERY_N_HOURS';
       await conn.execute(
-        `UPDATE medications SET schedule_type=?, interval_hours=?,
+        `UPDATE medications SET schedule_type=?, schedule_times=?, interval_hours=?,
                 interval_start_time=?, schedule_status='APPROVED', schedule_updated_by=?,
                 schedule_updated_at=NOW(3), schedule_approved_by=?, schedule_approved_at=NOW(3)
           WHERE id=? AND patient_id=?`,
         [
           scheduleType,
+          JSON.stringify(
+            generated.result.schedule
+              .filter((group) => group.medicines.some((item) => item.drug_id === rule.drug_id))
+              .map((group) => group.time)
+          ),
           intervalHours,
           rule.first_dose_time,
           req.user.sub,
@@ -984,6 +1024,14 @@ router.post('/save-reminders', async (req, res) => {
       for (const medicine of group.medicines) {
         const rule = rulesByDrug.get(medicine.drug_id);
         for (const treatmentDate of treatmentDateKeys(rule.start_date, rule.end_date)) {
+          const [[retained]] = await conn.execute(
+            "SELECT id FROM medication_schedules WHERE patient_id=? AND medication_id=? AND scheduled_time=CONCAT(?, ' ', ?, ':00') LIMIT 1",
+            [req.user.sub, medicationIds.get(medicine.drug_id), treatmentDate, group.time]
+          );
+          if (retained) {
+            count += 1;
+            continue;
+          }
           await conn.execute(
             `INSERT INTO medication_schedules
               (id,medication_id,patient_id,scheduled_time,generated_reason,schedule_source,

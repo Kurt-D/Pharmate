@@ -1,0 +1,52 @@
+*** Begin Patch
+*** Update File: C:/xampp/htdocs/Pharmate/client/src/styles/profile-page.css
+@@
+ .pm-profile-inline-editor textarea {
+   resize: vertical;
+ }
++.pm-profile-guided-field {
++  display: grid;
++  gap: 0.45rem;
++}
++.pm-profile-guided-field > span,
++.pm-profile-guided-choices > p {
++  color: #52627a;
++  font-size: 0.75rem;
++  font-weight: 700;
++  margin: 0;
++}
++.pm-profile-guided-choices {
++  display: grid;
++  gap: 0.5rem;
++}
++.pm-profile-guided-choices > button {
++  align-items: center;
++  background: #fff;
++  border: 1.5px solid #a9c8ef;
++  border-radius: 0.65rem;
++  color: #1e2e4a;
++  display: flex;
++  font: inherit;
++  font-size: 0.76rem;
++  font-weight: 750;
++  gap: 0.45rem;
++  min-height: 46px;
++  padding: 0.65rem 0.75rem;
++  text-align: left;
++  width: 100%;
++}
++.pm-profile-guided-choices > button.is-selected {
++  background: #eaf9f0;
++  border-color: #18a85b;
++  color: #126b3c;
++}
++.pm-profile-existing-answer {
++  background: #fff8e7;
++  border: 1px solid #f2d69c;
++  border-radius: 0.6rem;
++  color: #72510c;
++  line-height: 1.4;
++  padding: 0.65rem;
++}
+ .pm-profile-inline-routine {
+*** End Patch

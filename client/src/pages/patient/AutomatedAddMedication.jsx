@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import '../../styles/medication-corrections.css';
 import { medicineIssues } from '../../lib/medicationGuidance.js';
+import { scheduleFailure } from '../../lib/scheduleFailure.js';
 import { useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -177,6 +178,7 @@ export default function AutomatedAddMedication() {
   const [searching, setSearching] = useState(false);
   const [working, setWorking] = useState(false);
   const [error, setError] = useState('');
+  const [generationFailure, setGenerationFailure] = useState(null);
   const [scheduleIssue, setScheduleIssue] = useState(null);
   const [correction, setCorrection] = useState(null);
   const [showIssues, setShowIssues] = useState(false);
@@ -492,8 +494,10 @@ export default function AutomatedAddMedication() {
   }
 
   async function generate() {
+    if (working) return;
     setWorking(true);
     setError('');
+    setGenerationFailure(null);
     setSource('suggested');
     try {
       const safetyProfile = await api('/api/patient/safety-profile');
@@ -507,16 +511,17 @@ export default function AutomatedAddMedication() {
         setPhase('safety-needed');
         return;
       }
-      const adaptiveRequest = {
-        medications: intakes.map((item) => ({
-          ...item,
-          first_dose_time: '',
-        })),
-      };
+      const adaptiveRequest = { medications: intakes };
       const response = await api('/api/medications/generate-schedule', {
         method: 'POST',
         body: { ...adaptiveRequest, schedule_mode: 'SUGGESTED' },
       });
+      if (response.data?.can_save === false) {
+        throw Object.assign(new Error('Please review the schedule details before continuing.'), {
+          status: 409,
+          body: response.data,
+        });
+      }
       const governedDirections = new Map([
         ...(response.data.schedule || []).flatMap((slot) =>
           slot.medicines.map((item) => [String(item.drug_id), item])
@@ -550,7 +555,18 @@ export default function AutomatedAddMedication() {
       setReferenceConfirmed(false);
       setPhase('review');
     } catch (requestError) {
-      setError(requestError.body?.error || requestError.message);
+      const failure = scheduleFailure(requestError);
+      // Select the actual blocked medicine so correction and counseling actions
+      // refer to the same record as the server error, not the last edited one.
+      const blockedMedicine = allMedicines.find(
+        (item) => String(item.id) === String(failure.drugId)
+      );
+      if (blockedMedicine) {
+        setMedicineList(allMedicines);
+        setMedicine(blockedMedicine);
+      }
+      setGenerationFailure(failure);
+      setError(failure.message);
       setPhase('suggested-unavailable');
     } finally {
       setWorking(false);
@@ -1526,22 +1542,59 @@ export default function AutomatedAddMedication() {
       {phase === 'suggested-unavailable' && (
         <WizardPage
           className="pm-wizard__suggested-unavailable"
-          title={tr('No automatic rule available', 'Walang awtomatikong rule na available')}
+          title={
+            generationFailure?.retryable
+              ? tr('Unable to load your schedule', 'Hindi ma-load ang iskedyul')
+              : tr('Your schedule needs attention', 'Kailangang suriin ang iyong iskedyul')
+          }
         >
           <div className="pm-wizard__generation-error" role="alert">
             <Info />
             <div>
-              <h3>{medicine?.generic_name || intake.medicine_name}</h3>
+              <h3>
+                {generationFailure?.medicineName || tr('Schedule review', 'Pagsusuri ng iskedyul')}
+              </h3>
+              {allMedicines.length > 1 && (
+                <p>
+                  {tr('This request includes:', 'Kasama sa kahilingang ito:')}{' '}
+                  {allMedicines.map((item) => item.generic_name).join(', ')}.
+                </p>
+              )}
               <p>
-                {tr(
-                  'This exact medicine, strength, dose, and form does not have a supported PharMate rule yet.',
-                  'Wala pang suportadong PharMate rule para sa eksaktong gamot, lakas, dose, at uri na ito.'
-                )}
+                {generationFailure?.message ||
+                  error ||
+                  tr(
+                    'Please try again to check the saved medicine details. Your information has been kept.',
+                    'Subukan muli upang masuri ang naka-save na detalye ng gamot. Napanatili ang iyong impormasyon.'
+                  )}
               </p>
-              <button onClick={startManualQuestions} type="button">
-                {tr('Enter Label Instructions', 'Ilagay ang Tagubilin sa Label')}
-              </button>
-              <button onClick={() => setPhase('schedule-choice')} type="button">
+              {(generationFailure?.retryable || !generationFailure) && (
+                <button disabled={working} onClick={generate} type="button">
+                  {working ? tr('Checking…', 'Sinusuri…') : tr('Try again', 'Subukan muli')}
+                </button>
+              )}
+              {!generationFailure?.retryable && generationFailure && (
+                <>
+                  {generationFailure.code !== 'APPROVED_PRESCRIPTION_REQUIRED' && (
+                    <button disabled={working} onClick={startManualQuestions} type="button">
+                      {tr('Review medicine directions', 'Suriin ang tagubilin sa gamot')}
+                    </button>
+                  )}
+                  {generationFailure.code === 'APPROVED_PRESCRIPTION_REQUIRED' && (
+                    <button
+                      disabled={working}
+                      onClick={() => navigate('/patient/medications/prescription')}
+                      type="button"
+                    >
+                      {tr('Upload prescription', 'Mag-upload ng reseta')}
+                    </button>
+                  )}
+                  <button disabled={working} onClick={askPharmacist} type="button">
+                    {tr('Ask a pharmacist', 'Magtanong sa parmasyutiko')}
+                  </button>
+                </>
+              )}
+              <button disabled={working} onClick={() => setPhase('schedule-choice')} type="button">
                 {tr('Choose Another Method', 'Pumili ng Ibang Paraan')}
               </button>
             </div>

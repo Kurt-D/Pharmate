@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import { pool } from '../db/connection.js';
+import { getSharedScheduleReview } from '../services/medicationSchedule.js';
 import { requireAuth } from '../middleware/auth.js';
 import { requireRole } from '../middleware/role.js';
 import { parseFrequency } from '../../engine/frequencyParser.js';
@@ -895,6 +896,21 @@ router.post('/schedule/confirm', async (req, res) => {
     : [];
   const source = req.body?.source === 'manual' ? 'manual' : 'suggested';
   const result = await confirmForPatient(req.user.sub, req.body?.slots, medicationIds, { source });
+  if (result.error === 'schedule_changed') {
+    return res
+      .status(409)
+      .json({
+        error:
+          'This medicine changed while the schedule was being prepared. Reload and review the latest directions.',
+        code: 'SCHEDULE_CHANGED',
+      });
+  }
+  if (result.error === 'prescription_review_required') {
+    return res.status(409).json({
+      error: 'Prescription timing changes require pharmacist review.',
+      code: 'PRESCRIPTION_REVIEW_REQUIRED',
+    });
+  }
   if (result.error === 'schedule_verification_failed') {
     return res.status(409).json({
       error:
@@ -937,7 +953,7 @@ router.post('/schedule/confirm', async (req, res) => {
 });
 
 // ── DELETE /api/patient/schedule/items ────────────────────────────────────────
-// Explicit patient deletion includes recorded doses; retain an audit snapshot.
+// History is retained; only unlogged future reminders can be removed.
 router.delete('/schedule/items', async (req, res) => {
   const scheduleIds = Array.isArray(req.body?.schedule_ids) ? req.body.schedule_ids : [];
   const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -962,6 +978,21 @@ router.delete('/schedule/items', async (req, res) => {
       `SELECT * FROM dose_logs WHERE patient_id = ? AND schedule_id IN (${placeholders})`,
       [req.user.sub, ...validIds]
     );
+    if (
+      logs.length ||
+      entries.some(
+        (entry) =>
+          !['scheduled', 'snoozed'].includes(entry.status) ||
+          new Date(entry.scheduled_time).getTime() <= Date.now()
+      )
+    ) {
+      await conn.rollback();
+      return res.status(409).json({
+        error:
+          'Taken, missed, and historical dose records must remain in medication history. Select only future reminders without dose logs.',
+        code: 'DOSE_HISTORY_PROTECTED',
+      });
+    }
     await recordAudit({
       actor: req.user,
       action: 'patient.schedule_entries_deleted',
@@ -987,6 +1018,10 @@ router.delete('/schedule/items', async (req, res) => {
 // ── GET /api/patient/doses/today ──────────────────────────────────────────────
 // The current confirmed day plan with each dose's status — drives the dose
 // confirmation UI and the on-device notification schedule.
+router.get('/schedule/records', async (req, res) => {
+  res.json(await getSharedScheduleReview(req.user.sub, { date: req.query.date }));
+});
+
 router.get('/doses/today', async (req, res) => {
   res.json(await todayDoses(req.user.sub, { date: req.query.date }));
 });

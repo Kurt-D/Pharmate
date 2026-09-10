@@ -5,6 +5,12 @@ export const DEFAULT_DUE_WINDOW_MINUTES = 30;
 
 const TERMINAL_TAKEN = new Set(['taken', 'taken_late']);
 
+export function isCalendarDate(value) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(value))) return false;
+  const instant = new Date(`${value}T00:00:00Z`);
+  return !Number.isNaN(instant.getTime()) && instant.toISOString().slice(0, 10) === value;
+}
+
 function localDateKey(value, timeZone) {
   const parts = new Intl.DateTimeFormat('en-CA', {
     timeZone,
@@ -49,6 +55,9 @@ function zonedMidnight(date, timeZone) {
 }
 
 export function dateRangeBounds(startDate, endDate, timeZone = DEFAULT_TIMEZONE) {
+  if (!isCalendarDate(startDate) || !isCalendarDate(endDate) || startDate > endDate) {
+    throw Object.assign(new Error('Invalid schedule date range'), { status: 400 });
+  }
   const start = zonedMidnight(startDate, timeZone);
   const endLocal = new Date(`${endDate}T00:00:00Z`);
   endLocal.setUTCDate(endLocal.getUTCDate() + 1);
@@ -92,7 +101,7 @@ export function serializeMedicationDose(row, now = new Date(), dueWindowMinutes)
     status,
     taken_at: row.taken_at ?? null,
     logged_at: row.taken_at ?? null,
-    schedule_status: row.schedule_status || 'APPROVED',
+    schedule_status: row.schedule_status || 'NEEDS_REVIEW',
     schedule_type: row.schedule_type ?? null,
     frequency: row.frequency ?? null,
     interval_hours: row.interval_hours == null ? null : Number(row.interval_hours),
@@ -129,13 +138,16 @@ export async function getPatientMedicationSchedule(patientId, options = {}) {
       WHERE ms.patient_id = ?
         AND ms.scheduled_time >= ? AND ms.scheduled_time < ?
         AND (ms.status IN ('taken','taken_late','missed') OR (
+          ms.is_confirmed=1 AND ms.status IN ('scheduled','snoozed') AND ms.scheduled_time < ?
+        ) OR (
           m.status = 'active' AND m.schedule_status = 'APPROVED' AND ms.is_confirmed = 1 AND
+          ms.status IN ('scheduled','snoozed') AND ms.is_prn_slot=0 AND
           ms.schedule_version = (SELECT COALESCE(MAX(ms2.schedule_version), 0)
             FROM medication_schedules ms2
             WHERE ms2.patient_id = ms.patient_id AND ms2.medication_id = ms.medication_id)
         ))
       ORDER BY ms.scheduled_time ASC, ms.id ASC`,
-    [patientId, start, end]
+    [patientId, start, end, new Date(now.getTime() - DEFAULT_DUE_WINDOW_MINUTES * 60000)]
   );
   return {
     patient_id: patientId,
@@ -144,5 +156,35 @@ export async function getPatientMedicationSchedule(patientId, options = {}) {
     end_date: endDate,
     timezone: timeZone,
     doses: rows.map((row) => serializeMedicationDose(row, now, options.dueWindowMinutes)),
+  };
+}
+
+/** Definitions include unapproved timing for review, never as active reminders. */
+export async function getSharedScheduleReview(patientId, options = {}) {
+  const schedule = await getPatientMedicationSchedule(patientId, options);
+  const [definitions] = await pool.execute(
+    `SELECT id AS medication_id,drug_name_raw AS medication_name,dosage_instruction AS dose,
+       frequency,schedule_type,schedule_times,interval_hours,interval_start_time,schedule_days,
+       start_date,end_date,label_direction AS instructions,schedule_status,
+       schedule_updated_by,schedule_updated_at,schedule_approved_by,schedule_approved_at
+     FROM medications WHERE patient_id=? AND status NOT IN ('cancelled','completed') ORDER BY drug_name_raw,id`,
+    [patientId]
+  );
+  const array = (value) => {
+    if (Array.isArray(value)) return value;
+    try {
+      return JSON.parse(value || '[]');
+    } catch {
+      return [];
+    }
+  };
+  return {
+    ...schedule,
+    definitions: definitions.map((row) => ({
+      ...row,
+      schedule_times: array(row.schedule_times),
+      schedule_days: array(row.schedule_days),
+      reminders_enabled: row.schedule_status === 'APPROVED' && row.schedule_type !== 'AS_NEEDED',
+    })),
   };
 }

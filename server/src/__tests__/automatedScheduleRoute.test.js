@@ -124,6 +124,7 @@ test('suggested schedule reuses an existing medicine and persists dosage and sta
         {
           drug_id: drug.id,
           medicine_name: 'Paracetamol',
+          schedule_times: ['00:00', '06:00', '12:00', '18:00'],
           custom_strength: '500 mg',
           dosage_form: 'Tablet',
           dosage_instruction: 'Take 1 tablet',
@@ -209,6 +210,7 @@ test('suggested scheduling rejects duplicate active ingredients before persisten
     start_date: testDate(),
     entry_method: 'MANUAL',
     label_frequency: 'QID',
+    schedule_times: ['07:00', '12:00', '18:30', '22:00'],
     label_food_instruction: 'NONE',
     patient_confirmed: true,
   };
@@ -250,7 +252,7 @@ test('suggested scheduling rejects duplicate active ingredients before persisten
     '18:30',
     '22:00',
   ]);
-  expect(adaptive.body.rationale[0].explanation).toMatch(/saved routine/i);
+  expect(adaptive.body.rationale[0].explanation).toMatch(/entered medication timing/i);
 });
 
 test('medicine search tolerates a minor spelling mistake and separates catalog availability from timing verification', async () => {
@@ -293,6 +295,7 @@ test('medicine search tolerates a minor spelling mistake and separates catalog a
         {
           drug_id: cetirizine.id,
           medicine_name: 'cetirizine',
+          schedule_times: ['08:00'],
           custom_strength: '10 mg',
           dosage_form: 'Tablet',
           dosage_instruction: '1 tablet',
@@ -337,6 +340,7 @@ test('a sourced OTC reference rule requires review while manual label scheduling
   const medicine = {
     drug_id: drug.id,
     medicine_name: 'cetirizine',
+    schedule_times: ['08:00'],
     custom_strength: '10 mg',
     dosage_form: 'tablet',
     dosage_instruction: '1 tablet',
@@ -511,6 +515,9 @@ test('prescription schedules ignore catalog defaults and use approved patient di
       pharmacistId,
     ]
   );
+  await pool.execute("UPDATE medications SET interval_start_time='08:00:00' WHERE id=?", [
+    prescriptionMedicationId,
+  ]);
   const generated = await request(app)
     .post('/api/medications/generate-schedule')
     .set(auth(token))

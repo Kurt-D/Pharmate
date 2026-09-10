@@ -144,7 +144,7 @@ describe('Dose logging — the 30-min / 2-hour rule (D-C)', () => {
       .expect(404);
   });
 
-  test('logged 31 min late → taken_late (never plain taken) + reflow suggestion', async () => {
+  test('logged 31 min late remains an intake without rescheduling later doses', async () => {
     const doses = await today();
     const dose = doses[1];
     const late = new Date(new Date(dose.scheduled_time).getTime() + 31 * 60000).toISOString();
@@ -153,12 +153,10 @@ describe('Dose logging — the 30-min / 2-hour rule (D-C)', () => {
       .set(auth())
       .send({ logged_at: late, method: 'manual' });
     expect(res.body.status).toBe('TAKEN');
-    // Interval drug → reflow of the rest of the day is suggested (ENG §8).
-    expect(res.body.reflow).toBeTruthy();
-    expect(Array.isArray(res.body.reflow.kept)).toBe(true);
+    expect(res.body.reflow).toBeNull();
   });
 
-  test('logged beyond 2 h → missed (immutable, cannot become taken)', async () => {
+  test('an explicitly recorded intake beyond 2 hours remains taken_late', async () => {
     const doses = await today();
     const dose = doses[2];
     const veryLate = new Date(new Date(dose.scheduled_time).getTime() + 3 * 3600000).toISOString();
@@ -166,8 +164,8 @@ describe('Dose logging — the 30-min / 2-hour rule (D-C)', () => {
       .post(`/api/patient/doses/${dose.schedule_id}/log`)
       .set(auth())
       .send({ logged_at: veryLate, method: 'manual' });
-    expect(res.body.status).toBe('MISSED');
-    expect(res.body.status).not.toBe('TAKEN');
+    expect(res.body.status).toBe('TAKEN');
+    expect(res.body.adherence_status).toBe('taken_late');
   });
 });
 
@@ -179,7 +177,7 @@ describe('Missed sweep — the 30-minute rule', () => {
       .set(auth())
       .send({ drug_name: 'amoxicillin', frequency: 'BID', source: 'OTC_SELF', is_prn: false });
     await pool.execute(
-      `UPDATE medications SET schedule_status='APPROVED',schedule_type='TWICE_DAILY',
+      `UPDATE medications SET status='active',schedule_status='APPROVED',schedule_type='TWICE_DAILY',
          schedule_times=JSON_ARRAY('08:00','20:00'),schedule_approved_at=NOW(3) WHERE id=?`,
       [medication.body.id]
     );

@@ -19,6 +19,7 @@ import {
 import { subscribeCaregiver } from '../services/caregiverEvents.js';
 import { publishUser } from '../services/realtimeEvents.js';
 import { doseHistory, todayDoses } from '../services/doses.js';
+import { getSharedScheduleReview } from '../services/medicationSchedule.js';
 import { computeDoseStatus } from '../services/medicationSchedule.js';
 import { recordAudit } from '../services/audit.js';
 import { createPortalNotification } from '../services/portalNotifications.js';
@@ -192,6 +193,12 @@ router.get('/patients/:code/today', async (req, res) => {
   res.json(await todayDoses(patientId));
 });
 
+router.get('/patients/:code/schedule', async (req, res) => {
+  const patientId = await linkedPatientId(req.user.sub, req.params.code);
+  if (!patientId) return res.status(404).json({ error: 'Patient not linked' });
+  res.json(await getSharedScheduleReview(patientId, { date: req.query.date }));
+});
+
 router.get('/patients/:code/doses/history', async (req, res) => {
   const patientId = await linkedPatientId(req.user.sub, req.params.code);
   if (!patientId) return res.status(404).json({ error: 'Patient not linked' });
@@ -212,16 +219,19 @@ router.post('/patients/:code/notify', async (req, res) => {
             (SELECT dl.logged_at FROM dose_logs dl WHERE dl.schedule_id=ms.id
               AND dl.status IN ('taken','taken_late') LIMIT 1) AS taken_at
        FROM medication_schedules ms JOIN medications m ON m.id=ms.medication_id
-      WHERE ms.id=? AND ms.patient_id=? AND ms.is_confirmed=1`,
+      WHERE ms.id=? AND ms.patient_id=? AND ms.is_confirmed=1
+        AND m.status='active' AND m.schedule_status='APPROVED' AND ms.is_prn_slot=0
+        AND ms.schedule_version=(SELECT MAX(ms2.schedule_version) FROM medication_schedules ms2
+          WHERE ms2.patient_id=ms.patient_id AND ms2.medication_id=ms.medication_id)`,
     [doseId, patientId]
   );
   if (!dose) return res.status(404).json({ error: 'Dose not found' });
   const doseStatus = computeDoseStatus(dose);
-  const reminderAllowed =
-    doseStatus === 'MISSED' || (doseStatus === 'DUE' && dose.schedule_status === 'APPROVED');
+  const reminderAllowed = doseStatus === 'DUE' && dose.schedule_status === 'APPROVED';
   if (!reminderAllowed) {
     return res.status(409).json({
-      error: 'A reminder can only be sent while the dose is due or missed',
+      error:
+        'A take-medicine reminder can only be sent while an approved dose is due. Review missed doses with the pharmacist.',
       code: 'dose_not_due',
     });
   }

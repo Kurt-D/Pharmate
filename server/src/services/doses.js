@@ -13,17 +13,18 @@
 import { v4 as uuidv4 } from 'uuid';
 import { pool } from '../db/connection.js';
 import { classifyByDelay } from '../../engine/doseStatus.js';
-import { reflowRemaining } from '../../engine/index.js';
-import { idealSlots } from '../../engine/intervals.js';
-import { parseClock } from '../../engine/time.js';
 import { raiseMissedAlerts } from './alerts.js';
 import { createPatientNotification } from './patientNotifications.js';
 import { publishPatientAdherence } from './caregiverEvents.js';
 import { publishDoseActivity } from './realtimeEvents.js';
-import { getPatientMedicationSchedule } from './medicationSchedule.js';
+import {
+  getPatientMedicationSchedule,
+  isCalendarDate,
+  DEFAULT_DUE_WINDOW_MINUTES,
+  computeDoseStatus,
+} from './medicationSchedule.js';
 
 const VALID_METHODS = ['fcm', 'local', 'manual', 'ocr'];
-const MANILA_OFFSET_MS = 8 * 3600 * 1000;
 
 const CALENDAR_STATUSES = {
   all: null,
@@ -44,12 +45,6 @@ async function emitDoseActivity(patientId, scheduleId, status, loggedAt) {
   }
 }
 
-/** Minute-of-day (Asia/Manila) of an absolute instant. */
-function manilaMinuteOfDay(date) {
-  const d = new Date(date.getTime() + MANILA_OFFSET_MS);
-  return d.getUTCHours() * 60 + d.getUTCMinutes();
-}
-
 /** The patient's current confirmed day plan (latest version for each medicine). */
 export async function todayDoses(patientId, options = {}) {
   return (await getPatientMedicationSchedule(patientId, options)).doses;
@@ -57,7 +52,7 @@ export async function todayDoses(patientId, options = {}) {
 
 /** Dose history for one Manila calendar day, optionally narrowed by UI status. */
 export async function dosesForDate(patientId, date, status = 'all') {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(date)) || Number.isNaN(Date.parse(`${date}T00:00:00Z`))) {
+  if (!isCalendarDate(date)) {
     return { error: 'invalid_date' };
   }
   if (!Object.hasOwn(CALENDAR_STATUSES, status)) return { error: 'invalid_status' };
@@ -70,7 +65,7 @@ export async function dosesForDate(patientId, date, status = 'all') {
 }
 
 export async function doseHistory(patientId, startDate, endDate) {
-  if (![startDate, endDate].every((date) => /^\d{4}-\d{2}-\d{2}$/.test(String(date)))) {
+  if (![startDate, endDate].every(isCalendarDate)) {
     return { error: 'invalid_date' };
   }
   if (startDate > endDate) return { error: 'invalid_range' };
@@ -95,12 +90,20 @@ export async function logDose(patientId, scheduleId, opts = {}) {
   try {
     await conn.beginTransaction();
     const [[existingLog]] = await conn.execute(
-      'SELECT id,status FROM dose_logs WHERE id=? LIMIT 1',
-      [logId]
+      'SELECT id,status,logged_at FROM dose_logs WHERE id=? AND patient_id=? LIMIT 1',
+      [logId, patientId]
     );
     if (existingLog) {
       await conn.commit();
-      return { status: existingLog.status, log_id: logId, duplicate: true, reflow: null };
+      return {
+        status: ['taken', 'taken_late'].includes(existingLog.status)
+          ? 'TAKEN'
+          : String(existingLog.status).toUpperCase(),
+        adherence_status: existingLog.status,
+        log_id: logId,
+        duplicate: true,
+        reflow: null,
+      };
     }
     const [rows] = await conn.execute(
       `SELECT ms.id,ms.medication_id,ms.scheduled_time,ms.status,m.frequency_code,m.schedule_status,
@@ -135,7 +138,9 @@ export async function logDose(patientId, scheduleId, opts = {}) {
       status = 'snoozed';
     } else {
       const delayMin = (loggedAt.getTime() - new Date(sched.scheduled_time).getTime()) / 60000;
-      status = classifyByDelay(delayMin); // taken | taken_late | missed
+      // An explicit intake remains an intake even after the missed window.
+      // Keep its late classification without changing future reminder times.
+      status = classifyByDelay(delayMin) === 'taken' ? 'taken' : 'taken_late';
     }
     if (['taken', 'taken_late'].includes(status)) {
       const maximum = Number(sched.max_daily_doses);
@@ -209,10 +214,8 @@ export async function logDose(patientId, scheduleId, opts = {}) {
   } finally {
     conn.release();
   }
-  let reflow = null;
-  if (status === 'taken_late') {
-    reflow = await reflowSuggestion(patientId, sched.frequency_code, loggedAt);
-  }
+  // Recording an intake is not authorization to reschedule subsequent doses.
+  const reflow = null;
   await publishPatientAdherence(patientId, {
     schedule_id: scheduleId,
     status,
@@ -220,34 +223,15 @@ export async function logDose(patientId, scheduleId, opts = {}) {
   });
   await emitDoseActivity(patientId, scheduleId, status, loggedAt);
   return {
-    status: status === 'missed' ? 'MISSED' : 'TAKEN',
+    status: computeDoseStatus({
+      scheduled_at: sched.scheduled_time,
+      stored_status: status,
+      taken_at: ['taken', 'taken_late'].includes(status) ? loggedAt : null,
+    }),
     adherence_status: status,
     log_id: logId,
     reflow,
   };
-}
-
-/**
- * Suggested reflow of the rest of the day after a late intake (ENG §8). Returns
- * the recomputed remaining times for the patient to re-confirm (we never silently
- * mutate confirmed doses — the patient owns confirmation, ENG §6). Only interval
- * drugs reflow; anchored/PRN return null.
- */
-async function reflowSuggestion(patientId, frequencyCode, loggedAt) {
-  const [aRows] = await pool.execute(
-    `SELECT sleep_anchor FROM patient_anchors WHERE patient_id = ?`,
-    [patientId]
-  );
-  const sleepAnchor = aRows[0]?.sleep_anchor ?? '22:00:00';
-  const info = idealSlots(frequencyCode, { sleep: String(sleepAnchor).slice(0, 5) });
-  if (info.kind !== 'interval') return null;
-
-  const { kept, dropped } = reflowRemaining({
-    intervalHours: info.intervalMin / 60,
-    takenTimeMin: manilaMinuteOfDay(loggedAt),
-    sleepAnchorMin: parseClock(String(sleepAnchor).slice(0, 5)),
-  });
-  return { kept, dropped };
 }
 
 /**
@@ -265,13 +249,17 @@ export async function sweepMissed(now = new Date()) {
      WHERE ms.status = 'scheduled'
        AND ms.is_confirmed = 1
        AND m.schedule_status = 'APPROVED'
+       AND m.status = 'active'
+       AND ms.is_prn_slot = 0
+       AND ms.schedule_version = (SELECT MAX(ms2.schedule_version) FROM medication_schedules ms2
+         WHERE ms2.patient_id=ms.patient_id AND ms2.medication_id=ms.medication_id)
        AND NOT EXISTS (SELECT 1 FROM dose_logs dl
                         WHERE dl.schedule_id = ms.id AND dl.status IN ('taken','taken_late'))`
   );
   let missed = 0;
   for (const r of rows) {
     const delayMin = (now.getTime() - new Date(r.scheduled_time).getTime()) / 60000;
-    if (delayMin > 30) {
+    if (delayMin > DEFAULT_DUE_WINDOW_MINUTES) {
       const conn = await pool.getConnection();
       let changed = false;
       try {

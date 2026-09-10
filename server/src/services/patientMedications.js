@@ -150,10 +150,10 @@ async function insertAudit(conn, row, actorId, eventType, before, after) {
 async function invalidateFuture(conn, row) {
   const [result] = await conn.execute(
     `DELETE ms FROM medication_schedules ms
-     WHERE ms.medication_id = ? AND ms.patient_id = ? AND ms.scheduled_time > NOW(3)
+     WHERE ms.medication_id = ? AND ms.patient_id = ? AND ms.scheduled_time > ?
        AND ms.status IN ('scheduled','snoozed')
        AND NOT EXISTS (SELECT 1 FROM dose_logs dl WHERE dl.schedule_id = ms.id)`,
-    [row.id, row.patient_id]
+    [row.id, row.patient_id, new Date()]
   );
   return result.affectedRows;
 }
@@ -162,9 +162,10 @@ async function invalidateActiveReminders(conn, row) {
   const [result] = await conn.execute(
     `DELETE ms FROM medication_schedules ms
      WHERE ms.medication_id = ? AND ms.patient_id = ?
+       AND ms.scheduled_time > ?
        AND ms.status IN ('scheduled','snoozed')
        AND NOT EXISTS (SELECT 1 FROM dose_logs dl WHERE dl.schedule_id = ms.id)`,
-    [row.id, row.patient_id]
+    [row.id, row.patient_id, new Date()]
   );
   return result.affectedRows;
 }

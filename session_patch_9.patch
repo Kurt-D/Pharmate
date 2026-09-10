@@ -1,0 +1,167 @@
+*** Begin Patch
+*** Update File: C:/xampp/htdocs/Pharmate/client/src/pages/patient/ProfileRedesign.jsx
+@@
+ const EMPTY_ANCHORS = {
+@@
+ };
++
++const GUIDED_HEALTH_OPTIONS = {
++  allergies: [
++    'No known medicine allergies',
++    'Penicillin or amoxicillin',
++    'Aspirin or anti-inflammatory medicines',
++    'Sulfa medicines',
++    'I am not sure',
++    'Something else — ask my caregiver or pharmacist',
++  ],
++  conditions: [
++    'No known health conditions',
++    'High blood pressure',
++    'Diabetes',
++    'Asthma or breathing problems',
++    'Heart condition',
++    'I am not sure',
++    'Something else — ask my caregiver or health professional',
++  ],
++  current_medicines: [
++    'I do not currently take medicines or supplements',
++    'Blood pressure medicine',
++    'Diabetes medicine',
++    'Pain or fever medicine',
++    'Vitamins or supplements',
++    'I am not sure — check my medicine packaging',
++    'Something else — ask my caregiver or pharmacist',
++  ],
++};
++
++const EXCLUSIVE_GUIDED_ANSWERS = new Set([
++  'No known medicine allergies',
++  'No known health conditions',
++  'I do not currently take medicines or supplements',
++  'I am not sure',
++  'I am not sure — check my medicine packaging',
++]);
+@@
+   function startHealthEdit(field) {
+@@
+   }
++  function toggleGuidedAnswer(field, answer) {
++    setHealthDraft((current) => {
++      const selected = String(current[field] || '')
++        .split(', ')
++        .filter(Boolean);
++      if (selected.includes(answer)) {
++        return { ...current, [field]: selected.filter((item) => item !== answer).join(', ') };
++      }
++      if (EXCLUSIVE_GUIDED_ANSWERS.has(answer)) return { ...current, [field]: answer };
++      return {
++        ...current,
++        [field]: [...selected.filter((item) => !EXCLUSIVE_GUIDED_ANSWERS.has(item)), answer].join(', '),
++      };
++    });
++  }
+@@
+-    ['Medicine allergies', safetyProfile.allergies || 'Not provided', 'allergies', 'textarea'],
+-    ['Health conditions', safetyProfile.conditions || 'Not provided', 'conditions', 'textarea'],
++    ['Medicine allergies', safetyProfile.allergies || 'Not provided', 'allergies', 'guided'],
++    ['Health conditions', safetyProfile.conditions || 'Not provided', 'conditions', 'guided'],
+@@
+       safetyProfile.current_medicines || 'Not provided',
+       'current_medicines',
+-      'textarea',
++      'guided',
+@@
+                       {type === 'date' && (
+-                        <input
+-                          type="date"
+-                          value={healthDraft[field]}
+-                          onChange={(event) =>
+-                            setHealthDraft((current) => ({
+-                              ...current,
+-                              [field]: event.target.value,
+-                            }))
+-                          }
+-                        />
++                        <label className="pm-profile-guided-field">
++                          <span>Choose the date from the calendar</span>
++                          <input
++                            type="date"
++                            value={healthDraft[field]}
++                            onChange={(event) =>
++                              setHealthDraft((current) => ({
++                                ...current,
++                                [field]: event.target.value,
++                              }))
++                            }
++                          />
++                        </label>
+                       )}
+                       {type === 'number' && (
+-                        <input
+-                          max="500"
+-                          min="2"
+-                          step="0.1"
+-                          type="number"
++                        <label className="pm-profile-guided-field">
++                          <span>Choose your nearest weight</span>
++                          <select
+                           value={healthDraft[field]}
+                           onChange={(event) =>
+                             setHealthDraft((current) => ({
+                               ...current,
+                               [field]: event.target.value,
+                             }))
+                           }
+-                        />
++                          >
++                            <option value="">I am not sure</option>
++                            {Array.from({ length: 249 }, (_, index) => index + 2).map((weight) => (
++                              <option key={weight} value={weight}>
++                                {weight} kg
++                              </option>
++                            ))}
++                          </select>
++                        </label>
+                       )}
+-                      {type === 'textarea' && (
+-                        <textarea
+-                          rows="3"
+-                          value={healthDraft[field]}
+-                          onChange={(event) =>
+-                            setHealthDraft((current) => ({
+-                              ...current,
+-                              [field]: event.target.value,
+-                            }))
+-                          }
+-                        />
++                      {type === 'guided' && (
++                        <div className="pm-profile-guided-choices">
++                          <p>Choose every option that applies to you:</p>
++                          {GUIDED_HEALTH_OPTIONS[field].map((answer) => {
++                            const selected = String(healthDraft[field] || '')
++                              .split(', ')
++                              .includes(answer);
++                            return (
++                              <button
++                                aria-pressed={selected}
++                                className={selected ? 'is-selected' : ''}
++                                key={answer}
++                                onClick={() => toggleGuidedAnswer(field, answer)}
++                                type="button"
++                              >
++                                {selected && <Icon name="check" size={17} />}
++                                {answer}
++                              </button>
++                            );
++                          })}
++                          {healthDraft[field] &&
++                            !String(healthDraft[field])
++                              .split(', ')
++                              .every((answer) => GUIDED_HEALTH_OPTIONS[field].includes(answer)) && (
++                              <small className="pm-profile-existing-answer">
++                                Your previous answer is kept until you choose a guided option:{' '}
++                                <strong>{healthDraft[field]}</strong>
++                              </small>
++                            )}
++                        </div>
+*** End Patch

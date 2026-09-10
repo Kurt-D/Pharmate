@@ -90,18 +90,20 @@ describe('POST /api/patient/schedule/confirm', () => {
     expect(res.body.count).toBe(proposal.body.slots.length);
   });
 
-  test('re-confirming bumps the version and does not duplicate scheduled doses', async () => {
+  test('re-confirming an unchanged schedule preserves its version and doses', async () => {
     const first = await request(app).post('/api/patient/schedule/confirm').set(auth());
     const second = await request(app).post('/api/patient/schedule/confirm').set(auth());
-    expect(second.body.version).toBeGreaterThan(first.body.version);
-    // Same dose count — the prior 'scheduled' rows were replaced, not appended.
+    expect(second.body.version).toBe(first.body.version);
+    expect(second.body.unchanged).toBe(true);
     expect(second.body.count).toBe(first.body.count);
   });
 
-  test('deleting all selected reminders remains deleted when doses are fetched again', async () => {
+  test('deleting future reminders remains deleted when doses are fetched again', async () => {
     await request(app).post('/api/patient/schedule/confirm').set(auth());
     const before = await request(app).get('/api/patient/doses/today').set(auth());
-    const scheduleIds = before.body.map((dose) => dose.schedule_id);
+    const scheduleIds = before.body
+      .filter((dose) => new Date(dose.scheduled_at) > new Date())
+      .map((dose) => dose.schedule_id);
 
     expect(scheduleIds.length).toBeGreaterThan(0);
     const removed = await request(app)

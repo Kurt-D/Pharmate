@@ -49,6 +49,8 @@ export function frequencyRule(value, intervalHours = null) {
 
 export function suggestedTimes(value, startTime, intervalHours = null) {
   const rule = frequencyRule(value, intervalHours);
+  // A daily count is not an interval instruction.
+  if (rule && rule.frequencyType !== 'EVERY_N_HOURS' && rule.count !== 1) return [];
   if (!rule || rule.count === 0 || !Number.isInteger(rule.count) || !CLOCK.test(startTime || ''))
     return [];
   const start = Number(startTime.slice(0, 2)) * 60 + Number(startTime.slice(3, 5));
@@ -151,7 +153,7 @@ function typeForFrequency(code, isPrn) {
   if (code === 'QD') return 'ONCE_DAILY';
   if (code === 'BID') return 'TWICE_DAILY';
   if (code === 'TID') return 'THREE_TIMES_DAILY';
-  if (/^q\d{1,2}h$/.test(code || '')) return 'EVERY_N_HOURS';
+  if (/^q\d{1,2}h$/i.test(code || '')) return 'EVERY_N_HOURS';
   return null;
 }
 
@@ -169,8 +171,11 @@ export function deriveScheduleDefinition(input, frequencyCode) {
   const times = instructionTimes.length ? instructionTimes : enteredTimes;
   const requestedType = String(input.schedule_type || '').toUpperCase();
   const inferredType = typeForFrequency(frequencyCode, input.is_prn);
-  const scheduleType = requestedType || (times.length ? 'SPECIFIC_TIMES' : inferredType);
-  const intervalMatch = String(frequencyCode || '').match(/^q(\d{1,2})h$/);
+  const scheduleType =
+    inferredType === 'AS_NEEDED'
+      ? 'AS_NEEDED'
+      : requestedType || (times.length ? 'SPECIFIC_TIMES' : inferredType);
+  const intervalMatch = String(frequencyCode || '').match(/^q(\d{1,2})h$/i);
   const intervalHours = Number(input.interval_hours || intervalMatch?.[1]) || null;
   const intervalStartTime = String(
     input.interval_start_time || input.first_dose_time || input.start_time || ''
@@ -179,6 +184,22 @@ export function deriveScheduleDefinition(input, frequencyCode) {
   const days = Array.isArray(input.schedule_days)
     ? [...new Set(input.schedule_days.map(String))]
     : [];
+  if (
+    ['SPECIFIC_DAYS', 'WEEKLY'].includes(scheduleType) &&
+    (!days.length ||
+      days.some(
+        (day) => !/^(?:[0-6]|SUNDAY|MONDAY|TUESDAY|WEDNESDAY|THURSDAY|FRIDAY|SATURDAY)$/i.test(day)
+      ))
+  ) {
+    return {
+      scheduleType,
+      times,
+      intervalHours: null,
+      intervalStartTime: null,
+      days,
+      status: 'NEEDS_REVIEW',
+    };
+  }
 
   if (scheduleType === 'AS_NEEDED') {
     return {

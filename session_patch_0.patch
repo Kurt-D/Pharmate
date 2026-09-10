@@ -1,0 +1,43 @@
+*** Begin Patch
+*** Update File: C:/xampp/htdocs/Pharmate/client/src/pages/SignupRedesign.jsx
+@@
+   function finishAuthentication(data) {
+     login(data.user, data.accessToken, data.refreshToken);
+-    navigate(homeForRole(data.role || data.user.role), { replace: true });
++    const role = data.role || data.user.role;
++    navigate(role === 'patient' ? '/patient/onboarding' : homeForRole(role), { replace: true });
+   }
+*** Update File: C:/xampp/htdocs/Pharmate/server/src/routes/auth.js
+@@
+ async function createPatientRecords(conn, userId, fullName) {
+@@
+   await conn.execute('INSERT INTO patient_anchors (patient_id) VALUES (?)', [userId]);
+   await conn.execute('INSERT INTO patient_preferences (patient_id) VALUES (?)', [userId]);
++  await conn.execute('INSERT INTO patient_safety_profiles (patient_id) VALUES (?)', [userId]);
+@@
+-      const patientCode = await generatePatientCode();
+-      await conn.execute(
+-        `INSERT INTO patients
+-           (id, patient_code, full_name_enc, contact_num_enc, address_enc, medical_condition_enc)
+-         VALUES (?, ?, ?, ?, ?, ?)`,
+-        [
+-          userId,
+-          patientCode,
+-          full_name ? encrypt(full_name) : null,
+-          contact_num ? encrypt(contact_num) : null,
+-          address ? encrypt(address) : null,
+-          medical_condition ? encrypt(medical_condition) : null,
+-        ]
+-      );
+-      await conn.execute('INSERT INTO patient_anchors (patient_id) VALUES (?)', [userId]);
+-      await conn.execute('INSERT INTO patient_preferences (patient_id) VALUES (?)', [userId]);
++      await createPatientRecords(conn, userId, full_name?.trim());
++      const patientDetails = { contact_num, address, medical_condition };
++      const patientUpdates = Object.entries(patientDetails).filter(([, value]) => value);
++      if (patientUpdates.length) {
++        await conn.execute(
++          `UPDATE patients SET ${patientUpdates.map(([field]) => `${field}_enc=?`).join(',')} WHERE id=?`,
++          [...patientUpdates.map(([, value]) => encrypt(value)), userId]
++        );
++      }
+*** End Patch
