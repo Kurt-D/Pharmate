@@ -847,14 +847,12 @@ router.get('/search', async (req, res) => {
 router.post('/generate-schedule', async (req, res) => {
   const generated = await generateFromRequest(req.body, pool, req.user.sub);
   if (generated.error)
-    return res
-      .status(generated.status)
-      .json({
-        error: generated.error,
-        code: generated.code,
-        drug_id: generated.drug_id,
-        medicine_name: generated.medicine_name,
-      });
+    return res.status(generated.status).json({
+      error: generated.error,
+      code: generated.code,
+      drug_id: generated.drug_id,
+      medicine_name: generated.medicine_name,
+    });
   if (!generated.result.can_save) {
     const blocking = generated.result.warnings?.find((item) => item.severity === 'blocking');
     return res.status(422).json({

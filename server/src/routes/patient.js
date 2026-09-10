@@ -897,13 +897,11 @@ router.post('/schedule/confirm', async (req, res) => {
   const source = req.body?.source === 'manual' ? 'manual' : 'suggested';
   const result = await confirmForPatient(req.user.sub, req.body?.slots, medicationIds, { source });
   if (result.error === 'schedule_changed') {
-    return res
-      .status(409)
-      .json({
-        error:
-          'This medicine changed while the schedule was being prepared. Reload and review the latest directions.',
-        code: 'SCHEDULE_CHANGED',
-      });
+    return res.status(409).json({
+      error:
+        'This medicine changed while the schedule was being prepared. Reload and review the latest directions.',
+      code: 'SCHEDULE_CHANGED',
+    });
   }
   if (result.error === 'prescription_review_required') {
     return res.status(409).json({

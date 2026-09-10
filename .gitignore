@@ -8,5 +8,12 @@ node_modules
 .idea/
 tmp/
 
+# Local recovery data and agent-generated session exports are not application source.
+/.db-backups/
+/extract_session_diff.py
+/session_diff_*.txt
+/session_patch_*.patch
+/session_patch_call_*.txt
+
 # Runtime/test prescription uploads can contain sensitive patient data.
 /server/uploads/rx_*.png
