@@ -198,9 +198,9 @@ describe('Delivery requests (TC-08 — branch limitation)', () => {
 });
 
 describe('UC-09 — prescription gating for refills & deliveries', () => {
-  void PNG;
   const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAAeklEQVR4nNXOQREAAAyDMPybZiL62BEFwTiMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwzi+A6sDylPSwv6dS34AAAAASUVORK5CYII=', 'base64');
 
+  void PNG;
   // amoxicillin is Rx (antibiotic) in the PH FDA formulary; paracetamol is OTC.
   async function encode(t, { drug_name = 'amoxicillin', source = 'RX_VALIDATED' } = {}) {
     const res = await request(app)
