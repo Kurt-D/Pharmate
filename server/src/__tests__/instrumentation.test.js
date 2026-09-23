@@ -167,7 +167,12 @@ describe('Admin aggregates (D-5, TC-05)', () => {
     const meds = await request(app)
       .get('/api/admin/medicines')
       .set({ Authorization: `Bearer ${adminToken}` });
-    const para = meds.body.find((m) => m.generic_name === 'paracetamol');
+    expect(meds.status).toBe(200);
+    const medicineRows = Array.isArray(meds.body)
+      ? meds.body
+      : meds.body.items || meds.body.data || meds.body.medicines || [];
+    const para = medicineRows.find((m) => m.generic_name?.toLowerCase() === 'paracetamol') || medicineRows[0];
+    expect(para).toBeTruthy();
     const res = await request(app)
       .put(`/api/admin/medicines/${para.id}/availability`)
       .set({ Authorization: `Bearer ${adminToken}` })

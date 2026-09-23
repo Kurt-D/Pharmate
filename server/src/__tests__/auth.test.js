@@ -198,14 +198,15 @@ describe('Auth — register and login', () => {
     );
   });
 
-  test('patient login returns accessToken, refreshToken, and patientCode', async () => {
+  test('patient login returns an access token, stores refresh credentials in cookies, and includes patientCode', async () => {
     const res = await request(app).post('/api/auth/login').send({
       email: PATIENT_EMAIL,
       password: PASSWORD,
     });
     expect(res.status).toBe(200);
     expect(res.body).toHaveProperty('accessToken');
-    expect(res.body).toHaveProperty('refreshToken');
+    expect(res.body).not.toHaveProperty('refreshToken');
+    expect(res.headers['set-cookie'].some((cookie) => cookie.startsWith('pm_refresh='))).toBe(true);
     expect(res.body.user.role).toBe('patient');
     expect(res.body.user.patientCode).toMatch(/^PM-[A-Z0-9]{6}$/);
   });
@@ -279,16 +280,19 @@ describe('Auth — register and login', () => {
   });
 
   test('refresh token rotation returns new accessToken', async () => {
-    const loginRes = await request(app).post('/api/auth/login').send({
+    const agent = request.agent(app);
+    const loginRes = await agent.post('/api/auth/login').send({
       email: PATIENT_EMAIL,
       password: PASSWORD,
     });
-    const { refreshToken } = loginRes.body;
 
-    const refreshRes = await request(app).post('/api/auth/refresh').send({ refreshToken });
+    const refreshRes = await agent
+      .post('/api/auth/refresh')
+      .set('x-csrf-token', loginRes.body.csrfToken)
+      .send({});
     expect(refreshRes.status).toBe(200);
     expect(refreshRes.body).toHaveProperty('accessToken');
-    expect(refreshRes.body).toHaveProperty('refreshToken');
+    expect(refreshRes.body).not.toHaveProperty('refreshToken');
   });
 });
 

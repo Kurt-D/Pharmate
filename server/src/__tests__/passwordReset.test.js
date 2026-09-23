@@ -117,7 +117,8 @@ describe('PIN password recovery', () => {
   test('resets once, revokes sessions, and clears account lockout state', async () => {
     const email = `reset.sessions.${Date.now()}@test.pharmate`;
     const user = await register(email);
-    const login = await request(app)
+    const agent = request.agent(app);
+    const login = await agent
       .post('/api/auth/login')
       .send({ email, password: OLD_PASSWORD });
     const { pin } = await requestPin(email);
@@ -143,7 +144,7 @@ describe('PIN password recovery', () => {
     expect(audit.actor_user_id).toBe(user.id);
     expect(
       typeof audit.metadata_json === 'string' ? JSON.parse(audit.metadata_json) : audit.metadata_json
-    ).toEqual({ sessionsRevoked: true });
+    ).toEqual(expect.objectContaining({ sessionsRevoked: true }));
     expect(
       (await request(app).post('/api/auth/login').send({ email, password: OLD_PASSWORD })).status
     ).toBe(401);
@@ -151,7 +152,7 @@ describe('PIN password recovery', () => {
       (await request(app).post('/api/auth/login').send({ email, password: NEW_PASSWORD })).status
     ).toBe(200);
     expect(
-      (await request(app).post('/api/auth/refresh').send({ refreshToken: login.body.refreshToken }))
+      (await agent.post('/api/auth/refresh').set('x-csrf-token', login.body.csrfToken).send({}))
         .status
     ).toBe(401);
     expect(

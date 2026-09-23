@@ -14,11 +14,27 @@ afterAll(async () => {
 async function createUser(role = 'caregiver') {
   const email = `${role}.session.${Date.now()}.${Math.random()}@test.pharmate`;
   const id = await createPrivilegedTestUser({ email, password: CURRENT_PASSWORD, role });
-  const login = await request(app)
+  const agent = request.agent(app);
+  const login = await agent
     .post('/api/auth/login')
     .send({ email, password: CURRENT_PASSWORD });
   expect(login.status).toBe(200);
-  return { id, email, ...login.body };
+  const cookieHeader = login.headers['set-cookie']
+    .filter((cookie) => cookie.startsWith('pm_refresh=') || cookie.startsWith('pm_csrf='))
+    .map((cookie) => cookie.split(';')[0])
+    .join('; ');
+  return { id, email, agent, cookieHeader, ...login.body };
+}
+
+async function signIn(email) {
+  const agent = request.agent(app);
+  const login = await agent.post('/api/auth/login').send({ email, password: CURRENT_PASSWORD });
+  expect(login.status).toBe(200);
+  return { agent, ...login.body };
+}
+
+function refresh(session) {
+  return session.agent.post('/api/auth/refresh').set('x-csrf-token', session.csrfToken).send({});
 }
 
 async function protectedRequest(accessToken) {
@@ -31,9 +47,7 @@ async function protectedRequest(accessToken) {
 describe('password changes and immediate session invalidation', () => {
   test('changes a password, revokes every refresh token, and invalidates old access', async () => {
     const user = await createUser();
-    const secondLogin = await request(app)
-      .post('/api/auth/login')
-      .send({ email: user.email, password: CURRENT_PASSWORD });
+    const secondLogin = await signIn(user.email);
 
     const changed = await request(app)
       .post('/api/auth/change-password')
@@ -49,8 +63,8 @@ describe('password changes and immediate session invalidation', () => {
     );
     expect(passwordAudit).toBeTruthy();
     expect(await protectedRequest(user.accessToken)).toHaveProperty('status', 401);
-    for (const refreshToken of [user.refreshToken, secondLogin.body.refreshToken]) {
-      const refreshed = await request(app).post('/api/auth/refresh').send({ refreshToken });
+    for (const session of [user, secondLogin]) {
+      const refreshed = await refresh(session);
       expect(refreshed.status).toBe(401);
     }
     expect(
@@ -112,9 +126,7 @@ describe('password changes and immediate session invalidation', () => {
 
   test('logout-all invalidates access and all refresh sessions', async () => {
     const user = await createUser();
-    const secondLogin = await request(app)
-      .post('/api/auth/login')
-      .send({ email: user.email, password: CURRENT_PASSWORD });
+    const secondLogin = await signIn(user.email);
     const response = await request(app)
       .post('/api/auth/logout-all')
       .set('Authorization', `Bearer ${user.accessToken}`)
@@ -126,23 +138,20 @@ describe('password changes and immediate session invalidation', () => {
       [user.id]
     );
     expect(logoutAllAudit).toBeTruthy();
-    expect(await protectedRequest(secondLogin.body.accessToken)).toHaveProperty('status', 401);
-    for (const refreshToken of [user.refreshToken, secondLogin.body.refreshToken]) {
-      expect((await request(app).post('/api/auth/refresh').send({ refreshToken })).status).toBe(
-        401
-      );
+    expect(await protectedRequest(secondLogin.accessToken)).toHaveProperty('status', 401);
+    for (const session of [user, secondLogin]) {
+      expect((await refresh(session)).status).toBe(401);
     }
   });
 
   test('ordinary logout revokes only the supplied refresh token', async () => {
     const user = await createUser();
-    const secondLogin = await request(app)
-      .post('/api/auth/login')
-      .send({ email: user.email, password: CURRENT_PASSWORD });
-    await request(app)
+    const secondLogin = await signIn(user.email);
+    await user.agent
       .post('/api/auth/logout')
       .set('Authorization', `Bearer ${user.accessToken}`)
-      .send({ refreshToken: user.refreshToken });
+      .set('x-csrf-token', user.csrfToken)
+      .send({});
     const [[logoutAudit]] = await pool.execute(
       `SELECT metadata_json FROM audit_events
        WHERE action='logout_completed' AND entity_id=? ORDER BY created_at DESC LIMIT 1`,
@@ -150,35 +159,32 @@ describe('password changes and immediate session invalidation', () => {
     );
     expect(logoutAudit).toBeTruthy();
     expect(
-      (await request(app).post('/api/auth/refresh').send({ refreshToken: user.refreshToken }))
-        .status
+      (
+        await request(app)
+          .post('/api/auth/refresh')
+          .set('Cookie', user.cookieHeader)
+          .set('x-csrf-token', user.csrfToken)
+          .send({})
+      ).status
     ).toBe(401);
     expect(
-      (
-        await request(app).post('/api/auth/refresh').send({
-          refreshToken: secondLogin.body.refreshToken,
-        })
-      ).status
+      (await refresh(secondLogin)).status
     ).toBe(200);
   });
 
   test('reusing a rotated refresh token revokes its entire token family', async () => {
     const user = await createUser();
-    const rotated = await request(app)
-      .post('/api/auth/refresh')
-      .send({ refreshToken: user.refreshToken });
+    const rotated = await refresh(user);
     expect(rotated.status).toBe(200);
 
     const replay = await request(app)
       .post('/api/auth/refresh')
-      .send({ refreshToken: user.refreshToken });
+      .set('Cookie', user.cookieHeader)
+      .set('x-csrf-token', user.csrfToken)
+      .send({});
     expect(replay.status).toBe(401);
     expect(
-      (
-        await request(app)
-          .post('/api/auth/refresh')
-          .send({ refreshToken: rotated.body.refreshToken })
-      ).status
+      (await refresh({ ...user, csrfToken: rotated.body.csrfToken })).status
     ).toBe(401);
 
     const [[audit]] = await pool.execute(
@@ -197,8 +203,7 @@ describe('database-backed access authentication', () => {
     await pool.execute('UPDATE users SET is_active = 0 WHERE id = ?', [user.id]);
     expect(await protectedRequest(user.accessToken)).toHaveProperty('status', 401);
     expect(
-      (await request(app).post('/api/auth/refresh').send({ refreshToken: user.refreshToken }))
-        .status
+      (await refresh(user)).status
     ).toBe(401);
   });
 
