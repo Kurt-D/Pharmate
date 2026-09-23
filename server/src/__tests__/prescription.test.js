@@ -70,7 +70,7 @@ describe('Prescription upload', () => {
     const res = await request(app)
       .post(`/api/patient/medications/${medId}/prescription`)
       .set('Authorization', `Bearer ${patientToken}`)
-      .attach('photo', PNG, { filename: 'rx.png', contentType: 'image/png' });
+      .attach('photo', validPng, { filename: 'rx.png', contentType: 'image/png' });
     expect(res.status).toBe(201);
     expect(res.body.status).toBe('pending');
     expect(res.body.photo_id).toBeTruthy();
@@ -148,7 +148,7 @@ describe('Pharmacist validation queue + decision', () => {
     const decision = await request(app)
       .post('/api/pharmacist/validate')
       .set('Authorization', `Bearer ${pharmToken}`)
-      .send({ photo_id: photoId, action: 'approve' });
+      .send({ photo_id: photoId, action: 'approve', prescription: { medicine_name: 'Paracetamol', quantity: 20 } });
     expect(decision.status).toBe(200);
     expect(decision.body.status).toBe('approved');
 
@@ -201,11 +201,11 @@ describe('Pharmacist validation queue + decision', () => {
     await request(app)
       .post('/api/pharmacist/validate')
       .set('Authorization', `Bearer ${pharmToken}`)
-      .send({ photo_id: photoId, action: 'approve' });
+      .send({ photo_id: photoId, action: 'approve', prescription: { medicine_name: 'Paracetamol', quantity: 20 } });
     const again = await request(app)
       .post('/api/pharmacist/validate')
       .set('Authorization', `Bearer ${pharmToken}`)
-      .send({ photo_id: photoId, action: 'approve' });
+      .send({ photo_id: photoId, action: 'approve', prescription: { medicine_name: 'Paracetamol', quantity: 20 } });
     expect(again.status).toBe(409);
   });
 });
@@ -245,7 +245,7 @@ describe('Priority derivation on approval (PART 2)', () => {
     const decision = await request(app)
       .post('/api/pharmacist/validate')
       .set('Authorization', `Bearer ${pharmToken}`)
-      .send({ photo_id: up.body.photo_id, action: 'approve' });
+      .send({ photo_id: up.body.photo_id, action: 'approve', prescription: { medicine_name: 'Paracetamol', quantity: 20 } });
     expect(decision.status).toBe(200);
 
     const [[row]] = await pool.execute('SELECT priority_flag FROM patients WHERE id = ?', [

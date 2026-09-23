@@ -72,7 +72,7 @@ test('a complete third day awards one token exactly once', async () => {
     [patientId]
   );
   expect(Number(streak.current_days)).toBe(3);
-  expect(Number(streak.priority_tokens)).toBe(1);
+  expect(Number(streak.priority_tokens)).toBe(0);
   const [[notices]] = await pool.execute(
     `SELECT COUNT(*) AS count FROM patient_notifications
      WHERE patient_id = ? AND type = 'reward_earned'`,
@@ -81,17 +81,17 @@ test('a complete third day awards one token exactly once', async () => {
   expect(Number(notices.count)).toBe(1);
 });
 
-test('a missed day resets the streak and creates one reset notice', async () => {
+test('a missed day uses an available streak freeze', async () => {
   const day = shiftDay(manilaDayKey(), -8);
   await addDay(day, ['taken', 'missed']);
   const result = await evaluateStreakDay(patientId, day);
-  expect(result).toMatchObject({ processed: true, result: 'broken', nextDays: 0, tokens: 0 });
+  expect(result).toMatchObject({ processed: true, result: 'frozen', nextDays: 3, tokens: 0 });
   const [[streak]] = await pool.execute(
     'SELECT current_days, priority_tokens FROM patient_streaks WHERE patient_id = ?',
     [patientId]
   );
-  expect(Number(streak.current_days)).toBe(0);
-  expect(Number(streak.priority_tokens)).toBe(1);
+  expect(Number(streak.current_days)).toBe(3);
+  expect(Number(streak.priority_tokens)).toBe(0);
 });
 
 test('status endpoint returns the synchronized lifecycle contract', async () => {

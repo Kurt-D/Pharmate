@@ -16,6 +16,7 @@ export const NOTIFICATION_TYPES = [
   'appointment_update',
   'counseling_summary_ready',
   'otc_back_in_stock',
+  'order_created',
   'order_update',
 ];
 
@@ -193,6 +194,11 @@ export async function createPatientNotification({
       'Your pharmacist-reviewed counseling summary is ready.',
     ],
     otc_back_in_stock: ['Medicine available', `${medicine} is back in stock.`],
+    order_created: [
+      'Order received',
+      'Your pharmacy order was received and is waiting for pharmacy processing.',
+    ],
+    order_update: ['Order update', 'Your pharmacy order has been updated.'],
   }[type];
   const safeMetadata = Object.fromEntries(
     Object.entries(metadata).filter(

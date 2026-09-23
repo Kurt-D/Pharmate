@@ -269,6 +269,10 @@ test('withdrawal stops both message directions and caregiver creation while pres
     .post(`/api/patient/inquiries/${id}/close`)
     .set(auth(patient.token))
     .expect(200);
+  await request(app)
+    .post(`/api/pharmacist/inquiries/${id}/close`)
+    .set(auth(pharmacist.token))
+    .expect(200);
   for (const [role, user] of [
     ['patient', patient],
     ['pharmacist', pharmacist],
@@ -336,6 +340,7 @@ test('inquiry text never enters audit metadata or role-wide realtime payloads', 
   );
   const secret = `Private inquiry text ${uuidv4()}`;
   try {
+    await accept();
     const id = await open({ subject: secret });
     await request(app)
       .post(`/api/patient/inquiries/${id}/messages`)

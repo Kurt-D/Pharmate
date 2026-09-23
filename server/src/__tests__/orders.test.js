@@ -5,6 +5,7 @@
  * Requires the test DB migrated (001–004) and formulary seeded.
  */
 import request from 'supertest';
+import sharp from 'sharp';
 import app from '../index.js';
 import { pool } from '../db/connection.js';
 import { createPrivilegedTestUser } from './helpers/testUsers.js';
@@ -18,6 +19,7 @@ let patientId;
 let medId;
 let deliveryBranch; // offers delivery
 let pickupBranch; // does not
+let validPng;
 const auth = (t = token) => ({ Authorization: `Bearer ${t}` });
 
 async function register(role) {
@@ -37,6 +39,9 @@ async function register(role) {
 }
 
 beforeAll(async () => {
+  validPng = await sharp({
+    create: { width: 128, height: 128, channels: 3, background: '#ffffff' },
+  }).png().toBuffer();
   const p = await register('patient');
   token = p.token;
   patientId = p.id;
@@ -137,6 +142,7 @@ describe('Catalog ordering is separate from medication scheduling', () => {
        WHERE rx_class='RX' AND availability=1 AND is_restricted=0 LIMIT 1`
     );
     const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAAeklEQVR4nNXOQREAAAyDMPybZiL62BEFwTiMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwzi+A6sDylPSwv6dS34AAAAASUVORK5CYII=', 'base64');
+    void png;
     const order = await request(app)
       .post('/api/patient/orders')
       .set(auth())
@@ -144,7 +150,7 @@ describe('Catalog ordering is separate from medication scheduling', () => {
       .field('branch_id', pickupBranch)
       .field('quantity', '1')
       .field('fulfillment', 'pickup')
-      .attach('photo', png, { filename: 'order-rx.png', contentType: 'image/png' });
+      .attach('photo', validPng, { filename: 'order-rx.png', contentType: 'image/png' });
     expect(order.status).toBe(201);
     const queue = await request(app).get('/api/pharmacist/orders').set(auth(pharmToken));
     const queued = queue.body.refills.find((item) => item.id === order.body.id);
@@ -153,7 +159,7 @@ describe('Catalog ordering is separate from medication scheduling', () => {
       .get(`/api/pharmacist/orders/refill/${order.body.id}/prescription`)
       .set(auth(pharmToken));
     expect(photo.status).toBe(200);
-    expect(photo.headers['content-type']).toBe('image/png');
+    expect(photo.headers['content-type']).toBe('image/jpeg');
   });
 });
 
@@ -192,6 +198,7 @@ describe('Delivery requests (TC-08 — branch limitation)', () => {
 });
 
 describe('UC-09 — prescription gating for refills & deliveries', () => {
+  void PNG;
   const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAAeklEQVR4nNXOQREAAAyDMPybZiL62BEFwTiMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwzi+A6sDylPSwv6dS34AAAAASUVORK5CYII=', 'base64');
 
   // amoxicillin is Rx (antibiotic) in the PH FDA formulary; paracetamol is OTC.
@@ -251,11 +258,11 @@ describe('UC-09 — prescription gating for refills & deliveries', () => {
     const up = await request(app)
       .post(`/api/patient/medications/${rxMed}/prescription`)
       .set(auth())
-      .attach('photo', PNG, { filename: 'rx.png', contentType: 'image/png' });
+      .attach('photo', validPng, { filename: 'rx.png', contentType: 'image/png' });
     const decision = await request(app)
       .post('/api/pharmacist/validate')
       .set(auth(pharmToken))
-      .send({ photo_id: up.body.photo_id, action: 'approve' });
+      .send({ photo_id: up.body.photo_id, action: 'approve', prescription: { medicine_name: 'Amoxicillin', quantity: 20 } });
     expect(decision.status).toBe(200);
 
     const res = await request(app)

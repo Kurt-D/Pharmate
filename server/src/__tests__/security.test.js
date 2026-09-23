@@ -29,7 +29,7 @@ describe('authentication rate limits', () => {
   test('limits refresh requests', async () => {
     for (let attempt = 0; attempt < 30; attempt += 1) {
       const response = await request(app).post('/api/auth/refresh').send({});
-      expect(response.status).toBe(400);
+      expect(response.status).toBe(403);
     }
     const blocked = await request(app).post('/api/auth/refresh').send({});
     expect(blocked.status).toBe(429);
@@ -94,6 +94,7 @@ describe('startup environment validation', () => {
     DB_HOST: 'localhost',
     DB_NAME: 'pharmate',
     DB_USER: 'pharmate',
+    DB_PASS: 'test-password',
     JWT_SECRET: 'a'.repeat(64),
     JWT_REFRESH_SECRET: 'b'.repeat(64),
     AES_KEY: '0123456789abcdef'.repeat(4),

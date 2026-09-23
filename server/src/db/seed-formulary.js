@@ -116,8 +116,9 @@ async function seedFormulary(conn) {
       `INSERT INTO drug_reference
          (generic_name, brand_names_json, min_interval_hours, max_daily_doses,
           is_prn_default, default_interval_hours, meal_anchor_code, meal_instruction,
-          frequency_default, notes, is_restricted, rx_class, verified_by, verified_at, is_provisional)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, NULL, NULL, ?)`,
+          frequency_default, notes, is_restricted, rx_class, verified_by, verified_at, is_provisional,
+          availability, stock_quantity)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, NULL, NULL, ?, 1, 25)`,
       [
         canonical,
         JSON.stringify(brandArray(r.brand_names)),

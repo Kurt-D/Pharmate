@@ -101,7 +101,7 @@ describe('Device-token registration', () => {
 });
 
 describe('Reminder dispatch', () => {
-  test('a due dose repeats after five minutes until taken', async () => {
+  test('a due dose is sent once until it is taken', async () => {
     const now = new Date();
     const doseId = await anchorDoseAt(now);
 
@@ -129,7 +129,7 @@ describe('Reminder dispatch', () => {
       (await dueReminders(new Date(now.getTime() + 5 * 60000))).some(
         (d) => d.schedule_id === doseId
       )
-    ).toBe(true);
+    ).toBe(false);
     await pool.execute("UPDATE medication_schedules SET status='taken' WHERE id=?", [doseId]);
     expect(
       (await dueReminders(new Date(now.getTime() + 10 * 60000))).some(

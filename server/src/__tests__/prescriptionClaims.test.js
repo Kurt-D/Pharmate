@@ -1,4 +1,5 @@
 import request from 'supertest';
+import sharp from 'sharp';
 import app from '../index.js';
 import { pool } from '../db/connection.js';
 import { createPrivilegedTestUser } from './helpers/testUsers.js';
@@ -7,12 +8,14 @@ import { decideValidation } from '../services/prescription.js';
 const PASSWORD = 'TestPass@123';
 const stamp = Date.now();
 const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAAeklEQVR4nNXOQREAAAyDMPybZiL62BEFwTiMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwzi+A6sDylPSwv6dS34AAAAASUVORK5CYII=', 'base64');
+void PNG;
 let patientToken;
 let adminToken;
 let pharm1Token;
 let pharm2Token;
 let pharm1Id;
 let pharm2Id;
+let validPng;
 
 afterAll(async () => {
   await pool.end();
@@ -35,11 +38,14 @@ async function validation() {
   const photo = await request(app)
     .post(`/api/patient/medications/${med.body.id}/prescription`)
     .set(auth(patientToken))
-    .attach('photo', PNG, { filename: 'claim.png', contentType: 'image/png' });
+    .attach('photo', validPng, { filename: 'claim.png', contentType: 'image/png' });
   return { medicationId: med.body.id, photoId: photo.body.photo_id };
 }
 
 beforeAll(async () => {
+  validPng = await sharp({
+    create: { width: 128, height: 128, channels: 3, background: '#ffffff' },
+  }).png().toBuffer();
   const patientEmail = `claim.patient.${stamp}@test.pharmate`;
   await request(app)
     .post('/api/auth/register')
@@ -142,12 +148,12 @@ describe('validation claims', () => {
     const decided = await request(app)
       .post('/api/pharmacist/validate')
       .set(auth(pharm1Token))
-      .send({ photo_id: photoId, action: 'approve' });
+      .send({ photo_id: photoId, action: 'approve', prescription: { medicine_name: 'Paracetamol', quantity: 20 } });
     expect(decided.status).toBe(200);
     const again = await request(app)
       .post('/api/pharmacist/validate')
       .set(auth(pharm1Token))
-      .send({ photo_id: photoId, action: 'approve' });
+      .send({ photo_id: photoId, action: 'approve', prescription: { medicine_name: 'Paracetamol', quantity: 20 } });
     expect(again.status).toBe(409);
     const [[notifications]] = await pool.execute(
       'SELECT COUNT(*) count FROM patient_notifications WHERE event_key=?',
@@ -167,7 +173,7 @@ describe('validation claims', () => {
       request(app)
         .post('/api/pharmacist/validate')
         .set(auth(pharm1Token))
-        .send({ photo_id: photoId, action: 'approve' }),
+        .send({ photo_id: photoId, action: 'approve', prescription: { medicine_name: 'Paracetamol', quantity: 20 } }),
       request(app)
         .post('/api/pharmacist/validate')
         .set(auth(pharm2Token))
@@ -222,7 +228,7 @@ describe('validation claims', () => {
           await request(app)
             .post('/api/pharmacist/validate')
             .set(auth(token))
-            .send({ photo_id: photoId, action: 'approve' })
+            .send({ photo_id: photoId, action: 'approve', prescription: { medicine_name: 'Paracetamol', quantity: 20 } })
         ).status
       ).toBe(403);
     }
