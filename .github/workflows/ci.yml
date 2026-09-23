@@ -39,7 +39,7 @@ jobs:
       RESET_TOKEN_SECRET: test-reset-secret-dddddddddddddddddddddddddddddddddddddddddddddd
       GOOGLE_CLIENT_ID: test-client.apps.googleusercontent.com
       CAPTCHA_PROVIDER: self-hosted
-      CAPTCHA_SIGNING_SECRET: test-captcha-secret-eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
+      CAPTCHA_SIGNING_SECRET: eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
