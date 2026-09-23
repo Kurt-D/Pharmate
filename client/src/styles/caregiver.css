@@ -18,7 +18,7 @@
   justify-content: space-between;
 }
 .cg-header h1 {
-  color: #1769f5;
+  color: #578EF5;
   font-size: 1.55rem;
   font-weight: 850;
   margin: 0;
@@ -116,7 +116,7 @@
 .cg-section-title button {
   background: none;
   border: 0;
-  color: #1769f5;
+  color: #578EF5;
   font-size: 0.62rem;
 }
 .cg-med-row,
@@ -131,7 +131,7 @@
 .cg-med-card > i {
   background: #dce9ff;
   border-radius: 50%;
-  color: #1769f5;
+  color: #578EF5;
   display: grid;
   font-style: normal;
   height: 34px;
@@ -183,7 +183,7 @@
   color: #9d6a00;
 }
 .cg-adherence {
-  background: linear-gradient(120deg, #fff5f0, #eef5ff);
+  background: #fff5f0;
   border: 1px solid #e0e7f1;
   border-radius: 0.75rem;
   display: grid;
@@ -214,7 +214,7 @@
   background: #fff;
   border: 1px solid #e3e8ef;
   border-radius: 0.65rem;
-  color: #1769f5;
+  color: #578EF5;
   display: grid;
   gap: 0.6rem;
   grid-template-columns: auto 1fr auto;
@@ -255,9 +255,9 @@
 }
 .cg-med-card button {
   background: #fff;
-  border: 1px solid #1769f5;
+  border: 1px solid #578EF5;
   border-radius: 0.5rem;
-  color: #1769f5;
+  color: #578EF5;
   font-size: 0.65rem;
   grid-column: 3;
   min-height: 35px;
@@ -341,7 +341,7 @@
 .cg-order-form button.active,
 .cg-primary,
 .cg-link-form button {
-  background: #1769f5 !important;
+  background: #578EF5 !important;
   color: #fff;
 }
 .cg-order-form > small,
@@ -353,7 +353,7 @@
   justify-content: space-between;
 }
 .cg-track > div strong {
-  color: #1769f5;
+  color: #578EF5;
   font-size: 0.7rem;
 }
 .cg-track > div small,
@@ -372,7 +372,7 @@
   margin: 0.7rem 0;
 }
 .cg-progress i {
-  background: #1769f5;
+  background: #578EF5;
   border-radius: 50%;
   height: 10px;
   position: relative;
@@ -389,9 +389,9 @@
 }
 .cg-linked button {
   background: #fff;
-  border: 1px solid #1769f5;
+  border: 1px solid #578EF5;
   border-radius: 0.45rem;
-  color: #1769f5;
+  color: #578EF5;
   font-size: 0.6rem;
 }
 .cg-link-form {
@@ -420,10 +420,10 @@
   text-align: center;
 }
 .cg-empty h1 {
-  color: #1769f5;
+  color: #578EF5;
 }
 .cg-empty button {
-  background: #1769f5;
+  background: #578EF5;
   border: 0;
   border-radius: 0.55rem;
   color: #fff;
@@ -459,6 +459,20 @@
   font-style: normal;
 }
 .cg-nav button.active {
-  color: #1769f5;
+  color: #578EF5;
   font-weight: 800;
+}
+
+/* Shared caregiver primary color. */
+.cg-primary,
+.cg-link-form button {
+  background: #578EF5 !important;
+}
+.cg-header h1,
+.cg-nav button.active,
+.cg-empty h1,
+.cg-track > div strong,
+.cg-med-card button,
+.cg-linked button {
+  color: #578EF5;
 }

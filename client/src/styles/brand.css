@@ -1,0 +1,33 @@
+/* PharMate brand system — use these tokens instead of page-specific colours. */
+:root {
+  /* Core identity */
+  --pm-blue-700: #0f58c9; /* primary action / accessible text accent */
+  --pm-blue-600: #146ef5; /* brand blue */
+  --pm-blue-400: #5aa1ff; /* decorative highlight */
+  --pm-blue-100: #eaf3ff; /* selected / info surface */
+  --pm-blue-50: #f5f9ff;  /* quiet brand surface */
+  --pm-green-100: #ecf9f0;
+  --pm-green-200: #edf9e9;
+
+  /* Neutral workspace */
+  --pm-ink: #172b49;
+  --pm-text: #31445f;
+  --pm-muted: #66758a;
+  --pm-line: #dce6f2;
+  --pm-surface: #ffffff;
+  --pm-canvas: #f5f8fc;
+
+  /* Clinical status — reserve these for meaning, not decoration */
+  --pm-success: #1f9d55;
+  --pm-success-soft: #edf9e9;
+  --pm-warning: #b86d00;
+  --pm-warning-soft: #fff4df;
+  --pm-danger: #d83d4b;
+  --pm-danger-soft: #fff0f1;
+
+  --pm-focus-ring: 0 0 0 3px rgba(20, 110, 245, 0.18);
+  --pm-shadow-card: 0 10px 28px rgba(37, 68, 113, 0.08);
+}
+
+.pm-brand-primary { color: var(--pm-blue-700); }
+.pm-brand-surface { background: var(--pm-blue-50); }

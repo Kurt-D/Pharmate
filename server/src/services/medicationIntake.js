@@ -65,7 +65,11 @@ export function parseStrength(value) {
   return { value: Number(match[1]), unit: match[2].toLowerCase() === 'ml' ? 'mL' : match[2] };
 }
 
-export function validateIntakeRecord(record, verifiedDrug, { allowExistingStart = false } = {}) {
+export function validateIntakeRecord(
+  record,
+  verifiedDrug,
+  { allowExistingStart = false, allowUnknownStrength = false } = {}
+) {
   const medicineName = String(record?.medicine_name || verifiedDrug?.generic_name || '').trim();
   const customStrength = String(
     record?.custom_strength || verifiedDrug?.default_strength || verifiedDrug?.common_strength || ''
@@ -117,7 +121,7 @@ export function validateIntakeRecord(record, verifiedDrug, { allowExistingStart 
   }
   if (!dosageForm) return { error: `Confirm the dosage form for ${verifiedDrug.generic_name}.` };
   const strength = parseStrength(customStrength);
-  if (!strength.value || !strength.unit) {
+  if ((!strength.value || !strength.unit) && !allowUnknownStrength) {
     return {
       error: `Enter the strength shown on the label for ${verifiedDrug.generic_name}, including its unit.`,
     };

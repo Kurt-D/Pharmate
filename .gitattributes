@@ -1,0 +1,3 @@
+# Production shell scripts must retain Unix line endings when checked out on a
+# Linux deployment host, regardless of the developer workstation's Git config.
+*.sh text eol=lf

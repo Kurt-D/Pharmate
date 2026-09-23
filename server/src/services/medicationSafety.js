@@ -324,8 +324,13 @@ export function evaluateMedicationSafety({
     });
   }
 
+  const canSchedule = !warnings.some((item) => item.severity === 'blocking');
   return {
-    can_schedule: !warnings.some((item) => item.severity === 'blocking'),
+    // Fail closed: a schedule may be proposed only when every required
+    // patient-safety check completed without a blocking finding. Keep the
+    // original severity so API callers cannot accidentally treat a clinical
+    // stop as an informational notice.
+    can_schedule: canSchedule,
     missing_profile_fields: missing,
     warnings,
     evaluated: {

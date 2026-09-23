@@ -87,3 +87,38 @@ test('notification ownership prevents cross-account reads and mutations', async 
     .set(auth(caregiver.token));
   expect(marked.status).toBe(200);
 });
+
+test('attention counts use unresolved operational notifications, not unread totals', async () => {
+  const notificationId = uuidv4();
+  await pool.execute(
+    `INSERT INTO portal_notifications
+       (id,user_id,type,category,title,body,priority,resource_type,resource_id,event_key)
+     VALUES (?,?,?,?,?,?,?,?,?,?)`,
+    [
+      notificationId,
+      caregiver.id,
+      'ORDER_STATUS_CHANGED',
+      'orders',
+      'Order needs attention',
+      'An authorized order needs review.',
+      'ATTENTION',
+      'order',
+      'order-test-1',
+      `attention:${notificationId}`,
+    ]
+  );
+
+  const counts = await request(app).get('/api/notifications/attention-counts').set(auth(caregiver.token));
+  expect(counts.status).toBe(200);
+  expect(counts.body.attention.orders).toBe(1);
+
+  const resolved = await request(app)
+    .patch(`/api/notifications/${notificationId}/resolve`)
+    .set(auth(caregiver.token));
+  expect(resolved.status).toBe(200);
+
+  const afterResolve = await request(app)
+    .get('/api/notifications/attention-counts')
+    .set(auth(caregiver.token));
+  expect(afterResolve.body.attention.orders).toBeUndefined();
+});

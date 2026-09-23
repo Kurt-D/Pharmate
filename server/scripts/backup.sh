@@ -1,39 +1,83 @@
 #!/usr/bin/env bash
 #
-# Nightly MySQL backup (Sprint 8, task 1). Dumps the PharMate database to a
-# timestamped, gzipped file. Intended to run from cron on the host, e.g.:
+# Encrypted off-site PharMate backup.
 #
-#   0 2 * * *  /path/to/server/scripts/backup.sh >> /var/log/pharmate-backup.log 2>&1
-#
-# OFF-BOX: after the local dump succeeds, ship it off the box (rsync/scp to a
-# separate host or object store) — a backup on the same server does not survive a
-# host loss. That copy step is deployment-specific and lives in the ops runbook.
-#
-# Restore (rehearse this — it is the Sprint 8 exit gate):
-#   gunzip -c pharmate-YYYYmmdd-HHMMSS.sql.gz | mysql -h "$DB_HOST" -u "$DB_USER" -p "$DB_NAME"
-#
-# Reads DB_* from the environment (or server/.env if present).
+# Backs up both MySQL and the private prescription-upload directory to an AWS
+# S3 bucket. The bucket must already have versioning and Object Lock enabled;
+# see docs/aws-backup-runbook.md. This script never creates cloud resources.
 set -euo pipefail
+umask 077
 
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
 [ -f "$HERE/.env" ] && set -a && . "$HERE/.env" && set +a
 
-DB_HOST="${DB_HOST:-localhost}"
+require() {
+  local name="$1"
+  if [ -z "${!name:-}" ]; then
+    echo "Missing required configuration: $name" >&2
+    exit 2
+  fi
+}
+
+require DB_HOST
+require DB_NAME
+require DB_USER
+require BACKUP_S3_URI
+require BACKUP_KMS_KEY_ID
+
+command -v aws >/dev/null || { echo "AWS CLI v2 is required." >&2; exit 2; }
+command -v mysqldump >/dev/null || { echo "mysqldump is required." >&2; exit 2; }
+command -v sha256sum >/dev/null || { echo "sha256sum is required." >&2; exit 2; }
+command -v openssl >/dev/null || { echo "openssl is required." >&2; exit 2; }
+
 DB_PORT="${DB_PORT:-3306}"
-DB_NAME="${DB_NAME:-pharmate}"
-DB_USER="${DB_USER:-pharmate}"
-BACKUP_DIR="${BACKUP_DIR:-$HERE/backups}"
+UPLOADS_DIR="${UPLOADS_DIR:-$HERE/uploads}"
+S3_BASE="${BACKUP_S3_URI%/}"
+RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)-$(openssl rand -hex 8)"
+TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/pharmate-backup.XXXXXX")"
 
-mkdir -p "$BACKUP_DIR"
-OUT="$BACKUP_DIR/pharmate-$(date +%Y%m%d-%H%M%S).sql.gz"
+cleanup() {
+  rm -rf "$TMP_DIR"
+}
+trap cleanup EXIT
 
-# --single-transaction: consistent dump without locking (InnoDB).
+DATABASE_ARCHIVE="$TMP_DIR/database.sql.gz"
+UPLOADS_ARCHIVE="$TMP_DIR/prescription-uploads.tar.gz"
+MANIFEST="$TMP_DIR/manifest.sha256"
+
+echo "Creating database backup $RUN_ID"
 MYSQL_PWD="${DB_PASS:-}" mysqldump \
   --host="$DB_HOST" --port="$DB_PORT" --user="$DB_USER" \
-  --single-transaction --quick --routines --triggers \
-  "$DB_NAME" | gzip -c > "$OUT"
+  --single-transaction --quick --routines --triggers --events \
+  "$DB_NAME" | gzip -c > "$DATABASE_ARCHIVE"
 
-echo "Backup written: $OUT ($(du -h "$OUT" | cut -f1))"
+if [ -d "$UPLOADS_DIR" ]; then
+  echo "Creating private-upload backup"
+  tar -C "$UPLOADS_DIR" --exclude='.gitkeep' -czf "$UPLOADS_ARCHIVE" .
+else
+  tar -C "$TMP_DIR" -czf "$UPLOADS_ARCHIVE" --files-from /dev/null
+fi
 
-# Retention: keep the 14 most recent local dumps.
-ls -1t "$BACKUP_DIR"/pharmate-*.sql.gz 2>/dev/null | tail -n +15 | xargs -r rm -f
+(cd "$TMP_DIR" && sha256sum "$(basename "$DATABASE_ARCHIVE")" "$(basename "$UPLOADS_ARCHIVE")") \
+  > "$MANIFEST"
+
+upload() {
+  local source="$1"
+  local target="$2"
+  aws s3 cp "$source" "$target" \
+    --sse aws:kms \
+    --sse-kms-key-id "$BACKUP_KMS_KEY_ID" \
+    --only-show-errors
+}
+
+DESTINATION="$S3_BASE/$RUN_ID"
+echo "Uploading encrypted backup to $DESTINATION"
+upload "$DATABASE_ARCHIVE" "$DESTINATION/database.sql.gz"
+upload "$UPLOADS_ARCHIVE" "$DESTINATION/prescription-uploads.tar.gz"
+upload "$MANIFEST" "$DESTINATION/manifest.sha256"
+
+# Verify the manifest was accepted by the remote store before removing the
+# local temporary files. The S3 bucket policy must deny unencrypted uploads.
+aws s3 ls "$DESTINATION/manifest.sha256" >/dev/null
+
+echo "Backup complete: $DESTINATION"

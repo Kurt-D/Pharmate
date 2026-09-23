@@ -40,7 +40,7 @@
   border: 0;
   background: transparent;
 }
-.cg-portal .cg-calendar-header p { margin: 0 0 4px; color: #2878df; font-size: 10px; letter-spacing: .055em; }
+.cg-portal .cg-calendar-header p { margin: 0 0 4px; color: #578EF5; font-size: 10px; letter-spacing: .055em; }
 .cg-portal .cg-calendar-header h3 { margin: 0; color: #163153; font-size: 16px; line-height: 1.35; font-weight: 700; }
 .cg-portal .cg-medicine-calendar .cg-calendar-toggle {
   display: inline-flex;
@@ -69,7 +69,7 @@
 .cg-portal .cg-calendar-date-heading { margin: 0 2px 10px; font-size: 13px; font-weight: 700; color: #193958; }
 .cg-portal .cg-calendar-results { display: grid; gap: 10px; }
 .cg-portal .cg-calendar-empty { margin: 0; padding: 12px 0 4px; border: 0; background: transparent; color: #627b9c; font-size: 12px; line-height: 1.7; text-align: center; }
-.cg-portal .cg-calendar-dose { padding: 12px; border: 1px solid #dfebfa; border-left: 3px solid #4c8ce4; border-radius: 12px; background: #f8fbff; overflow-wrap: anywhere; }
+.cg-portal .cg-calendar-dose { padding: 12px; border: 1px solid #dfebfa; border-left: 3px solid #578EF5; border-radius: 12px; background: #f8fbff; overflow-wrap: anywhere; }
 @media (hover: hover) {
   .cg-portal .cg-medicine-calendar button:hover { background: #eaf3ff; color: #095bd5; }
   .cg-portal .cg-medicine-calendar .cg-calendar-day[aria-pressed='true']:hover { background: #095bd5; color: #fff; }

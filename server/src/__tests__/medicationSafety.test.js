@@ -34,6 +34,33 @@ test('safety rule completeness is explicit rather than inferred from missing val
   );
 });
 
+test('a saved but unfinished safety profile cannot authorize scheduling', () => {
+  const result = evaluateMedicationSafety({
+    profileRow: {
+      date_of_birth: '1990-01-01',
+      weight_kg: 65,
+      allergies_enc: encrypt('None known'),
+      conditions_enc: encrypt('None known'),
+      current_medicines_enc: encrypt('None'),
+      kidney_status: 'NO',
+      liver_status: 'NO',
+      pregnancy_status: 'NOT_APPLICABLE',
+      profile_completed: 0,
+    },
+    medicines: [],
+    safetyRules: [],
+    interactions: [],
+  });
+
+  expect(result.can_schedule).toBe(false);
+  expect(result.missing_profile_fields).toContain('profile_completed');
+  expect(result.warnings).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ code: 'SAFETY_PROFILE_INCOMPLETE', severity: 'blocking' }),
+    ])
+  );
+});
+
 test('patient safety evaluation blocks allergy, condition, organ, pregnancy, age, weight, and severe interaction risks', () => {
   const result = evaluateMedicationSafety({
     profileRow: {

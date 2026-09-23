@@ -1,5 +1,5 @@
 .pm-profile-page {
-  background: linear-gradient(180deg, #f5f8fd 0, #f8fafc 100%);
+  background: #f5f8fd;
   color: #1e2e4a;
   gap: 1rem;
   margin: -1rem;
@@ -10,7 +10,7 @@
   min-height: 58px;
 }
 .pm-profile-page > header h1 {
-  color: #1e2e4a;
+  color: #578EF5;
   font-size: 1.6rem;
   letter-spacing: -0.025em;
   line-height: 1.2;
@@ -47,7 +47,7 @@
 }
 
 .pm-profile-identity {
-  background: linear-gradient(135deg, #fff, #f3f7ff);
+  background: #fff;
   border: 1px solid #ccdbee;
   border-radius: 1.05rem;
   box-shadow: 0 6px 18px #1e2e4a0c;
@@ -55,10 +55,10 @@
   padding: 1rem;
 }
 .pm-profile-avatar {
-  background: linear-gradient(145deg, #eaf2ff, #fff);
+  background: #eaf2ff;
   border: 2px solid #bfd4f2;
-  box-shadow: 0 4px 12px #2a67b817;
-  color: #2a67b8;
+  box-shadow: 0 4px 12px #578EF517;
+  color: #578EF5;
   font-size: 1.25rem;
   height: 72px;
   width: 72px;
@@ -79,7 +79,7 @@
 .pm-profile-identity > div > small {
   background: #eaf2ff;
   border-radius: 999px;
-  color: #2a67b8;
+  color: #578EF5;
   display: inline-block;
   font-size: 0.67rem;
   font-weight: 800;
@@ -105,7 +105,7 @@
   gap: 0.3rem;
 }
 .pm-profile-identity dt svg {
-  color: #2a67b8;
+  color: #578EF5;
 }
 .pm-profile-identity dd {
   color: #1e2e4a;
@@ -162,7 +162,7 @@
   align-items: center;
   background: #e8f1ff;
   border-radius: 0.6rem;
-  color: #1769f5;
+  color: #578EF5;
   display: flex;
   height: 40px;
   justify-content: center;
@@ -226,12 +226,33 @@
   background: #eef5ff;
   border-color: #a9c8ef;
 }
+.pm-profile-more-details .pm-profile-condition {
+  grid-template-columns: 40px minmax(0, 1fr) 34px;
+}
+.pm-profile-more-details .pm-profile-condition.is-editing {
+  background: #eef5ff;
+  border-color: #a9c8ef;
+}
+.pm-profile-condition > button {
+  align-items: center;
+  background: #e8f1ff;
+  border: 0;
+  border-radius: 0.55rem;
+  color: #578EF5;
+  display: flex;
+  height: 34px;
+  justify-content: center;
+  width: 34px;
+}
+.pm-profile-condition .pm-profile-inline-editor {
+  grid-column: 1/-1;
+}
 .pm-profile-health-details > div > button {
   align-items: center;
   background: #e8f1ff;
   border: 0;
   border-radius: 0.55rem;
-  color: #1769f5;
+  color: #578EF5;
   display: flex;
   height: 34px;
   justify-content: center;
@@ -330,8 +351,8 @@
   padding: 0.5rem 1rem;
 }
 .pm-profile-inline-actions button:last-child {
-  background: #1769f5;
-  border-color: #1769f5;
+  background: #578EF5;
+  border-color: #578EF5;
   color: #fff;
 }
 
@@ -366,7 +387,7 @@
   background: #eaf2ff;
   border: 1px solid #d4e3f7;
   border-radius: 0.75rem;
-  color: #2a67b8;
+  color: #578EF5;
   display: flex;
   height: 44px;
   justify-content: center;
@@ -376,7 +397,7 @@
   font-size: initial;
 }
 .pm-caregiver-intro > b {
-  background: #eff9ec;
+  background: #edf9e9;
   border-color: #cce8c2;
   color: #1b4d08;
 }
@@ -401,7 +422,7 @@
   font-size: 0.68rem;
 }
 .pm-caregiver-code > strong {
-  color: #2a67b8;
+  color: #578EF5;
   font-size: 1.15rem;
   margin-top: 0.35rem;
 }
@@ -417,7 +438,7 @@
 .pm-caregiver-code button {
   align-items: center;
   border-radius: 0.55rem;
-  color: #2a67b8;
+  color: #578EF5;
   display: flex;
   flex-direction: column;
   font-size: 0.68rem;
@@ -458,7 +479,7 @@
   background: #fff;
   border: 1px solid #b9cde8;
   border-radius: 0.65rem;
-  color: #2a67b8;
+  color: #578EF5;
   display: flex;
   font-size: 0.75rem;
   font-weight: 700;
@@ -469,7 +490,7 @@
   width: 100%;
 }
 .pm-linked-caregivers > span button.is-authorized {
-  background: #edf9e8;
+  background: #edf9e9;
   border-color: #91d06c;
   color: #1b4d08;
 }
@@ -613,7 +634,7 @@
   background: #eaf2ff;
   border: 1px solid #d5e4f8;
   border-radius: 0.7rem;
-  color: #2a67b8;
+  color: #578EF5;
   height: 44px;
   width: 44px;
 }
@@ -672,7 +693,7 @@
   padding: 0.65rem 0.75rem;
 }
 .pm-profile-panel > button {
-  background: #2a67b8;
+  background: #578EF5;
   border-radius: 0.65rem;
   font-size: 0.9rem;
   min-height: 52px;
@@ -692,16 +713,16 @@
   padding: 0.5rem 0.65rem;
 }
 .pm-profile-toggles input {
-  accent-color: #2a67b8;
+  accent-color: #578EF5;
   height: 24px;
   width: 24px;
 }
 
 .pm-phone.pm-a11y-dark-mode .pm-profile-page {
-  background: linear-gradient(180deg, #0f172a, #111c31) !important;
+  background: #0f172a;
 }
 .pm-phone.pm-a11y-dark-mode .pm-profile-identity {
-  background: linear-gradient(135deg, #1e293b, #17233a) !important;
+  background: #1e293b;
 }
 .pm-phone.pm-a11y-dark-mode .pm-profile-avatar,
 .pm-phone.pm-a11y-dark-mode .pm-profile-identity dl > div,
@@ -801,3 +822,8 @@
     font-size: 0.68rem;
   }
 }
+/* Senior-friendly trusted-device management. */
+.pm-security-page { background: #f6f8fc; color: #1e2e4a; margin: 0 auto; max-width: 680px; min-height: 100%; padding: 24px; }
+.pm-security-page header { display: grid; gap: 7px; margin-bottom: 24px; }.pm-security-page header p { color: #578EF5; font-size: .75rem; font-weight: 800; margin: 0; text-transform: uppercase; }.pm-security-page h1 { font-size: 1.55rem; margin: 0; }.pm-security-page header span { color: #61718b; line-height: 1.5; }
+.pm-security-page section { background: #fff; border: 1px solid #dbe5f3; border-radius: 12px; overflow: hidden; }.pm-security-page section > p { padding: 20px; }.pm-security-page article { align-items: center; border-bottom: 1px solid #e7edf6; display: flex; gap: 16px; justify-content: space-between; padding: 18px; }.pm-security-page article:last-child { border-bottom: 0; }.pm-security-page article div { display: grid; gap: 5px; }.pm-security-page article small { color: #66768e; line-height: 1.4; }.pm-security-page button { border-radius: 9px; font: inherit; font-weight: 700; min-height: 44px; padding: 9px 12px; }.pm-security-page article button { background: #fff; border: 1px solid #578EF5; color: #2373F4; }.pm-security-revoke-all { background: #fff2f1; border: 1px solid #dc2626; color: #b42318; margin-top: 18px; width: 100%; }.pm-security-error { background: #fff0f0; border-radius: 9px; color: #b42318; padding: 12px; }
+@media (max-width: 540px) { .pm-security-page { padding: 16px; }.pm-security-page article { align-items: stretch; flex-direction: column; }.pm-security-page article button { width: 100%; } }

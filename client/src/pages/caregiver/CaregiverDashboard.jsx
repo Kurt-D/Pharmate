@@ -7,9 +7,7 @@ import {
   ChevronUp,
   Clock3,
   Link2,
-  Package,
   Plus,
-  ShieldCheck,
   Volume2,
 } from 'lucide-react';
 import CaregiverCareSummary from './CaregiverCareSummary.jsx';
@@ -22,7 +20,7 @@ function PatientSwitcher({ patients, selectedCode, onSelect, onAdd }) {
       <div className="flex items-center justify-between gap-3">
         <label className="min-w-0 flex-1">
           <span className="mb-1 block text-xs font-bold uppercase tracking-wide text-blue-700">
-            Currently monitoring
+            Switch patient
           </span>
           <span className="relative block">
             <select
@@ -67,13 +65,17 @@ export default function CaregiverDashboard({
   snoozedUntil,
   stockAlerts = [],
   patientLabel,
-  onNavigate,
   notificationCount = 0,
   onOpenNotifications,
   realtimeStatus = 'connecting',
 }) {
   const [showAllStock, setShowAllStock] = useState(false);
   const [dismissedStock, setDismissedStock] = useState([]);
+  const selectedPatient = patients.find((patient) => patient.patient_code === selectedCode) || patients[0];
+  const patientName = selectedPatient?.relationship && selectedPatient.relationship !== 'Caregiver'
+    ? selectedPatient.relationship
+    : (patientLabel || 'Linked patient').split('•')[0].trim();
+  const patientCode = selectedPatient?.patient_code || selectedCode;
   const visibleStockAlerts = useMemo(
     () => stockAlerts.filter((item) => !dismissedStock.includes(item.id)),
     [dismissedStock, stockAlerts]
@@ -86,6 +88,10 @@ export default function CaregiverDashboard({
         dose.status === 'upcoming' &&
         /due (right now|in ([1-9]|1[0-5])m)/i.test(dose.statusText || '')
     );
+  const nextScheduledDose = timeline.find((dose) =>
+    ['upcoming', 'due'].includes(dose.status)
+  );
+  const latestMissedDose = timeline.find((dose) => dose.status === 'overdue');
 
   if (!patients.length) {
     return (
@@ -156,11 +162,14 @@ export default function CaregiverDashboard({
     <main className="grid gap-4 px-4 pb-4 pt-5">
       <header className="cg-home-hero">
         <div className="flex items-center justify-between gap-3">
-          <div>
-            <p className="m-0 text-sm font-semibold">PharMate Family Care</p>
-            <h1 className="mb-0 mt-1 text-2xl font-bold tracking-tight text-slate-900">
-              Hello, Caregiver
-            </h1>
+          <div className="cg-home-hero__identity">
+            <div>
+              <p className="m-0 text-sm font-semibold">Currently monitoring</p>
+              <h1 className="cg-home-hero__patient-name mb-0 mt-1 text-2xl font-bold tracking-tight text-slate-900" style={{ color: '#fff' }}>
+                {patientName}
+              </h1>
+              {patientCode && <span className="cg-home-hero__patient-code">{patientCode}</span>}
+            </div>
           </div>
           <button
             aria-label={`Open notifications${notificationCount ? `, ${notificationCount} unread` : ''}`}
@@ -177,7 +186,7 @@ export default function CaregiverDashboard({
           </button>
         </div>
         <p className="mb-0 mt-1 text-sm font-medium leading-5 text-slate-600">
-          Keep {patientLabel || 'your linked patient'} on track today.
+          Patient profile and medicine schedule.
         </p>
         <span className={`cg-live-status ${realtimeStatus === 'live' ? 'is-live' : 'is-preview'}`}>
           <Activity className="h-4 w-4" />
@@ -196,7 +205,44 @@ export default function CaregiverDashboard({
         onSelect={onSelectPatient}
         onAdd={onAddPatient}
       />
-      {urgentDose && !snoozedUntil && (
+      {(nextScheduledDose || latestMissedDose) && (
+        <section className="rounded-2xl border border-blue-100 bg-white p-4 shadow-sm" aria-labelledby="caregiver-reminders-title">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="m-0 text-xs font-bold uppercase tracking-wide text-blue-700">Today&apos;s reminders</p>
+              <h2 className="mb-0 mt-1 text-lg font-bold text-slate-900" id="caregiver-reminders-title">Medicine check-in</h2>
+            </div>
+            <BellRing className="h-6 w-6 text-blue-600" aria-hidden="true" />
+          </div>
+          <div className="mt-3 grid gap-2">
+            {nextScheduledDose && (
+              <article className="flex items-center gap-3 rounded-xl bg-blue-50 p-3">
+                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-white text-blue-600"><Clock3 className="h-5 w-5" /></span>
+                <div className="min-w-0 flex-1">
+                  <p className="m-0 text-xs font-bold uppercase tracking-wide text-blue-700">{nextScheduledDose.status === 'due' ? 'Due now' : 'Upcoming dose'}</p>
+                  <p className="mb-0 mt-0.5 truncate text-sm font-bold text-slate-900">{nextScheduledDose.medicine} · {nextScheduledDose.time}</p>
+                </div>
+                <button className="min-h-[38px] rounded-lg border border-blue-200 bg-white px-3 text-xs font-bold text-blue-700 hover:bg-blue-100" onClick={() => onVoiceReminder(nextScheduledDose)} disabled={sendingReminder} type="button">
+                  {sendingReminder ? 'Sending…' : 'Remind'}
+                </button>
+              </article>
+            )}
+            {latestMissedDose && (
+              <article className="flex items-center gap-3 rounded-xl border border-rose-100 bg-rose-50 p-3">
+                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-white text-rose-600"><BellRing className="h-5 w-5" /></span>
+                <div className="min-w-0 flex-1">
+                  <p className="m-0 text-xs font-bold uppercase tracking-wide text-rose-700">Missed dose</p>
+                  <p className="mb-0 mt-0.5 truncate text-sm font-bold text-slate-900">{latestMissedDose.medicine} · {latestMissedDose.time}</p>
+                </div>
+                <button className="min-h-[38px] rounded-lg border border-rose-200 bg-white px-3 text-xs font-bold text-rose-700 hover:bg-rose-100" onClick={() => onVoiceReminder(latestMissedDose)} disabled={sendingReminder} type="button">
+                  {sendingReminder ? 'Sending…' : 'Check in'}
+                </button>
+              </article>
+            )}
+          </div>
+        </section>
+      )}
+      {urgentDose && !snoozedUntil && urgentDose.status !== 'overdue' && (
         <section
           className="cg-dose-alert overflow-hidden rounded-2xl border border-rose-200 bg-white shadow-sm"
           aria-labelledby="caregiver-dose-alert-title"
@@ -230,24 +276,24 @@ export default function CaregiverDashboard({
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3 p-4">
-            <button
-              className="flex min-h-[56px] items-center justify-center gap-2 rounded-xl bg-blue-600 px-3 text-sm font-semibold text-white hover:bg-blue-700 active:scale-[.98]"
-              onClick={() => onVoiceReminder(urgentDose)}
-              disabled={sendingReminder}
-              aria-busy={sendingReminder}
-              type="button"
-            >
-              <Volume2 className="h-5 w-5 stroke-[2.2]" />
-              {sendingReminder ? 'Sending…' : 'Send reminder'}
-            </button>
-            <button
-              className="flex min-h-[56px] items-center justify-center gap-2 rounded-xl border border-blue-300 bg-white px-3 text-sm font-semibold text-blue-700 hover:bg-blue-50 active:scale-[.98]"
-              onClick={() => onSnooze(urgentDose)}
-              type="button"
-            >
-              <BellOff className="h-5 w-5 stroke-[2.2]" />
-              Snooze 15 mins
-            </button>
+              <button
+                className="flex min-h-[56px] items-center justify-center gap-2 rounded-xl bg-blue-600 px-3 text-sm font-semibold text-white hover:bg-blue-700 active:scale-[.98]"
+                onClick={() => onVoiceReminder(urgentDose)}
+                disabled={sendingReminder}
+                aria-busy={sendingReminder}
+                type="button"
+              >
+                <Volume2 className="h-5 w-5 stroke-[2.2]" />
+                {sendingReminder ? 'Sending…' : 'Send reminder'}
+              </button>
+              <button
+                className="flex min-h-[56px] items-center justify-center gap-2 rounded-xl border border-blue-300 bg-white px-3 text-sm font-semibold text-blue-700 hover:bg-blue-50 active:scale-[.98]"
+                onClick={() => onSnooze(urgentDose)}
+                type="button"
+              >
+                <BellOff className="h-5 w-5 stroke-[2.2]" />
+                Snooze 15 mins
+              </button>
           </div>
         </section>
       )}
@@ -295,22 +341,6 @@ export default function CaregiverDashboard({
           )}
         </section>
       )}
-      <section className="cg-pharmacy-support">
-        <span>
-          <ShieldCheck className="h-6 w-6" />
-        </span>
-        <div>
-          <small>PHARMATE SUPPORT</small>
-          <h2>Medication care with pharmacist safeguards</h2>
-          <p>
-            Prescription refills and medicine concerns remain pharmacist-reviewed for patient
-            safety.
-          </p>
-        </div>
-        <button onClick={() => onNavigate('medication')} type="button">
-          <Package className="h-4 w-4" /> View medicine care
-        </button>
-      </section>
     </main>
   );
 }

@@ -162,7 +162,7 @@ describe('Auth — register and login', () => {
     expect(profiles).toHaveLength(1);
   });
 
-  test('a newly registered patient is visible through pharmacist and admin database APIs', async () => {
+  test('a newly registered patient is visible to admins but stays off the pharmacist care roster until treatment begins', async () => {
     const email = `visible.patient.${Date.now()}@test.pharmate`;
     const registered = await request(app).post('/api/auth/register').send({
       email,
@@ -187,7 +187,7 @@ describe('Auth — register and login', () => {
     const pharmacistPatients = await request(app)
       .get('/api/pharmacist/patients')
       .set('Authorization', `Bearer ${pharmacistToken}`);
-    expect(pharmacistPatients.body).toEqual(
+    expect(pharmacistPatients.body).not.toEqual(
       expect.arrayContaining([expect.objectContaining({ patient_code: identity.patient_code })])
     );
     const adminUsers = await request(app)
@@ -211,11 +211,32 @@ describe('Auth — register and login', () => {
   });
 
   test('wrong password returns 401', async () => {
+    const [[before]] = await pool.execute(
+      `SELECT COUNT(*) AS count FROM audit_events
+       WHERE action='login_failed' AND entity_id=(SELECT id FROM users WHERE email=?)`,
+      [PATIENT_EMAIL]
+    );
     const res = await request(app).post('/api/auth/login').send({
       email: PATIENT_EMAIL,
       password: 'wrongpassword',
     });
     expect(res.status).toBe(401);
+    const [[after]] = await pool.execute(
+      `SELECT COUNT(*) AS count FROM audit_events
+       WHERE action='login_failed' AND entity_id=(SELECT id FROM users WHERE email=?)`,
+      [PATIENT_EMAIL]
+    );
+    expect(Number(after.count)).toBe(Number(before.count) + 1);
+  });
+
+  test.each([
+    { email: 'not-an-email', password: PASSWORD },
+    { email: `user@${'a'.repeat(250)}.com`, password: PASSWORD },
+    { email: PATIENT_EMAIL, password: 'x'.repeat(73) },
+  ])('rejects malformed or oversized login credentials', async (credentials) => {
+    const res = await request(app).post('/api/auth/login').send(credentials);
+    expect(res.status).toBe(400);
+    expect(res.body).not.toHaveProperty('accessToken');
   });
 
   test('patient cannot sign in through the caregiver option', async () => {

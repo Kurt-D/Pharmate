@@ -7,19 +7,263 @@
  */
 import { Router } from 'express';
 import { v4 as uuidv4 } from 'uuid';
+import bcrypt from 'bcryptjs';
+import { randomBytes } from 'node:crypto';
 import { pool } from '../db/connection.js';
 import { requireAuth } from '../middleware/auth.js';
 import { requireRole } from '../middleware/role.js';
 import { adherenceReport, doseLogReport, toCsv } from '../services/adherence.js';
 import { updateOrderStatus, updatePaymentStatus } from '../services/orders.js';
-import { recordAudit } from '../services/audit.js';
+import { auditStaffRequest, recordAudit } from '../services/audit.js';
 import { orderChanged } from '../services/domainEvents.js';
 import { publishRole, publishUser } from '../services/realtimeEvents.js';
 import { checkClinicalRule } from '../services/clinicalRuleVerification.js';
 import { checkSafetyRule } from '../services/medicationSafety.js';
+import { createPatientNotification } from '../services/patientNotifications.js';
+import { rateLimit } from '../middleware/rateLimit.js';
+import { normalizeEmail } from '../utils/email.js';
+import { issueOtp, OTP_PURPOSE, invalidateUndeliveredOtp } from '../services/otpService.js';
+import { sendOtpEmail } from '../services/emailService.js';
 
 const router = Router();
+const adminKey = (req) => `${req.user?.sub || 'anonymous'}:${req.ip || 'unknown'}`;
+const csvExportLimit = rateLimit({
+  scope: 'admin-csv-export', windowMs: 60 * 60 * 1000, max: 10, keyGenerator: adminKey,
+  message: 'Export limit reached. Please wait before requesting another report.',
+});
+const adminActionLimit = rateLimit({
+  scope: 'admin-sensitive-action', windowMs: 15 * 60 * 1000, max: 60, keyGenerator: adminKey,
+  message: 'Too many administrative changes. Please wait a few minutes and try again.',
+});
 router.use(requireAuth, requireRole('admin'));
+router.use(auditStaffRequest('admin'));
+
+const PHARMACIST_CREDENTIAL_STATUSES = new Set(['PENDING', 'VERIFIED', 'SUSPENDED', 'EXPIRED']);
+const MEDICINE_CATALOG_STATUSES = new Set(['ACTIVE', 'INACTIVE', 'ARCHIVED']);
+const pharmacistStatus = (value) => String(value || 'PENDING').trim().toUpperCase();
+const optionalText = (value, max) => String(value || '').trim().slice(0, max) || null;
+const historyPage = (value) => Math.max(1, Math.min(Number.parseInt(value, 10) || 1, 100000));
+const historyLimit = (value) => Math.max(10, Math.min(Number.parseInt(value, 10) || 25, 100));
+const historyCategory = (action = '') => {
+  const value = String(action).toUpperCase();
+  if (value.includes('PHARMACIST') || value.includes('CREDENTIAL')) return 'Clinical governance';
+  if (value.includes('ORDER') || value.includes('PAYMENT')) return 'Orders';
+  if (value.includes('MEDICINE') || value.includes('FORMULARY') || value.includes('INVENTORY')) return 'Medication management';
+  if (value.includes('SECURITY') || value.includes('LOGIN') || value.includes('AUTH')) return 'Security';
+  if (value.includes('USER') || value.includes('ACCOUNT')) return 'User management';
+  return 'System';
+};
+const historyActionLabel = (action = '') => String(action).toLowerCase().split('_').map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+function sanitizedHistoryDetails(value) {
+  if (!value || typeof value !== 'object') return null;
+  const blocked = /password|token|secret|cookie|hash|encrypted|prescription.*content|message.*content/i;
+  return Object.fromEntries(Object.entries(value).filter(([key]) => !blocked.test(key)).map(([key, entry]) => [key, entry && typeof entry === 'object' ? sanitizedHistoryDetails(entry) : entry]));
+}
+
+function credentialIsVerified(status, expiresOn) {
+  if (status !== 'VERIFIED' || !expiresOn) return false;
+  const expiry = new Date(`${String(expiresOn).slice(0, 10)}T23:59:59Z`);
+  return !Number.isNaN(expiry.getTime()) && expiry >= new Date();
+}
+
+function pharmacistRowDto(row) {
+  const expires = row.license_expires_on ? String(row.license_expires_on).slice(0, 10) : null;
+  const expiryTime = expires ? new Date(`${expires}T23:59:59Z`).getTime() : 0;
+  const now = Date.now();
+  const credentialStatus = row.license_status === 'VERIFIED' && expiryTime && expiryTime < now
+    ? 'EXPIRED'
+    : row.license_status;
+  return {
+    ...row,
+    is_active: Boolean(row.is_active),
+    patient_visible: Boolean(row.patient_visible),
+    chat_available: Boolean(row.chat_available),
+    license_expires_on: expires,
+    credential_status: credentialStatus,
+    clinical_eligible: Boolean(row.is_active) && credentialIsVerified(credentialStatus, expires),
+  };
+}
+
+async function ensureNotLastActiveAdmin(conn, userId) {
+  const [[target]] = await conn.execute('SELECT role,is_active FROM users WHERE id=? FOR UPDATE', [userId]);
+  if (!target) return { found: false };
+  if (target.role !== 'admin' || !Number(target.is_active)) return { found: true };
+  const [[count]] = await conn.execute("SELECT COUNT(*) AS total FROM users WHERE role='admin' AND is_active=1 FOR UPDATE");
+  if (Number(count.total) <= 1) return { found: true, blocked: true };
+  return { found: true };
+}
+
+// Immutable administrative history: DTOs intentionally omit clinical content,
+// secret values, and patient medical data even when an audit event exists.
+router.get('/history', async (req, res) => {
+  const page = historyPage(req.query.page); const limit = historyLimit(req.query.limit);
+  const category = optionalText(req.query.category, 40); const search = optionalText(req.query.search, 100);
+  const role = optionalText(req.query.actorRole, 20); const result = optionalText(req.query.result, 10);
+  const allowedCategories = new Set(['User management', 'Clinical governance', 'Medication management', 'Orders', 'Security', 'System']);
+  if (category && !allowedCategories.has(category)) return res.status(400).json({ error: 'Invalid history category.' });
+  if (role && !['admin', 'pharmacist', 'patient', 'caregiver', 'system'].includes(role)) return res.status(400).json({ error: 'Invalid actor role.' });
+  if (result && !['success', 'failure'].includes(result)) return res.status(400).json({ error: 'Invalid history result.' });
+  const clauses = []; const values = [];
+  if (role) { clauses.push('actor_role=?'); values.push(role); }
+  if (result) { clauses.push('outcome=?'); values.push(result); }
+  if (search) { clauses.push('(action LIKE ? OR entity_type LIKE ? OR entity_id LIKE ?)'); values.push(`%${search}%`, `%${search}%`, `%${search}%`); }
+  const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
+  const [rows] = await pool.execute(`SELECT id,actor_user_id,actor_role,action,entity_type,entity_id,request_id,outcome,metadata_json,created_at FROM audit_events ${where} ORDER BY created_at DESC LIMIT ? OFFSET ?`, [...values, limit, (page - 1) * limit]);
+  const [[count]] = await pool.execute(`SELECT COUNT(*) AS total FROM audit_events ${where}`, values);
+  const data = rows.map((row) => ({ id: row.id, occurredAt: row.created_at, category: historyCategory(row.action), action: historyActionLabel(row.action), actor: row.actor_user_id ? 'Staff account' : 'System', actorRole: row.actor_role, targetType: row.entity_type, referenceId: row.entity_id, requestId: row.request_id, result: row.outcome, details: sanitizedHistoryDetails(row.metadata_json) })).filter((row) => !category || row.category === category);
+  res.json({ data, pagination: { page, limit, total: Number(count.total), totalPages: Math.ceil(Number(count.total) / limit) } });
+});
+
+router.get('/history/:eventId', async (req, res) => {
+  const [[row]] = await pool.execute('SELECT id,actor_user_id,actor_role,action,entity_type,entity_id,request_id,outcome,metadata_json,created_at FROM audit_events WHERE id=?', [req.params.eventId]);
+  if (!row) return res.status(404).json({ error: 'History event not found.' });
+  res.json({ id: row.id, occurredAt: row.created_at, category: historyCategory(row.action), action: historyActionLabel(row.action), actor: row.actor_user_id ? 'Staff account' : 'System', actorRole: row.actor_role, targetType: row.entity_type, referenceId: row.entity_id, requestId: row.request_id, result: row.outcome, details: sanitizedHistoryDetails(row.metadata_json) });
+});
+
+// Professional governance: admins create and administer pharmacist accounts;
+// this never grants an administrator authority to make clinical decisions.
+router.get('/pharmacists', async (req, res) => {
+  const status = optionalText(req.query.account_status, 16)?.toLowerCase();
+  const credential = pharmacistStatus(req.query.credential_status || '');
+  const search = optionalText(req.query.search, 120);
+  const clauses = [];
+  const values = [];
+  if (status === 'active') clauses.push('user.is_active=1');
+  if (status === 'inactive' || status === 'suspended') clauses.push('user.is_active=0');
+  if (credential && PHARMACIST_CREDENTIAL_STATUSES.has(credential)) {
+    clauses.push('pharmacist.license_status=?'); values.push(credential);
+  }
+  if (search) {
+    clauses.push('(pharmacist.full_name LIKE ? OR user.email LIKE ? OR pharmacist.license_number LIKE ?)');
+    values.push(`%${search}%`, `%${search}%`, `%${search}%`);
+  }
+  const [rows] = await pool.execute(
+    `SELECT pharmacist.id, pharmacist.full_name, user.email, user.is_active, pharmacist.branch_id,
+            branch.name AS branch, pharmacist.license_number, pharmacist.license_jurisdiction,
+            pharmacist.license_status, pharmacist.license_expires_on, pharmacist.license_verified_at,
+            profile.professional_title, profile.specialization, profile.languages, profile.biography,
+            profile.patient_visible, profile.chat_available, profile.updated_at
+     FROM pharmacists pharmacist
+     JOIN users user ON user.id=pharmacist.id
+     LEFT JOIN pharmacy_branches branch ON branch.id=pharmacist.branch_id
+     LEFT JOIN pharmacist_professional_profiles profile ON profile.pharmacist_id=pharmacist.id
+     ${clauses.length ? `WHERE ${clauses.join(' AND ')}` : ''}
+     ORDER BY pharmacist.full_name`,
+    values
+  );
+  const pharmacists = rows.map(pharmacistRowDto);
+  res.json({
+    pharmacists,
+    summary: {
+      total: pharmacists.length,
+      eligible: pharmacists.filter((item) => item.clinical_eligible).length,
+      pending: pharmacists.filter((item) => item.credential_status === 'PENDING').length,
+      expiring_soon: pharmacists.filter((item) => {
+        const expiry = item.license_expires_on && new Date(`${item.license_expires_on}T23:59:59Z`).getTime();
+        return expiry && expiry >= Date.now() && expiry - Date.now() <= 30 * 24 * 60 * 60 * 1000;
+      }).length,
+    },
+  });
+});
+
+router.get('/pharmacists/:id/audit', async (req, res) => {
+  const [rows] = await pool.execute(
+    `SELECT action,actor_role,outcome,metadata_json,created_at
+     FROM audit_events
+     WHERE entity_type='pharmacist' AND entity_id=?
+     ORDER BY created_at DESC LIMIT 100`,
+    [req.params.id]
+  );
+  res.json({ history: rows.map((row) => ({
+    ...row,
+    // The write path only records administrative deltas, never passwords,
+    // tokens, or credential-document contents.
+    metadata: row.metadata_json ? JSON.parse(row.metadata_json) : null,
+    metadata_json: undefined,
+  })) });
+});
+
+router.post('/pharmacists', adminActionLimit, async (req, res) => {
+  const fullName = optionalText(req.body?.full_name, 255);
+  const email = normalizeEmail(req.body?.email);
+  const branchId = optionalText(req.body?.branch_id, 36);
+  const licenseNumber = optionalText(req.body?.license_number, 100);
+  const jurisdiction = optionalText(req.body?.license_jurisdiction, 100);
+  const licenseStatus = pharmacistStatus(req.body?.license_status);
+  const expiresOn = optionalText(req.body?.license_expires_on, 10);
+  const evidenceUrl = optionalText(req.body?.license_evidence_url, 1000);
+  const accountActive = Boolean(req.body?.is_active);
+  const profile = req.body?.profile || {};
+  if (!fullName || !email) return res.status(422).json({ error: 'Full name and email are required.' });
+  if (!PHARMACIST_CREDENTIAL_STATUSES.has(licenseStatus)) return res.status(422).json({ error: 'Invalid credential status.' });
+  if (expiresOn && !/^\d{4}-\d{2}-\d{2}$/.test(expiresOn)) return res.status(422).json({ error: 'Enter a valid credential expiration date.' });
+  if (evidenceUrl && !/^https:\/\//i.test(evidenceUrl)) return res.status(422).json({ error: 'Credential evidence must use HTTPS.' });
+  if (licenseStatus === 'VERIFIED' && (!licenseNumber || !jurisdiction || !expiresOn || !evidenceUrl || !credentialIsVerified(licenseStatus, expiresOn))) {
+    return res.status(422).json({ error: 'A verified credential requires a current license number, jurisdiction, expiration date, and HTTPS evidence.' });
+  }
+  const id = uuidv4();
+  const passwordHash = await bcrypt.hash(randomBytes(48).toString('hex'), Number(process.env.BCRYPT_COST) || 12);
+  const conn = await pool.getConnection();
+  let issued = null;
+  try {
+    await conn.beginTransaction();
+    await conn.execute(
+      `INSERT INTO users (id,email,password_hash,role,is_active,is_verified) VALUES (?,?,?,'pharmacist',?,0)`,
+      [id, email, passwordHash, accountActive ? 1 : 0]
+    );
+    await conn.execute(
+      `INSERT INTO pharmacists (id,full_name,license_number,branch_id,license_jurisdiction,license_status,license_expires_on,license_evidence_url,license_verified_at,license_verified_by)
+       VALUES (?,?,?,?,?,?,?,?,CASE WHEN ?='VERIFIED' THEN NOW(3) ELSE NULL END,CASE WHEN ?='VERIFIED' THEN ? ELSE NULL END)`,
+      [id, fullName, licenseNumber, branchId, jurisdiction, licenseStatus, expiresOn, evidenceUrl, licenseStatus, licenseStatus, req.user.sub]
+    );
+    await conn.execute(
+      `INSERT INTO pharmacist_professional_profiles (pharmacist_id,professional_title,specialization,languages,biography,patient_visible,chat_available)
+       VALUES (?,?,?,?,?,?,?)`,
+      [id, optionalText(profile.professional_title, 120), optionalText(profile.specialization, 160), optionalText(profile.languages, 255), optionalText(profile.biography, 1000), profile.patient_visible ? 1 : 0, profile.chat_available ? 1 : 0]
+    );
+    if (accountActive) issued = await issueOtp(conn, id, OTP_PURPOSE.EMAIL_VERIFICATION);
+    await recordAudit({ actor: { id: req.user.sub, role: 'admin' }, action: 'PHARMACIST_CREATED', entityType: 'pharmacist', entityId: id, metadata: { account_active: accountActive, credential_status: licenseStatus, branch_id: branchId, patient_visible: Boolean(profile.patient_visible) }, executor: conn });
+    await conn.commit();
+  } catch (error) {
+    await conn.rollback();
+    if (error?.code === 'ER_DUP_ENTRY') return res.status(409).json({ error: 'That email or credential number is already in use.' });
+    throw error;
+  } finally { conn.release(); }
+  if (issued?.otp) {
+    try { await sendOtpEmail({ email, otp: issued.otp, purpose: OTP_PURPOSE.EMAIL_VERIFICATION }); }
+    catch { await invalidateUndeliveredOtp(pool, issued.id); }
+  }
+  res.status(201).json({ id, activation_required: accountActive, message: accountActive ? 'Pharmacist created. A secure verification email was sent.' : 'Pharmacist created in inactive state.' });
+});
+
+router.put('/pharmacists/:id', adminActionLimit, async (req, res) => {
+  const id = req.params.id;
+  const fullName = optionalText(req.body?.full_name, 255);
+  const branchId = optionalText(req.body?.branch_id, 36);
+  const licenseNumber = optionalText(req.body?.license_number, 100);
+  const jurisdiction = optionalText(req.body?.license_jurisdiction, 100);
+  const licenseStatus = pharmacistStatus(req.body?.license_status);
+  const expiresOn = optionalText(req.body?.license_expires_on, 10);
+  const evidenceUrl = optionalText(req.body?.license_evidence_url, 1000);
+  const profile = req.body?.profile || {};
+  if (!fullName || !PHARMACIST_CREDENTIAL_STATUSES.has(licenseStatus)) return res.status(422).json({ error: 'Full name and a valid credential status are required.' });
+  if (expiresOn && !/^\d{4}-\d{2}-\d{2}$/.test(expiresOn)) return res.status(422).json({ error: 'Enter a valid credential expiration date.' });
+  if (licenseStatus === 'VERIFIED' && (!licenseNumber || !jurisdiction || !expiresOn || !evidenceUrl || !credentialIsVerified(licenseStatus, expiresOn))) return res.status(422).json({ error: 'A verified credential must be complete and current.' });
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const [[before]] = await conn.execute('SELECT pharmacist.id,pharmacist.license_status,user.is_active FROM pharmacists pharmacist JOIN users user ON user.id=pharmacist.id WHERE pharmacist.id=? FOR UPDATE', [id]);
+    if (!before) { await conn.rollback(); return res.status(404).json({ error: 'Pharmacist not found.' }); }
+    const isActive = req.body?.is_active ? 1 : 0;
+    await conn.execute('UPDATE users SET is_active=? WHERE id=?', [isActive, id]);
+    await conn.execute(`UPDATE pharmacists SET full_name=?,branch_id=?,license_number=?,license_jurisdiction=?,license_status=?,license_expires_on=?,license_evidence_url=?,license_verified_at=CASE WHEN ?='VERIFIED' THEN COALESCE(license_verified_at,NOW(3)) ELSE NULL END,license_verified_by=CASE WHEN ?='VERIFIED' THEN COALESCE(license_verified_by,?) ELSE NULL END WHERE id=?`, [fullName, branchId, licenseNumber, jurisdiction, licenseStatus, expiresOn, evidenceUrl, licenseStatus, licenseStatus, req.user.sub, id]);
+    await conn.execute(`INSERT INTO pharmacist_professional_profiles (pharmacist_id,professional_title,specialization,languages,biography,patient_visible,chat_available) VALUES (?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE professional_title=VALUES(professional_title),specialization=VALUES(specialization),languages=VALUES(languages),biography=VALUES(biography),patient_visible=VALUES(patient_visible),chat_available=VALUES(chat_available)`, [id, optionalText(profile.professional_title,120), optionalText(profile.specialization,160), optionalText(profile.languages,255), optionalText(profile.biography,1000), profile.patient_visible ? 1 : 0, profile.chat_available ? 1 : 0]);
+    await recordAudit({ actor: { id: req.user.sub, role: 'admin' }, action: 'PHARMACIST_GOVERNANCE_UPDATED', entityType: 'pharmacist', entityId: id, metadata: { account_from: Boolean(before.is_active), account_to: Boolean(isActive), credential_from: before.license_status, credential_to: licenseStatus, patient_visible: Boolean(profile.patient_visible) }, executor: conn });
+    await conn.commit();
+    publishUser(id, 'PHARMACIST_GOVERNANCE_CHANGED', { is_active: Boolean(isActive), license_status: licenseStatus });
+    res.json({ id, message: 'Pharmacist governance record updated.' });
+  } catch (error) { await conn.rollback(); throw error; } finally { conn.release(); }
+});
 
 // Aggregate-only validation results. Product names, patient IDs, recognized
 // text, and images are deliberately excluded from the administrator response.
@@ -143,8 +387,8 @@ function governancePayload(row) {
   };
 }
 
-// Administrator evidence preparation. Pharmacists remain the only role allowed
-// to verify a clinical rule; an admin submission enters their existing queue.
+// Administrators monitor workflow readiness only. Clinical rule contents and
+// approvals belong to the pharmacist portal, where a verified license is required.
 router.get('/rule-governance', async (req, res) => {
   const query = String(req.query.q || '')
     .trim()
@@ -172,7 +416,16 @@ router.get('/rule-governance', async (req, res) => {
       ).length,
       prn: medicines.filter((item) => item.schedule_type === 'PRN_TRACKER').length,
     },
-    medicines,
+    scope: 'Read-only operational summary. Clinical rule details are restricted to pharmacists.',
+  });
+});
+
+// Kept as an explicit guard while historical implementation remains below.
+// Do not permit administrators to access an individual clinical-rule record or
+// mutate it through this router.
+router.use('/rule-governance/:id', (_req, res) => {
+  res.status(403).json({
+    error: 'Clinical rule details and changes are restricted to the pharmacist portal.',
   });
 });
 
@@ -607,10 +860,35 @@ router.get('/aggregates', async (_req, res) => {
 router.get('/medicines', async (_req, res) => {
   const [rows] = await pool.execute(
     `SELECT id, generic_name, common_strength, dosage_form, short_description,
-            rx_class, availability, stock_quantity, is_restricted, is_provisional
+            rx_class, availability, admin_status, stock_quantity, is_restricted, is_provisional,
+            created_at, updated_at
      FROM drug_reference ORDER BY generic_name`
   );
   res.json(rows);
+});
+
+// Detail and history remain administrative catalog data; no patient-specific
+// clinical information is returned from this endpoint.
+router.get('/medicines/:id', async (req, res) => {
+  const [[medicine]] = await pool.execute(
+    `SELECT id, generic_name, brand_names_json, category, therapeutic_category,
+            common_strength, dosage_form, short_description, rx_class, availability,
+            admin_status, stock_quantity, is_restricted, is_provisional, created_at, updated_at
+       FROM drug_reference WHERE id = ?`,
+    [req.params.id]
+  );
+  if (!medicine) return res.status(404).json({ error: 'Medicine not found' });
+  const [history] = await pool.execute(
+    `SELECT id, actor_user_id, actor_role, action, metadata_json, created_at
+       FROM audit_events
+      WHERE entity_type = 'drug_reference' AND entity_id = ?
+      ORDER BY created_at DESC LIMIT 50`,
+    [req.params.id]
+  );
+  res.json({
+    medicine,
+    history: history.map((event) => ({ ...event, metadata: sanitizedHistoryDetails(JSON.parse(event.metadata_json || '{}')) })),
+  });
 });
 
 // ── POST /api/admin/medicines ────────────────────────────────────────────────
@@ -687,14 +965,18 @@ router.put('/medicines/:id', async (req, res) => {
   if (!Number.isInteger(stock) || stock < 0 || stock > 1000000) {
     return res.status(400).json({ error: 'Stock must be a whole number between 0 and 1,000,000' });
   }
-  const [result] = await pool.execute(
+  const [[previous]] = await pool.execute(
+    'SELECT stock_quantity,rx_class,generic_name FROM drug_reference WHERE id=?',
+    [req.params.id]
+  );
+  if (!previous) return res.status(404).json({ error: 'Medicine not found' });
+  await pool.execute(
     `UPDATE drug_reference
      SET generic_name = ?, common_strength = ?, dosage_form = ?, short_description = ?,
          rx_class = ?, stock_quantity = ?, availability = ?
      WHERE id = ?`,
     [genericName, strength, form, description, rxClass, stock, stock > 0 ? 1 : 0, req.params.id]
   );
-  if (!result.affectedRows) return res.status(404).json({ error: 'Medicine not found' });
   await pool.execute(
     `UPDATE medication_rule_variants SET strength=?,dosage_form=?,schedule_rule_status='UNVERIFIED'
      WHERE drug_id=?`,
@@ -707,18 +989,73 @@ router.put('/medicines/:id', async (req, res) => {
     entityId: req.params.id,
   });
   publishRole('pharmacist', 'FORMULARY_UPDATED', { action: 'updated', drug_id: req.params.id });
+  if (previous.rx_class === 'OTC' && Number(previous.stock_quantity) <= 0 && stock > 0) {
+    const [alerts] = await pool.execute(
+      'SELECT id,patient_id FROM patient_otc_restock_alerts WHERE drug_id=? AND notified_at IS NULL',
+      [req.params.id]
+    );
+    for (const alert of alerts) {
+      const notification = await createPatientNotification({
+        patientId: alert.patient_id,
+        type: 'otc_back_in_stock',
+        medicineName: previous.generic_name,
+        eventKey: `otc-restock:${alert.id}`,
+        metadata: { drug_id: req.params.id, screen: 'shop' },
+      });
+      if (notification.created) publishUser(alert.patient_id, 'notification-updated', { reason: 'otc-restock' });
+      await pool.execute('UPDATE patient_otc_restock_alerts SET notified_at=NOW(3) WHERE id=?', [alert.id]);
+    }
+  }
   res.json({ id: req.params.id });
 });
+
+async function changeMedicineCatalogStatus(req, res, nextStatus, action) {
+  const [[medicine]] = await pool.execute(
+    'SELECT id, generic_name, admin_status FROM drug_reference WHERE id = ?',
+    [req.params.id]
+  );
+  if (!medicine) return res.status(404).json({ error: 'Medicine not found' });
+  if (!MEDICINE_CATALOG_STATUSES.has(nextStatus)) {
+    return res.status(400).json({ error: 'Invalid catalog status' });
+  }
+  await pool.execute(
+    'UPDATE drug_reference SET admin_status = ?, availability = ? WHERE id = ?',
+    [nextStatus, nextStatus === 'ACTIVE' ? 1 : 0, req.params.id]
+  );
+  await recordAudit({
+    actor: { id: req.user.sub, role: 'admin' }, action, entityType: 'drug_reference', entityId: req.params.id,
+    metadata: { previous_status: medicine.admin_status, admin_status: nextStatus },
+  });
+  publishRole('pharmacist', 'FORMULARY_UPDATED', { action: action.toLowerCase(), drug_id: req.params.id });
+  res.json({ id: req.params.id, admin_status: nextStatus });
+}
+
+router.post('/medicines/:id/archive', (req, res) =>
+  changeMedicineCatalogStatus(req, res, 'ARCHIVED', 'FORMULARY_MEDICINE_ARCHIVED')
+);
+router.post('/medicines/:id/restore', (req, res) =>
+  changeMedicineCatalogStatus(req, res, 'ACTIVE', 'FORMULARY_MEDICINE_RESTORED')
+);
+router.post('/medicines/:id/activate', (req, res) =>
+  changeMedicineCatalogStatus(req, res, 'ACTIVE', 'FORMULARY_MEDICINE_ACTIVATED')
+);
+router.post('/medicines/:id/deactivate', (req, res) =>
+  changeMedicineCatalogStatus(req, res, 'INACTIVE', 'FORMULARY_MEDICINE_DEACTIVATED')
+);
 
 // Delete only unused references; patient medication history must never be erased.
 router.delete('/medicines/:id', async (req, res) => {
   const [[usage]] = await pool.execute(
-    'SELECT COUNT(*) AS count FROM medications WHERE drug_id = ?',
-    [req.params.id]
+    `SELECT
+       (SELECT COUNT(*) FROM medications WHERE drug_id = ?) +
+       (SELECT COUNT(*) FROM refill_requests WHERE drug_id = ?) +
+       (SELECT COUNT(*) FROM delivery_requests WHERE drug_id = ?) AS count`,
+    [req.params.id, req.params.id, req.params.id]
   );
   if (Number(usage.count) > 0) {
     return res.status(409).json({
-      error: 'This medicine is in use and cannot be deleted. Set its stock to 0 instead.',
+      error: 'This medicine has existing records and cannot be permanently deleted. Archive it instead.',
+      can_archive: true,
     });
   }
   const [result] = await pool.execute('DELETE FROM drug_reference WHERE id = ?', [req.params.id]);
@@ -735,11 +1072,16 @@ router.delete('/medicines/:id', async (req, res) => {
 
 // ── PUT /api/admin/medicines/:id/availability ─────────────────────────────────
 router.put('/medicines/:id/availability', async (req, res) => {
+  if (typeof req.body?.available !== 'boolean') {
+    return res.status(400).json({ error: 'Availability must be true or false' });
+  }
   const available = req.body?.available ? 1 : 0;
-  const [r] = await pool.execute('UPDATE drug_reference SET availability = ? WHERE id = ?', [
-    available,
-    req.params.id,
-  ]);
+  const [r] = await pool.execute(
+    `UPDATE drug_reference
+        SET availability = ?, admin_status = CASE WHEN admin_status = 'ARCHIVED' THEN 'ARCHIVED' WHEN ? = 1 THEN 'ACTIVE' ELSE 'INACTIVE' END
+      WHERE id = ?`,
+    [available, available, req.params.id]
+  );
   if (r.affectedRows === 0) return res.status(404).json({ error: 'Medicine not found' });
   await recordAudit({
     actor: { id: req.user.sub, role: 'admin' },
@@ -771,7 +1113,7 @@ function sendCsv(res, filename, csv) {
 }
 
 // ── GET /api/admin/export/adherence.csv ───────────────────────────────────────
-router.get('/export/adherence.csv', async (req, res) => {
+router.get('/export/adherence.csv', csvExportLimit, async (req, res) => {
   const rows = await adherenceReport();
   const headers = [
     'patient_code',
@@ -787,7 +1129,7 @@ router.get('/export/adherence.csv', async (req, res) => {
 });
 
 // ── GET /api/admin/export/dose-logs.csv ───────────────────────────────────────
-router.get('/export/dose-logs.csv', async (req, res) => {
+router.get('/export/dose-logs.csv', csvExportLimit, async (req, res) => {
   const rows = await doseLogReport();
   const headers = [
     'patient_code',
@@ -802,7 +1144,7 @@ router.get('/export/dose-logs.csv', async (req, res) => {
 });
 
 // ── GET /api/admin/export/surveys.csv?instrument=sus|tam ───────────────────────
-router.get('/export/surveys.csv', async (req, res) => {
+router.get('/export/surveys.csv', csvExportLimit, async (req, res) => {
   const instrument = req.query.instrument === 'tam' ? 'tam' : 'sus';
   const table = instrument === 'tam' ? 'tam_responses' : 'sus_responses';
   const [rows] = await pool.execute(
@@ -856,11 +1198,15 @@ router.get('/users', async (req, res) => {
 // ── PUT /api/admin/users/:id/active ───────────────────────────────────────────
 router.put('/users/:id/active', async (req, res) => {
   const active = req.body?.active ? 1 : 0;
-  const [r] = await pool.execute('UPDATE users SET is_active = ? WHERE id = ?', [
-    active,
-    req.params.id,
-  ]);
-  if (r.affectedRows === 0) return res.status(404).json({ error: 'User not found' });
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const guard = active ? { found: true } : await ensureNotLastActiveAdmin(conn, req.params.id);
+    if (!guard.found) { await conn.rollback(); return res.status(404).json({ error: 'User not found' }); }
+    if (guard.blocked) { await conn.rollback(); return res.status(409).json({ error: 'Another active administrator must exist before this account can be deactivated.' }); }
+    await conn.execute('UPDATE users SET is_active=? WHERE id=?', [active, req.params.id]);
+    await conn.commit();
+  } catch (error) { await conn.rollback(); throw error; } finally { conn.release(); }
   await recordAudit({
     actor: { id: req.user.sub, role: 'admin' },
     action: 'USER_ACTIVE_STATUS_UPDATED',
@@ -870,6 +1216,57 @@ router.put('/users/:id/active', async (req, res) => {
   });
   publishUser(req.params.id, 'ACCOUNT_STATUS_CHANGED', { is_active: Boolean(active) });
   res.json({ id: req.params.id, is_active: active });
+});
+
+// Privacy-safe visual report data for the admin dashboard.  No patient names,
+// codes, or individual records leave this aggregate endpoint.
+router.get('/reports/summary', async (_req, res) => {
+  const [[adherence]] = await pool.execute(
+    `SELECT COUNT(*) AS scheduled,
+            SUM(status IN ('taken', 'taken_late')) AS taken,
+            SUM(status = 'missed') AS missed
+     FROM medication_schedules`
+  );
+  const [doseStatuses] = await pool.execute(
+    'SELECT status, COUNT(*) AS count FROM medication_schedules GROUP BY status'
+  );
+  const [[sus]] = await pool.execute('SELECT COUNT(*) AS count FROM sus_responses');
+  const [[tam]] = await pool.execute('SELECT COUNT(*) AS count FROM tam_responses');
+  res.json({
+    adherence: {
+      scheduled: Number(adherence.scheduled || 0),
+      taken: Number(adherence.taken || 0),
+      missed: Number(adherence.missed || 0),
+      percentage: adherence.scheduled
+        ? Math.round((Number(adherence.taken || 0) / Number(adherence.scheduled)) * 100)
+        : 0,
+    },
+    dose_statuses: doseStatuses.map((row) => ({ status: row.status, count: Number(row.count) })),
+    surveys: { sus: Number(sus.count || 0), tam: Number(tam.count || 0) },
+  });
+});
+
+// Account removal immediately disables the identity and invalidates every
+// existing token. Related health/audit records are retained for integrity.
+router.delete('/users/:id', async (req, res) => {
+  if (req.params.id === req.user.sub) {
+    return res.status(400).json({ error: 'You cannot remove your own administrator account' });
+  }
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const guard = await ensureNotLastActiveAdmin(conn, req.params.id);
+    if (!guard.found) { await conn.rollback(); return res.status(404).json({ error: 'User not found' }); }
+    if (guard.blocked) { await conn.rollback(); return res.status(409).json({ error: 'Another active administrator must exist before this account can be deactivated.' }); }
+    await conn.execute('UPDATE users SET is_active=0, session_version=session_version+1 WHERE id=?', [req.params.id]);
+    await conn.commit();
+  } catch (error) { await conn.rollback(); throw error; } finally { conn.release(); }
+  await recordAudit({
+    actor: { id: req.user.sub, role: 'admin' }, action: 'USER_ACCOUNT_REMOVED',
+    entityType: 'user', entityId: req.params.id,
+  });
+  publishUser(req.params.id, 'ACCOUNT_REMOVED', { is_active: false });
+  res.status(204).end();
 });
 
 // Pharmacist credential review is deliberately separate from account status.
@@ -1044,7 +1441,7 @@ router.get('/orders', async (_req, res) => {
 // Admins coordinate fulfilment, but cannot skip or reverse operational stages.
 // Prescription approval remains in the pharmacist validation workspace; an Rx
 // request can only exist here after the service-level prescription gate passes.
-router.post('/orders/:kind/:id/status', async (req, res) => {
+router.post('/orders/:kind/:id/status', adminActionLimit, async (req, res) => {
   const { kind, id } = req.params;
   if (!['refill', 'delivery'].includes(kind)) {
     return res.status(400).json({ error: 'kind must be refill or delivery' });
@@ -1096,7 +1493,7 @@ router.post('/orders/:kind/:id/status', async (req, res) => {
   res.json(result);
 });
 
-router.post('/orders/:kind/:id/payment-status', async (req, res) => {
+router.post('/orders/:kind/:id/payment-status', adminActionLimit, async (req, res) => {
   const result = await updatePaymentStatus(
     req.params.kind,
     req.params.id,

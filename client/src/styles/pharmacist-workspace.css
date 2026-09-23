@@ -137,6 +137,40 @@
   line-height: 1.6;
   overflow-wrap: anywhere;
 }
+.pw-workspace .pmr-rules {
+  background: #ffffff;
+}
+.pw-workspace .pmr-rules__header {
+  padding: 0.35rem 0.2rem 1rem;
+  border-bottom: 1px solid #e0e9f5;
+}
+.pw-workspace .pmr-rules__header h3 { color: #17375d; font-size: 1.2rem; font-weight: 800; }
+.pw-workspace .pmr-rules__header .badge { border-radius: 999px; font-size: 0.7rem; }
+.pw-workspace .pmr-rules__workspace { align-items: stretch; }
+.pw-workspace .pmr-rules__catalog,
+.pw-workspace .pmr-rules__editor { min-width: 0; }
+.pw-workspace .pmr-rules__catalog > .list-group {
+  overflow: auto !important;
+  border: 1px solid #dce6f4;
+  border-radius: 0.85rem;
+  background: #fff;
+  box-shadow: inset 0 1px 0 #fff;
+}
+.pw-workspace .pmr-rules__catalog .list-group-item { border-right: 0; border-left: 0; }
+.pw-workspace .pmr-rules__catalog .list-group-item:first-child { border-top: 0; }
+.pw-workspace .pmr-rules__editor {
+  padding: 1.15rem;
+  border: 1px solid #dce6f4;
+  border-radius: 0.9rem;
+  background: #fff;
+  box-shadow: 0 8px 22px rgba(37, 78, 135, 0.05);
+}
+.pw-workspace .pmr-rules__editor > .row { row-gap: 0.95rem !important; }
+.pw-workspace .pmr-rules__editor .border.rounded {
+  border-color: #dce6f4 !important;
+  border-radius: 0.8rem !important;
+  background: #f8fbff !important;
+}
 @media (max-width: 900px) {
   .pw-workspace {
     flex-direction: column;
@@ -186,4 +220,122 @@
   .pw-workspace .pw-navlink {
     flex: 1 1 45%;
   }
+}
+
+/* Shared PharMate console system: pharmacist and administrator portals use the
+   same layout language while keeping their role-specific workspaces distinct. */
+.pw-shell.pw-workspace {
+  background: #dfeeff;
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: 250px minmax(0, 1fr);
+  min-height: 100vh;
+  padding: 1rem;
+}
+.pw-workspace .pw-sidebar {
+  background: #578EF5;
+  border: 0;
+  border-radius: 1.2rem;
+  box-shadow: 0 20px 45px rgba(76, 140, 228, 0.25);
+  color: #fff;
+  height: calc(100vh - 2rem);
+  padding: 1.15rem 0.9rem 1rem;
+  position: sticky;
+  top: 1rem;
+}
+.pw-workspace .pw-brand {
+  align-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 0.9rem;
+  display: flex;
+  gap: 0.65rem;
+  margin-bottom: 0.65rem;
+  padding: 0.65rem 0.75rem;
+}
+.pw-workspace .pw-brand img {
+  background: rgba(255, 255, 255, 0.16);
+  border-radius: 0.65rem;
+  height: 2.65rem;
+  object-fit: contain;
+  padding: 0.12rem;
+  width: 2.65rem;
+}
+.pw-workspace .pw-brand small { color: #dceaff; font-size: 0.66rem; letter-spacing: 0.07em; text-transform: uppercase; }
+.pw-navigation { display: grid; flex: 1 1 auto; min-height: 0; overflow-y: auto; padding-right: 0.12rem; }
+.pw-nav-section + .pw-nav-section { margin-top: 0.35rem; }
+.pw-workspace .pw-menu-label { color: #dceaff; font-size: 0.61rem; letter-spacing: 0.1em; margin: 0; padding: 0.58rem 0.75rem 0.28rem; text-transform: uppercase; }
+.pw-workspace .pw-navlink {
+  border-radius: 999px;
+  color: #fff;
+  font-size: 0.77rem;
+  margin: 0.12rem 0;
+  min-height: 2.78rem;
+  padding: 0.57rem 0.85rem;
+  transition: background 160ms ease, color 160ms ease, transform 160ms ease;
+}
+.pw-workspace .pw-navlink:hover { background: rgba(255, 255, 255, 0.15); color: #fff; transform: translateX(3px); }
+.pw-workspace .pw-navlink.active {
+  background: #fff;
+  border-radius: 999px 0 0 999px;
+  box-shadow: 0 8px 18px rgba(8, 53, 135, 0.18);
+  color: #578EF5;
+  margin-right: -1.25rem;
+  padding-left: 1rem;
+}
+.pw-workspace .pw-logout {
+  background: rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 0.72rem;
+  color: #fff;
+  margin-top: 0.7rem;
+}
+.pw-workspace .pw-logout:hover { background: #fff; color: #578EF5; }
+.pw-workspace .pw-main {
+  background: rgba(245, 248, 255, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.85);
+  border-radius: 1.2rem;
+  box-shadow: 0 24px 55px rgba(45, 75, 116, 0.14);
+  min-height: calc(100vh - 2rem);
+  overflow: hidden;
+}
+.pw-workspace .pw-header { background: rgba(250, 252, 255, 0.92); border-bottom: 1px solid #e4eaf4; min-height: 104px; padding: 1rem clamp(1.25rem, 3vw, 2.25rem); }
+.pw-workspace .pw-header h1 { color: #1e293b; font-size: clamp(1.55rem, 2.1vw, 2rem); }
+.pw-workspace .pw-sub { color: #64748b; font-size: 0.78rem; }
+.pw-workspace .pw-user-badge { background: #fff; border: 1px solid #dce4ee; border-radius: 0.8rem; box-shadow: 0 8px 20px rgba(30, 41, 59, 0.06); margin: 0; padding: 0.5rem 0.7rem; }
+.pw-workspace .pw-user-badge > i { background: #578EF5; color: #fff; height: 2.35rem; width: 2.35rem; }
+.pw-workspace .pw-content { padding: clamp(1.25rem, 2.2vw, 2rem); }
+.pw-workspace .pw-card,
+.pw-workspace .px-panel { border-color: #d2deee; border-radius: 1rem; box-shadow: 0 12px 30px rgba(56, 79, 110, 0.07); }
+
+/* Brand and navigation details intentionally match the Admin portal. */
+.pw-workspace .pw-brand { align-items: center; display: flex; }
+.pw-workspace .pw-brand-mark {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.16);
+  border-radius: 0.7rem;
+  display: inline-flex;
+  flex: 0 0 2.7rem;
+  height: 2.7rem;
+  justify-content: center;
+  overflow: hidden;
+  width: 2.7rem;
+}
+.pw-workspace .pw-brand .pw-brand-mark img { background: transparent; border-radius: 0; height: 100%; padding: 0.08rem; width: 100%; }
+.pw-workspace .pw-brand > span:last-child { display: flex; flex-direction: column; gap: 0.02rem; }
+.pw-workspace .pw-brand strong { color: #fff; font-size: 1.12rem; letter-spacing: -0.025em; line-height: 1.15; }
+.pw-workspace .pw-brand small { line-height: 1.2; }
+.pw-workspace .pw-navlink { align-items: center; display: flex; gap: 0.72rem; }
+.pw-workspace .pw-navlink svg { flex: 0 0 auto; }
+
+@media (max-width: 850px) {
+  .pw-shell.pw-workspace { display: block; padding: 0; }
+  .pw-workspace .pw-sidebar { align-items: center; border-radius: 0; display: flex; flex-direction: row; gap: 0.25rem; height: auto; overflow-x: auto; padding: 0.55rem; position: sticky; top: 0; z-index: 20; }
+  .pw-workspace .pw-brand { border: 0; margin: 0; padding: 0 0.35rem; }
+  .pw-workspace .pw-brand small, .pw-workspace .pw-menu-label { display: none; }
+  .pw-workspace .pw-brand-mark { height: 2.3rem; width: 2.3rem; flex-basis: 2.3rem; }
+  .pw-navigation, .pw-nav-section { display: contents; }
+  .pw-workspace .pw-navlink { flex: 0 0 auto; min-height: 2.55rem; padding: 0.5rem 0.65rem; white-space: nowrap; }
+  .pw-workspace .pw-navlink.active { border-radius: 999px; margin-right: 0; }
+  .pw-workspace .pw-logout { flex: 0 0 auto; margin: 0; min-height: 2.55rem; padding: 0.5rem 0.75rem; }
+  .pw-workspace .pw-main { border: 0; border-radius: 0; min-height: 100vh; }
 }

@@ -40,25 +40,32 @@
 .ph-connected-dashboard {
   display: grid;
   gap: 1.25rem;
+  margin: 0 auto;
+  max-width: 1180px;
+  padding: 1.5rem;
 }
 .ph-connected-dashboard > header {
   align-items: center;
+  background: linear-gradient(135deg, #123f91, #286ee6);
+  border-radius: 1.25rem;
+  color: #fff;
   display: flex;
   justify-content: space-between;
   gap: 1rem;
+  padding: 1.5rem;
 }
 .ph-connected-dashboard > header span {
-  color: #2563eb;
+  color: #cfe1ff;
   font-size: .75rem;
   font-weight: 800;
   letter-spacing: .08em;
 }
-.ph-connected-dashboard > header h2 { margin: .25rem 0; }
-.ph-connected-dashboard > header p { color: #64748b; margin: 0; }
+.ph-connected-dashboard > header h2 { color: #fff; margin: .25rem 0; }
+.ph-connected-dashboard > header p { color: #e4efff; margin: 0; }
 .ph-connected-dashboard > header button {
   align-items: center;
   background: #fff;
-  border: 1px solid #cbd5e1;
+  border: 1px solid #bfd6ff;
   border-radius: .75rem;
   display: inline-flex;
   gap: .5rem;
@@ -68,7 +75,7 @@
 .ph-connected-grid {
   display: grid;
   gap: 1rem;
-  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 .ph-connected-grid button {
   background: #fff;
@@ -76,8 +83,8 @@
   border-radius: 1rem;
   display: grid;
   gap: .45rem;
-  min-height: 150px;
-  padding: 1.2rem;
+  min-height: 132px;
+  padding: 1rem;
   text-align: left;
 }
 .ph-connected-grid button:hover { border-color: #2563eb; box-shadow: 0 8px 24px #0f172a12; }
@@ -94,7 +101,26 @@
 .ph-connected-empty svg { color: #22c55e; }
 .ph-connected-empty p { color: #64748b; }
 .ph-connected-error { border-color: #fecaca; color: #b91c1c; }
+.ph-connected-workspace { display: grid; gap: 1rem; grid-template-columns: 1.2fr .8fr; }
+.ph-connected-panel { background: #fff; border: 1px solid #dbe4f0; border-radius: 1rem; overflow: hidden; }
+.ph-connected-panel > header { align-items: center; border-bottom: 1px solid #edf1f6; display: flex; justify-content: space-between; padding: 1rem 1.1rem; }
+.ph-connected-panel > header span { align-items: center; color: #286ee6; display: flex; font-size: .68rem; font-weight: 800; gap: .35rem; letter-spacing: .08em; }
+.ph-connected-panel h3 { color: #122449; font-size: 1rem; margin: .3rem 0 0; }
+.ph-connected-panel > header > button { background: #edf4ff; border: 1px solid #b9d2f2; border-radius: .6rem; color: #1558c9; font: inherit; font-size: .78rem; font-weight: 800; min-height: 36px; padding: .4rem .65rem; }
+.ph-connected-patient-list, .ph-connected-activity-list { display: grid; padding: .6rem; }
+.ph-connected-patient-list > button, .ph-connected-activity-list > button { align-items: center; background: #fff; border: 0; border-radius: .7rem; color: #122449; display: grid; font: inherit; gap: .65rem; padding: .7rem; text-align: left; width: 100%; }
+.ph-connected-patient-list > button { grid-template-columns: 38px minmax(0,1fr) auto; }
+.ph-connected-patient-list > button:hover, .ph-connected-activity-list > button:hover { background: #f2f7ff; }
+.ph-connected-patient-list > button > span { align-items: center; background: #dceaff; border-radius: 50%; color: #1558c9; display: flex; font-size: .74rem; font-weight: 800; height: 38px; justify-content: center; width: 38px; }
+.ph-connected-patient-list strong, .ph-connected-activity-list strong { display: block; font-size: .85rem; }
+.ph-connected-patient-list small, .ph-connected-activity-list small { color: #61718a; display: block; font-size: .73rem; margin-top: .16rem; }
+.ph-connected-patient-list b { background: #fff3d8; border-radius: 999px; color: #a45d00; font-size: .66rem; padding: .25rem .4rem; }
+.ph-connected-activity-list > button { grid-template-columns: 26px minmax(0,1fr); }
+.ph-connected-activity-list > button > svg { color: #286ee6; }
+.ph-connected-loading { color: #68768e; font-size: .85rem; margin: 0; padding: 1.25rem; text-align: center; }
 @media (max-width: 640px) {
   .ph-connected-dashboard > header { align-items: stretch; flex-direction: column; }
   .ph-connected-dashboard > header button { justify-content: center; }
+  .ph-connected-dashboard { padding: 1rem; }
+  .ph-connected-grid, .ph-connected-workspace { grid-template-columns: 1fr; }
 }

@@ -191,8 +191,7 @@ function DeleteModal({ user, onClose, onConfirm }) {
         </header>
         <div className="admin-delete-modal__body">
           <p>
-            Are you sure you want to delete this {user.role} account? This frontend action cannot be
-            undone during the current session.
+            Are you sure you want to delete this {user.role} account?
           </p>
         </div>
         <footer>
@@ -208,6 +207,75 @@ function DeleteModal({ user, onClose, onConfirm }) {
   );
 }
 
+function CredentialModal({ credential, onClose, onSave, saving }) {
+  const [draft, setDraft] = useState(() => ({
+    ...credential,
+    license_number: credential.license_number || '',
+    license_jurisdiction: credential.license_jurisdiction || '',
+    license_expires_on: credential.license_expires_on ? String(credential.license_expires_on).slice(0, 10) : '',
+    license_evidence_url: credential.license_evidence_url || '',
+    license_status: credential.license_status || 'PENDING',
+  }));
+
+  function submit(event) {
+    event.preventDefault();
+    onSave(draft);
+  }
+
+  return (
+    <div className="admin-user-modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
+      <section aria-labelledby="admin-credential-title" aria-modal="true" className="admin-user-modal" role="dialog">
+        <header>
+          <span><UserIcon name="shield" /></span>
+          <div>
+            <small>Clinical review access</small>
+            <h2 id="admin-credential-title">Pharmacist approval</h2>
+            <p>Record the license check before granting clinical signing access.</p>
+          </div>
+          <button aria-label="Close approval dialog" onClick={onClose} type="button"><UserIcon name="close" /></button>
+        </header>
+        <form onSubmit={submit}>
+          <label>
+            <span>License number</span>
+            <input required onChange={(event) => setDraft((current) => ({ ...current, license_number: event.target.value }))} value={draft.license_number} />
+          </label>
+          <div className="admin-user-form-grid">
+            <label>
+              <span>Jurisdiction</span>
+              <input required onChange={(event) => setDraft((current) => ({ ...current, license_jurisdiction: event.target.value }))} value={draft.license_jurisdiction} />
+            </label>
+            <label>
+              <span>Expires on</span>
+              <input required onChange={(event) => setDraft((current) => ({ ...current, license_expires_on: event.target.value }))} type="date" value={draft.license_expires_on} />
+            </label>
+          </div>
+          <label>
+            <span>Verification record URL</span>
+            <input required onChange={(event) => setDraft((current) => ({ ...current, license_evidence_url: event.target.value }))} placeholder="https://…" type="url" value={draft.license_evidence_url} />
+          </label>
+          <label>
+            <span>Approval status</span>
+            <select onChange={(event) => setDraft((current) => ({ ...current, license_status: event.target.value }))} value={draft.license_status}>
+              <option value="PENDING">Pending review</option>
+              <option value="VERIFIED">Approved for clinical review</option>
+              <option value="SUSPENDED">Suspended</option>
+              <option value="EXPIRED">Expired</option>
+            </select>
+          </label>
+          <aside>
+            <UserIcon name="shield" size={17} />
+            <p>Approve only after independently confirming the pharmacist’s current license.</p>
+          </aside>
+          <footer>
+            <button className="admin-btn" onClick={onClose} type="button">Cancel</button>
+            <button className="admin-btn primary" disabled={saving} type="submit">{saving ? 'Saving…' : 'Save approval'}</button>
+          </footer>
+        </form>
+      </section>
+    </div>
+  );
+}
+
 export default function Users() {
   const [activeFilter, setActiveFilter] = useState('all');
   const [users, setUsers] = useState([]);
@@ -217,17 +285,35 @@ export default function Users() {
   const [error, setError] = useState('');
   const [modal, setModal] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [credentials, setCredentials] = useState({});
+  const [credentialModal, setCredentialModal] = useState(null);
+  const [credentialSaving, setCredentialSaving] = useState(false);
+
+  useEffect(() => {
+    if (!modal && !deleteTarget && !credentialModal) return undefined;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = previousOverflow; };
+  }, [modal, deleteTarget, credentialModal]);
 
   const load = useCallback(() => {
     setError('');
-    return Promise.all(ROLES.map((role) => api(`/api/admin/users?role=${role}`)))
-      .then((responses) =>
+    return Promise.all([
+      ...ROLES.map((role) => api(`/api/admin/users?role=${role}`)),
+      api('/api/admin/pharmacist-credentials'),
+    ])
+      .then((responses) => {
+        const credentialResponse = responses.pop();
+        const credentialById = Object.fromEntries(
+          (credentialResponse.data?.pharmacists || []).map((credential) => [credential.id, credential])
+        );
+        setCredentials(credentialById);
         setUsers(
           responses
             .flatMap((response) => response.data)
-            .map((user) => ({ ...user, is_active: Number(user.is_active) }))
-        )
-      )
+            .map((user) => ({ ...user, is_active: Number(user.is_active), credential: credentialById[user.id] || null }))
+        );
+      })
       .catch((loadError) => setError(loadError.message));
   }, []);
 
@@ -258,19 +344,6 @@ export default function Users() {
     setPage(1);
   }
 
-  function saveUser(draft) {
-    if (modal.mode === 'add')
-      setUsers((rows) => [
-        { ...draft, id: `local-${Date.now()}`, created_at: new Date().toISOString() },
-        ...rows,
-      ]);
-    else
-      setUsers((rows) =>
-        rows.map((row) => (row.id === modal.user.id ? { ...row, ...draft } : row))
-      );
-    setModal(null);
-  }
-
   async function toggle(user) {
     try {
       if (!String(user.id).startsWith('local-'))
@@ -286,17 +359,32 @@ export default function Users() {
     }
   }
 
-  function confirmDelete() {
-    setUsers((rows) => rows.filter((row) => row.id !== deleteTarget.id));
-    setDeleteTarget(null);
+  async function saveCredential(draft) {
+    setCredentialSaving(true);
+    setError('');
+    try {
+      await api(`/api/admin/pharmacist-credentials/${draft.id}`, { method: 'PUT', body: draft });
+      setCredentialModal(null);
+      await load();
+    } catch (saveError) {
+      setError(saveError.message);
+    } finally {
+      setCredentialSaving(false);
+    }
   }
 
-  const addRole =
-    activeFilter === 'staff'
-      ? 'pharmacist'
-      : ['patient', 'caregiver'].includes(activeFilter)
-        ? activeFilter
-        : 'patient';
+  async function confirmDelete() {
+    if (!deleteTarget) return;
+    try {
+      if (!String(deleteTarget.id).startsWith('local-')) {
+        await api(`/api/admin/users/${deleteTarget.id}`, { method: 'DELETE' });
+      }
+      setUsers((rows) => rows.filter((row) => row.id !== deleteTarget.id));
+      setDeleteTarget(null);
+    } catch (deleteError) {
+      setError(deleteError.message);
+    }
+  }
 
   return (
     <div className="admin-user-management">
@@ -317,20 +405,6 @@ export default function Users() {
           ))}
         </nav>
         <div className="admin-user-toolbar">
-          <button
-            className="admin-add-user"
-            onClick={() =>
-              setModal({ mode: 'add', user: { label: '', role: addRole, is_active: 1 } })
-            }
-            type="button"
-          >
-            <UserIcon name="plus" size={17} />{' '}
-            {activeFilter === 'patient'
-              ? 'Add Patient'
-              : activeFilter === 'caregiver'
-                ? 'Add Caregiver'
-                : 'Add User'}
-          </button>
           <label className="admin-user-search">
             <UserIcon name="search" size={17} />
             <input
@@ -376,6 +450,7 @@ export default function Users() {
                 <th>Account ID</th>
                 <th>Role</th>
                 <th>Status</th>
+                <th>Clinical approval</th>
                 <th>Date Added</th>
                 <th>Actions</th>
               </tr>
@@ -400,6 +475,19 @@ export default function Users() {
                     </button>
                   </td>
                   <td>
+                    {user.role === 'pharmacist' ? (
+                      <button
+                        className={`admin-credential-status is-${String(user.credential?.license_status || 'pending').toLowerCase()}`}
+                        onClick={() => setCredentialModal(user.credential || { id: user.id, license_status: 'PENDING' })}
+                        type="button"
+                      >
+                        <UserIcon name="shield" size={14} /> {user.credential?.license_status === 'VERIFIED' ? 'Approved' : 'Review approval'}
+                      </button>
+                    ) : (
+                      <span className="admin-credential-na">—</span>
+                    )}
+                  </td>
+                  <td>
                     {user.created_at
                       ? new Date(user.created_at).toLocaleString('en-PH', {
                           dateStyle: 'medium',
@@ -415,13 +503,6 @@ export default function Users() {
                         type="button"
                       >
                         <UserIcon name="eye" size={16} />
-                      </button>
-                      <button
-                        aria-label={`Edit ${user.label}`}
-                        onClick={() => setModal({ mode: 'edit', user })}
-                        type="button"
-                      >
-                        <UserIcon name="edit" size={16} />
                       </button>
                       <button
                         aria-label={`Delete ${user.label}`}
@@ -485,8 +566,15 @@ export default function Users() {
           key={`${modal.mode}-${modal.user?.id || 'new'}`}
           mode={modal.mode}
           onClose={() => setModal(null)}
-          onSave={saveUser}
           user={modal.user}
+        />
+      )}
+      {credentialModal && (
+        <CredentialModal
+          credential={credentials[credentialModal.id] || credentialModal}
+          onClose={() => setCredentialModal(null)}
+          onSave={saveCredential}
+          saving={credentialSaving}
         />
       )}
       {deleteTarget && (

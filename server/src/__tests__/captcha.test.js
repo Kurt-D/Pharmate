@@ -92,6 +92,35 @@ describe('CAPTCHA verification', () => {
     expect(response.statusCode).toBe(200);
   });
 
+  test.each([
+    [{ success: true, hostname: 'pharmate.example.com' }, 'a missing action'],
+    [
+      { success: true, hostname: 'pharmate.example.com', action: 'forgot_password' },
+      'a token issued for another action',
+    ],
+    [
+      { success: true, hostname: 'attacker.example.com', action: 'login' },
+      'a token issued for another hostname',
+    ],
+  ])('rejects %s', async (providerResponse) => {
+    process.env.CAPTCHA_PROVIDER = 'turnstile';
+    process.env.TURNSTILE_SECRET_KEY = 'configured-secret';
+    process.env.TURNSTILE_ALLOWED_HOSTNAMES = 'pharmate.example.com';
+    jest.spyOn(axios, 'post').mockResolvedValue({ data: providerResponse });
+
+    const response = responseDouble();
+    const next = jest.fn();
+    await verifyCaptcha(
+      { body: { captchaToken: 'dummy-token' }, ip: '127.0.0.1', path: '/login' },
+      response,
+      next
+    );
+
+    expect(response.statusCode).toBe(400);
+    expect(response.body).toEqual(CAPTCHA_FAILURE);
+    expect(next).not.toHaveBeenCalled();
+  });
+
   test('issues and verifies the explicitly selected self-hosted challenge once', () => {
     process.env.CAPTCHA_PROVIDER = 'self-hosted';
     jest.spyOn(svgCaptcha, 'create').mockReturnValue({ text: 'AbC23', data: '<svg />' });

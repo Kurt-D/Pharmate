@@ -4,6 +4,7 @@ import { pool } from '../db/connection.js';
 import { getSharedScheduleReview } from '../services/medicationSchedule.js';
 import { requireAuth } from '../middleware/auth.js';
 import { requireRole } from '../middleware/role.js';
+import { rateLimit } from '../middleware/rateLimit.js';
 import { parseFrequency } from '../../engine/frequencyParser.js';
 import { findRestricted, resolveDrug, searchDrugs } from '../services/formulary.js';
 import {
@@ -13,7 +14,11 @@ import {
   analyzeAdjustedLayout,
 } from '../services/schedule.js';
 import { uploadPrescription } from '../middleware/upload.js';
-import { attachPhoto } from '../services/prescription.js';
+import {
+  attachPhoto,
+  createPhotoOnlyPrescription,
+  patientPhotoFilePath,
+} from '../services/prescription.js';
 import { todayDoses, dosesForDate, doseHistory, logDose, syncLogs } from '../services/doses.js';
 import { deriveScheduleDefinition } from '../services/scheduleDefinition.js';
 import {
@@ -41,7 +46,7 @@ import { loyaltyFor } from '../services/adherence.js';
 import { encrypt } from '../utils/crypto.js';
 import { serializePatient } from '../utils/serializer.js';
 import { getPatientDashboard } from '../services/patientDashboard.js';
-import { getStreakStatus } from '../services/streakLifecycle.js';
+import { claimStreakReward, getStreakStatus } from '../services/streakLifecycle.js';
 import {
   getPreferences,
   updatePreferences,
@@ -94,8 +99,62 @@ import {
 
 const router = Router();
 
+// Limits use the signed-in account rather than a household IP address, so a
+// family sharing Wi-Fi does not lock a senior out because another person used
+// the portal. IP remains part of the key to slow down a stolen session.
+const accountKey = (req) => `${req.user?.sub || 'anonymous'}:${req.ip || 'unknown'}`;
+const prescriptionUploadLimit = rateLimit({
+  scope: 'patient-prescription-upload', windowMs: 15 * 60 * 1000, max: 10,
+  keyGenerator: accountKey, message: 'You have uploaded several photos. Please wait a few minutes before trying again.',
+});
+const inquiryPostLimit = rateLimit({
+  scope: 'patient-inquiry-post', windowMs: 15 * 60 * 1000, max: 30,
+  keyGenerator: accountKey, message: 'Please wait a few minutes before sending more messages.',
+});
+const medicineSearchLimit = rateLimit({
+  scope: 'patient-medicine-search', windowMs: 60 * 1000, max: 120,
+  keyGenerator: accountKey, message: 'Please pause briefly before searching again.',
+});
+
 // All patient routes require authentication + patient role
 router.use(requireAuth, requireRole('patient'));
+
+// Device/session management is scoped to the signed-in patient. Session IDs are
+// opaque implementation values and are never returned in the patient DTO.
+router.get('/security/sessions', async (req, res) => {
+  const [rows] = await pool.execute(
+    `SELECT id,device_label,persistent,last_used_at,created_at
+     FROM refresh_tokens
+     WHERE user_id=? AND revoked=0 AND expires_at>NOW(3)
+     ORDER BY COALESCE(last_used_at,created_at) DESC`,
+    [req.user.sub]
+  );
+  res.json({ sessions: rows.map((row) => ({
+    sessionRef: row.id, label: row.device_label || 'This browser', trusted: Boolean(row.persistent),
+    lastActiveAt: row.last_used_at || row.created_at,
+  })) });
+});
+
+router.delete('/security/sessions/:sessionRef', async (req, res) => {
+  const [result] = await pool.execute(
+    'UPDATE refresh_tokens SET revoked=1,revoked_at=NOW(3) WHERE id=? AND user_id=? AND revoked=0',
+    [req.params.sessionRef, req.user.sub]
+  );
+  if (!result.affectedRows) return res.status(404).json({ error: 'Signed-in device not found.' });
+  await recordAudit({ actor: req.user, action: 'TRUSTED_SESSION_REVOKED', entityType: 'session', entityId: req.params.sessionRef, metadata: { patient_initiated: true } });
+  res.status(204).end();
+});
+
+router.post('/security/sessions/revoke-all', async (req, res) => {
+  // Revoking every session is an explicit lost-device recovery action. The
+  // caller is asked to sign in again rather than guessing the current token.
+  const [result] = await pool.execute(
+    'UPDATE refresh_tokens SET revoked=1,revoked_at=NOW(3) WHERE user_id=? AND revoked=0',
+    [req.user.sub]
+  );
+  await recordAudit({ actor: req.user, action: 'TRUSTED_SESSIONS_REVOKED', entityType: 'session', entityId: req.user.sub, metadata: { revoked_count: result.affectedRows } });
+  res.json({ message: 'All signed-in devices have been signed out. Please sign in again.', revoked: result.affectedRows });
+});
 
 router.get('/notifications', async (req, res) => {
   const parsed = parseNotificationQuery(req.query);
@@ -135,6 +194,14 @@ router.get('/dashboard', async (req, res) => {
 // One server-owned streak state shared by the home banner, header icon and inbox.
 router.get('/streak/status', async (req, res) => {
   res.json(await getStreakStatus(req.user.sub));
+});
+
+router.post('/streak/claim-reward', async (req, res) => {
+  const result = await claimStreakReward(req.user.sub);
+  if (result.error === 'no_reward_available') {
+    return res.status(409).json({ error: 'There is no Priority Token reward ready to claim.' });
+  }
+  res.json(result);
 });
 
 // Native Google ML Kit runs fully on-device. This endpoint stores only field-
@@ -538,12 +605,41 @@ router.delete('/caregivers/:linkId', async (req, res) => {
 
 // ── GET /api/patient/drugs?q= ─────────────────────────────────────────────────
 // Type-ahead drug picker for the encode form.
-router.get('/drugs', async (req, res) => {
+router.get('/drugs', medicineSearchLimit, async (req, res) => {
   const results = await searchDrugs(req.query.q, req.query.limit || 20, {
     rxClass: req.query.rx_class,
     category: req.query.category,
   });
   res.json(results);
+});
+
+// ── GET /api/patient/shop/otc ───────────────────────────────────────────────
+// The shop can display unavailable products so patients can request a restock alert.
+router.get('/shop/otc', async (_req, res) => {
+  const [rows] = await pool.execute(
+    `SELECT id,generic_name,brand_names_json,category,therapeutic_category,common_strength,
+            dosage_form,administration_instruction,meal_instruction,guidance_dont,
+            availability,admin_status,stock_quantity
+       FROM drug_reference
+      WHERE rx_class='OTC' AND is_restricted=0 AND admin_status='ACTIVE'
+      ORDER BY generic_name`
+  );
+  res.json(rows);
+});
+
+router.post('/shop/otc/:drugId/restock-alert', async (req, res) => {
+  const [[drug]] = await pool.execute(
+    `SELECT id FROM drug_reference WHERE id=? AND rx_class='OTC' AND is_restricted=0`,
+    [req.params.drugId]
+  );
+  if (!drug) return res.status(404).json({ error: 'OTC medicine not found' });
+  await pool.execute(
+    `INSERT INTO patient_otc_restock_alerts (id,patient_id,drug_id)
+     VALUES (UUID(),?,?,?)
+     ON DUPLICATE KEY UPDATE notified_at=NULL`,
+    [req.user.sub, drug.id]
+  );
+  res.status(201).json({ subscribed: true });
 });
 
 // ── POST /api/patient/medications ─────────────────────────────────────────────
@@ -748,7 +844,7 @@ router.get('/medications', async (req, res) => {
             m.schedule_approved_by, m.schedule_approved_at,
             m.dosage_instruction, m.label_direction, m.food_instruction, m.timing_note,
             m.quantity_on_hand, m.quantity_unit, m.entry_method, m.ocr_confidence,
-            m.patient_confirmed,
+            m.patient_confirmed, m.prescription_photo_id,
             m.start_date, m.end_date, m.status, m.created_at, m.updated_at,
             dr.rx_class, dr.meal_instruction, dr.administration_instruction,
             dr.guidance_do, dr.guidance_dont, dr.evidence_source_url,
@@ -821,6 +917,7 @@ router.post('/medications/:id/stop', async (req, res) => {
 // The unredacted original never leaves the device. Multer errors (size/type) → 400.
 router.post(
   '/medications/:id/prescription',
+  prescriptionUploadLimit,
   (req, res, next) => {
     uploadPrescription(req, res, (err) => {
       if (err) return res.status(400).json({ error: err.message });
@@ -855,6 +952,36 @@ router.post(
     });
   }
 );
+
+// A patient-only photo submission. Medicine and schedule details are completed
+// by a pharmacist after the prescription is received.
+router.post(
+  '/prescriptions',
+  prescriptionUploadLimit,
+  (req, res, next) => {
+    uploadPrescription(req, res, (err) => {
+      if (err) return res.status(400).json({ error: err.message });
+      next();
+    });
+  },
+  async (req, res) => {
+    if (!req.file) return res.status(400).json({ error: 'photo file is required (field: photo)' });
+    const result = await createPhotoOnlyPrescription(req.user.sub, req.file.filename);
+    await prescriptionChanged({
+      patientId: req.user.sub,
+      prescriptionId: result.photoId,
+      status: 'pending',
+    });
+    res.status(201).json({ photo_id: result.photoId, status: 'pending' });
+  }
+);
+
+// Return only the caller's redacted upload; the original photo is never retained.
+router.get('/prescriptions/:id/photo', async (req, res) => {
+  const result = await patientPhotoFilePath(req.user.sub, req.params.id);
+  if (result.error) return res.status(404).json({ error: 'Uploaded prescription is not available' });
+  res.sendFile(result.path);
+});
 
 // ── GET /api/patient/schedule ─────────────────────────────────────────────────
 // Generate a schedule proposal for today from active medications (ENG §5). The
@@ -951,7 +1078,9 @@ router.post('/schedule/confirm', async (req, res) => {
 });
 
 // ── DELETE /api/patient/schedule/items ────────────────────────────────────────
-// History is retained; only unlogged future reminders can be removed.
+// Patients may remove an incorrect schedule entry, including a generated
+// missed entry. Related dose logs cascade with the schedule row; the audit
+// record below preserves the deletion event and its original metadata.
 router.delete('/schedule/items', async (req, res) => {
   const scheduleIds = Array.isArray(req.body?.schedule_ids) ? req.body.schedule_ids : [];
   const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -976,21 +1105,6 @@ router.delete('/schedule/items', async (req, res) => {
       `SELECT * FROM dose_logs WHERE patient_id = ? AND schedule_id IN (${placeholders})`,
       [req.user.sub, ...validIds]
     );
-    if (
-      logs.length ||
-      entries.some(
-        (entry) =>
-          !['scheduled', 'snoozed'].includes(entry.status) ||
-          new Date(entry.scheduled_time).getTime() <= Date.now()
-      )
-    ) {
-      await conn.rollback();
-      return res.status(409).json({
-        error:
-          'Taken, missed, and historical dose records must remain in medication history. Select only future reminders without dose logs.',
-        code: 'DOSE_HISTORY_PROTECTED',
-      });
-    }
     await recordAudit({
       actor: req.user,
       action: 'patient.schedule_entries_deleted',
@@ -1076,14 +1190,12 @@ router.post('/doses/:scheduleId/log', async (req, res) => {
       max_daily_doses: result.max_daily_doses,
     });
   }
-  if (result.error === 'minimum_dose_interval_not_met') {
-    return res.status(409).json({
-      error: `Wait at least ${result.min_interval_hours} hours between recorded doses of this medicine.`,
-      min_interval_hours: result.min_interval_hours,
-      nearest_logged_at: result.nearest_logged_at,
-    });
-  }
-  res.status(201).json(result);
+  // Return the same streak snapshot that the Home and Adherence screens use.
+  // This keeps a successful dose log visible immediately across all patient views.
+  const streak = ['taken', 'taken_late'].includes(String(result.status || '').toLowerCase())
+    ? await getStreakStatus(req.user.sub)
+    : null;
+  res.status(201).json({ ...result, streak });
 });
 
 // ── POST /api/patient/doses/sync ──────────────────────────────────────────────
@@ -1117,14 +1229,15 @@ router.delete('/inquiry-consent', async (req, res) => {
 });
 
 // Open a thread. A restricted-substance subject is declined with a branch visit.
-router.post('/inquiries', async (req, res) => {
-  const { subject, branch_id, pharmacist_id, drug_name, medication_draft_id } = req.body ?? {};
+router.post('/inquiries', inquiryPostLimit, async (req, res) => {
+  const { subject, branch_id, pharmacist_id, drug_name, medication_draft_id, use_priority_token } = req.body ?? {};
   const result = await openThread(req.user.sub, {
     subject,
     branchId: branch_id ?? null,
     pharmacistId: pharmacist_id ?? null,
     drugName: drug_name ?? null,
     medicationDraftKey: medication_draft_id ? String(medication_draft_id).slice(0, 120) : null,
+    usePriorityToken: use_priority_token === true,
   });
   if (result.error === 'inquiry_consent_required') return res.status(403).json(result);
   if (result.error === 'restricted') {
@@ -1139,6 +1252,9 @@ router.post('/inquiries', async (req, res) => {
   if (result.error === 'pharmacist_not_found') {
     return res.status(404).json({ error: 'Selected pharmacist is not available at this branch' });
   }
+  if (result.error === 'priority_token_unavailable') {
+    return res.status(409).json({ error: 'No Priority Token is available for this request.' });
+  }
   await inquiryChanged({ patientId: req.user.sub, threadId: result.thread_id, action: 'created' });
   res.status(201).json(result);
 });
@@ -1147,7 +1263,7 @@ router.get('/inquiries', async (req, res) => {
   res.json(await patientThreads(req.user.sub));
 });
 
-router.post('/inquiries/:id/messages', async (req, res) => {
+router.post('/inquiries/:id/messages', inquiryPostLimit, async (req, res) => {
   const message = String(req.body?.message ?? '').trim();
   if (!message) return res.status(400).json({ error: 'message is required' });
   const result = await postMessage(req.params.id, 'patient', req.user.sub, message);
@@ -1171,8 +1287,13 @@ router.get('/inquiries/:id/messages', async (req, res) => {
 router.post('/inquiries/:id/close', async (req, res) => {
   const result = await closeThread(req.params.id, 'patient', req.user.sub);
   if (result.error === 'not_found') return res.status(404).json({ error: 'Thread not found' });
-  await inquiryChanged({ patientId: req.user.sub, threadId: req.params.id, action: 'closed' });
-  res.json({ message: 'Inquiry completed and saved to consultation history', ...result });
+  await inquiryChanged({ patientId: req.user.sub, threadId: req.params.id, action: result.closed ? 'closed' : 'patient_completed' });
+  res.json({
+    message: result.closed
+      ? 'Inquiry completed and saved to consultation history'
+      : 'Completion confirmed. Waiting for the pharmacist to complete the conversation.',
+    ...result,
+  });
 });
 
 // ── Refill & delivery (Tier 2b, D-4 — request + status only, no payments) ─────
@@ -1180,7 +1301,7 @@ router.get('/orders', async (req, res) => {
   res.json(await listOrders(req.user.sub));
 });
 
-router.post('/orders', (req, res, next) => {
+router.post('/orders', prescriptionUploadLimit, (req, res, next) => {
   uploadPrescription(req, res, async (uploadError) => {
     if (uploadError) return res.status(400).json({ error: uploadError.message });
     try {
@@ -1194,6 +1315,7 @@ router.post('/orders', (req, res, next) => {
         invalid_quantity: [400, 'Quantity must be between 1 and 100'],
         branch_required: [400, 'Select a pharmacy branch'],
         drug_not_found: [404, 'Medicine is unavailable'],
+        out_of_stock: [409, 'This medicine does not have enough stock for the requested quantity'],
         prescription_required: [400, 'A prescription image is required for this medicine'],
         restricted: [403, 'This medicine requires an in-person pharmacy visit'],
         branch_not_found: [404, 'Pharmacy branch not found'],
@@ -1211,6 +1333,13 @@ router.post('/orders', (req, res, next) => {
         orderId: result.id,
         status: result.status,
         created: true,
+      });
+      await recordAudit({
+        actor: req.user,
+        action: 'CATALOG_ORDER_CREATED',
+        entityType: result.kind,
+        entityId: result.id,
+        metadata: { drug_id: result.item.medication_id, quantity: result.item.quantity, fulfillment: result.kind },
       });
       return res.status(201).json(result);
     } catch (error) {

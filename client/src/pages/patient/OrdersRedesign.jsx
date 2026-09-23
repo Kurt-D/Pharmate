@@ -69,6 +69,9 @@ function Icon({ name, size = 22 }) {
   );
 }
 const money = (value) => `₱${Number(value || 0).toFixed(2)}`;
+const terminalStatuses = new Set([
+  'delivered', 'completed', 'ready', 'rejected', 'needs_resubmission', 'cancelled',
+]);
 const statusIndex = (status) =>
   ({
     order_placed: 0,
@@ -86,37 +89,64 @@ const statusIndex = (status) =>
     delivered: 3,
     completed: 3,
     rejected: 3,
+    needs_resubmission: 3,
+    cancelled: 3,
   })[status] ?? 0;
+
+function orderStatus(order) {
+  if (['rejected', 'needs_resubmission'].includes(order.prescription_status))
+    return order.prescription_status;
+  if (order.prescription_status === 'approved' && order.status === 'pending') return 'approved';
+  return order.status || 'order_placed';
+}
+
+function statusCopy(order) {
+  const status = orderStatus(order);
+  return ({
+    order_placed: ['Checkout completed', 'The pharmacy received your order.'],
+    pending: ['Order received', 'Your checkout is waiting for pharmacy review.'],
+    submitted: ['Submitted', 'Your order was sent to the pharmacy.'],
+    prescription_under_review: ['Under review', 'A pharmacist is reviewing the prescription.'],
+    approved: ['Approved', 'The pharmacist approved the order for preparation.'],
+    processing: ['Approved and preparing', 'The pharmacy is preparing your order.'],
+    packing: ['Packing', 'The pharmacy is checking and packing the items.'],
+    ready: ['Ready for pickup', 'The approved order is ready at the selected branch.'],
+    out_for_delivery: ['Out for delivery', 'The approved order is on its way.'],
+    in_transit: ['In transit', 'The approved order is on its way.'],
+    delivered: ['Delivered', 'Checkout, delivery, and payment processing are complete.'],
+    completed: ['Completed', 'The order was completed successfully.'],
+    rejected: ['Disapproved', 'The pharmacist did not approve this prescription order.'],
+    needs_resubmission: ['Needs a clearer prescription', 'Upload a clearer prescription to continue.'],
+    cancelled: ['Cancelled', 'The order was cancelled and will not be fulfilled.'],
+  })[status] || [String(status).replaceAll('_', ' '), 'The latest pharmacy status is shown here.'];
+}
 
 export default function OrdersRedesign() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
-  const [localOrders, setLocalOrders] = useState([]);
   const [serverOrders, setServerOrders] = useState([]);
   const [expanded, setExpanded] = useState(params.get('placed') || '');
+  const [view, setView] = useState(() => (params.get('view') === 'history' ? 'history' : 'active'));
+  const [orderHistories, setOrderHistories] = useState({});
   useEffect(() => {
-    try {
-      const otc = JSON.parse(localStorage.getItem('pm_otc_orders') || '[]');
-      const rx = JSON.parse(localStorage.getItem('pm_rx_orders') || '[]');
-      setLocalOrders(
-        [...rx, ...otc].sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
-      );
-    } catch {
-      setLocalOrders([]);
-    }
     api('/api/patient/orders')
       .then((response) => {
         const combined = [
-          ...(response.data.deliveries || []).map((item) => ({ ...item, fulfillment: 'delivery' })),
-          ...(response.data.refills || []).map((item) => ({ ...item, fulfillment: 'pickup' })),
+          ...(response.data.deliveries || []).map((item) => ({
+            ...item, fulfillment: 'delivery', order_kind: 'delivery',
+          })),
+          ...(response.data.refills || []).map((item) => ({
+            ...item, fulfillment: 'pickup', order_kind: 'refill',
+          })),
         ];
         setServerOrders(
           combined
             .map((order) => ({
               ...order,
+              status: orderStatus(order),
               type: order.rx_class === 'RX' || order.source === 'RX_VALIDATED' ? 'rx' : 'otc',
               created_at: order.requested_at,
-              items: [{ name: order.drug || 'Pharmacy order', quantity: 1 }],
+              items: [{ name: order.drug || 'Pharmacy order', quantity: Number(order.quantity || 1) }],
               payment: order.payment_method,
               contact: 'Saved patient contact',
               address: order.fulfillment === 'pickup' ? order.branch : 'Saved delivery address',
@@ -128,20 +158,42 @@ export default function OrdersRedesign() {
       .catch(() => setServerOrders([]));
   }, []);
   const attention = useMemo(
-    () => localOrders.filter((order) => ['needs_resubmission', 'rejected'].includes(order.status)),
-    [localOrders]
+    () =>
+      serverOrders.filter((order) =>
+        ['needs_resubmission', 'rejected'].includes(orderStatus(order))
+      ),
+    [serverOrders]
   );
   const active = useMemo(
     () =>
-      [...serverOrders, ...localOrders].filter(
-        (order) => statusIndex(order.status) < 3 && order.status !== 'needs_resubmission'
+      serverOrders.filter(
+        (order) => !terminalStatuses.has(orderStatus(order))
       ),
-    [localOrders, serverOrders]
+    [serverOrders]
   );
-  const completed = useMemo(
-    () => [...serverOrders, ...localOrders].filter((order) => statusIndex(order.status) === 3),
-    [localOrders, serverOrders]
+  const historyOrders = useMemo(
+    () => serverOrders.slice().sort(
+      (a, b) => new Date(b.created_at || b.requested_at) - new Date(a.created_at || a.requested_at)
+    ),
+    [serverOrders]
   );
+  const placedOrder = useMemo(
+    () => serverOrders.find((order) => order.id === params.get('placed')),
+    [params, serverOrders]
+  );
+  async function toggleOrder(order) {
+    const nextExpanded = expanded === order.id ? '' : order.id;
+    setExpanded(nextExpanded);
+    if (!nextExpanded || !order.order_kind || orderHistories[order.id]) return;
+    try {
+      const response = await api(
+        `/api/patient/orders/${order.order_kind}/${encodeURIComponent(order.id)}/history`
+      );
+      setOrderHistories((current) => ({ ...current, [order.id]: response.data.history || [] }));
+    } catch {
+      setOrderHistories((current) => ({ ...current, [order.id]: [] }));
+    }
+  }
   function tracker(order) {
     const current = statusIndex(order.status);
     const steps = order.type === 'rx' ? RX_STEPS : OTC_STEPS;
@@ -183,6 +235,7 @@ export default function OrdersRedesign() {
         </div>
       </header>
       {params.get('placed') && (
+        <>
         <div className="pm-order-success" role="status">
           <span>
             <Icon name="check" />
@@ -198,10 +251,34 @@ export default function OrdersRedesign() {
                 ? 'Payment and packing remain locked until a pharmacist approves the prescription.'
                 : 'The pharmacy received your request and will begin checking the items.'}
             </p>
+            <small>
+              Receipt #{params.get('placed')}
+              {placedOrder?.total != null ? ` · Total ${money(placedOrder.total)}` : ''}
+            </small>
           </div>
         </div>
+        {placedOrder && (
+          <section className="pm-order-receipt" aria-label="Order receipt">
+            <header>
+              <div><small>Order receipt</small><h2>Order received</h2><p>Receipt #{placedOrder.id}</p></div>
+              <time>{new Date(placedOrder.created_at).toLocaleString()}</time>
+            </header>
+            <ol className="pm-order-receipt__timeline"><li className="active">Order placed</li><li>Preparing</li><li>{placedOrder.fulfillment === 'pickup' ? 'Ready for pickup' : 'Out for delivery'}</li></ol>
+            <div className="pm-order-receipt__store"><span><Icon name={placedOrder.fulfillment === 'pickup' ? 'store' : 'delivery'} /></span><div><strong>{placedOrder.fulfillment === 'pickup' ? placedOrder.branch : 'Doorstep delivery'}</strong><small>{placedOrder.fulfillment === 'pickup' ? 'Pick up when ready' : 'Deliver to your saved address'}</small></div></div>
+            <div className="pm-order-receipt__items">{placedOrder.items.map((item) => <div key={`${item.id}-${item.pack}`}><span><Icon name="bag" /></span><p><strong>{item.name}</strong><small>{item.pack} · Qty {item.quantity}</small></p><b>{money(Number(item.unit_price || 0) * Number(item.quantity || 1))}</b></div>)}</div>
+            <dl>
+              <div><dt>Subtotal</dt><dd>{money(placedOrder.subtotal)}</dd></div>
+              <div><dt>Delivery fee</dt><dd>{placedOrder.delivery_fee ? money(placedOrder.delivery_fee) : 'Free'}</dd></div>
+              <div className="total"><dt>Total</dt><dd>{money(placedOrder.total)}</dd></div>
+            </dl>
+            <div className="pm-order-receipt__detail"><strong>Payment</strong><span>{String(placedOrder.payment || 'Cash').replaceAll('_', ' ')} · Pay on {placedOrder.fulfillment === 'pickup' ? 'pickup' : 'delivery'}</span></div>
+            <div className="pm-order-receipt__detail"><strong>{placedOrder.fulfillment === 'pickup' ? 'Pickup branch' : 'Delivery address'}</strong><span>{placedOrder.fulfillment === 'pickup' ? placedOrder.branch : placedOrder.address}</span></div>
+            {placedOrder.recipient_name && <div className="pm-order-receipt__detail"><strong>Recipient</strong><span>{placedOrder.recipient_name} · {placedOrder.contact}</span></div>}
+          </section>
+        )}
+        </>
       )}
-      {attention.map((order) => (
+      {view === 'active' && attention.map((order) => (
         <div className="pm-rx-order-alert" role="alert" key={`alert-${order.id}`}>
           <strong>
             {order.status === 'rejected'
@@ -219,21 +296,31 @@ export default function OrdersRedesign() {
       ))}
       <div className="pm-tracker-heading">
         <div>
-          <h2>Active Orders</h2>
+          <h2>{view === 'active' ? 'Active Orders' : 'Order History'}</h2>
           <p>
-            {active.length
+            {view === 'history'
+              ? `${historyOrders.length} checkout${historyOrders.length === 1 ? '' : 's'} recorded`
+              : active.length
               ? `${active.length} order${active.length === 1 ? '' : 's'} in progress`
               : 'No orders in progress'}
           </p>
         </div>
+        <div className="pm-order-view-tabs" role="tablist" aria-label="Order views">
+          <button className={view === 'active' ? 'active' : ''} onClick={() => setView('active')} role="tab" aria-selected={view === 'active'} type="button">
+            Active
+          </button>
+          <button className={view === 'history' ? 'active' : ''} onClick={() => setView('history')} role="tab" aria-selected={view === 'history'} type="button">
+            History
+          </button>
+        </div>
       </div>
-      {active.length > 0 && (
+      {view === 'active' && active.length > 0 && (
         <section className="pm-active-orders">
           {active.map((order) => (
             <article key={order.id} className={expanded === order.id ? 'expanded' : ''}>
               <button
                 className="pm-order-card-summary"
-                onClick={() => setExpanded((value) => (value === order.id ? '' : order.id))}
+                onClick={() => toggleOrder(order)}
                 type="button"
               >
                 <span className="pm-order-type-icon">
@@ -282,25 +369,46 @@ export default function OrdersRedesign() {
           ))}
         </section>
       )}
-      {completed.length > 0 && (
+      {view === 'history' && historyOrders.length > 0 && (
         <section className="pm-order-history-new">
-          <h2>Order History</h2>
-          {completed.slice(0, 8).map((order) => (
-            <article key={`${order.fulfillment}-${order.id}`}>
-              <span>
-                <Icon name={order.fulfillment === 'pickup' ? 'store' : 'box'} />
-              </span>
-              <div>
-                <strong>{order.items?.[0]?.name || order.drug || 'Pharmacy order'}</strong>
-                <small>
-                  {new Date(order.created_at || order.requested_at).toLocaleDateString()} ·{' '}
-                  {order.branch || order.fulfillment}
-                </small>
-              </div>
-              <em>{String(order.status || 'placed').replaceAll('_', ' ')}</em>
-            </article>
-          ))}
+          {historyOrders.map((order) => {
+            const [label, detail] = statusCopy(order);
+            const history = orderHistories[order.id] || [];
+            return (
+              <article className={`status-${orderStatus(order)}`} key={`${order.fulfillment}-${order.id}`}>
+                <button className="pm-order-history-summary" onClick={() => toggleOrder(order)} type="button">
+                  <span><Icon name={order.fulfillment === 'pickup' ? 'store' : 'box'} /></span>
+                  <div>
+                    <strong>{order.items?.[0]?.name || order.drug || 'Pharmacy order'}</strong>
+                    <small>{new Date(order.created_at || order.requested_at).toLocaleString()} · {order.branch || order.fulfillment}</small>
+                    <small>{detail}</small>
+                  </div>
+                  <em>{label}</em>
+                </button>
+                {expanded === order.id && (
+                  <div className="pm-order-history-detail">
+                    <p><strong>Checkout:</strong> {order.items?.reduce((sum, item) => sum + Number(item.quantity || 0), 0)} unit(s) requested</p>
+                    <p><strong>Payment:</strong> {order.payment_status ? String(order.payment_status).replaceAll('_', ' ') : order.payment ? String(order.payment).replaceAll('_', ' ') : 'Recorded at checkout'}</p>
+                    {order.rejection_reason && <p><strong>Pharmacist feedback:</strong> {order.rejection_reason}</p>}
+                    {history.map((event, index) => (
+                      <p key={`${event.changed_at}-${index}`}>
+                        <strong>{new Date(event.changed_at).toLocaleString()}:</strong>{' '}
+                        {String(event.from_status || 'submitted').replaceAll('_', ' ')} → {String(event.to_status).replaceAll('_', ' ')}
+                      </p>
+                    ))}
+                  </div>
+                )}
+              </article>
+            );
+          })}
         </section>
+      )}
+      {view === 'history' && historyOrders.length === 0 && (
+        <div className="pm-no-active-orders">
+          <Icon name="clock" size={30} />
+          <strong>No order history yet</strong>
+          <p>Completed checkouts and pharmacist decisions will appear here.</p>
+        </div>
       )}
     </main>
   );

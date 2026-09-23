@@ -17,8 +17,7 @@ const faqData = [
     tourStep: {
       id: 'create-schedule',
       path: '/patient/medications',
-      target:
-        '.pm-med-setup-empty .pm-primary-large, .pm-med-setup-empty .pm-med-section-head button, .pm-med-library .pm-med-section-head button',
+      target: '.pm-med-setup-empty .pm-primary-large',
       title: 'Create a Medicine Schedule',
       description:
         'Tap this plus button to add a medicine, set the dose, and choose daily reminder times.',
@@ -85,11 +84,11 @@ const faqData = [
     importantRule: 'A schedule suggestion does not replace advice from a licensed pharmacist.',
     tourStep: {
       id: 'safety-spacing',
-      path: '/patient/schedule',
-      target: '.pm-schedule-safety, .pm-safe-strip',
-      title: 'Review Safe Reminder Spacing',
+      path: '/patient/medications',
+      target: '.pm-medication-calendar-summary',
+      title: 'View Your Medication Schedule',
       description:
-        'This notice explains how saved reminder times are spaced. Review changes before saving.',
+        'Choose a date, then use Upcoming, Taken, or Missed to see each medicine reminder clearly.',
     },
   },
   {
@@ -183,6 +182,29 @@ const faqData = [
         'Generate a secure code here and share it only with the family member helping with your medicines.',
     },
   },
+  {
+    id: 'edit-profile',
+    category: 'Profile & Settings',
+    question: 'How do I update my profile?',
+    keywords: ['profile', 'edit name', 'medical condition', 'health details'],
+    summary: 'Open your details to update your personal and health information.',
+    stepByStep: [
+      'Open the Profile tab.',
+      'Choose Edit profile.',
+      'Use the pencil beside Medical information to update it.',
+      'Use the Edit buttons beside health and scheduling details to update them one at a time.',
+      'Save each change when you are finished.',
+    ],
+    importantRule: 'Keep your health details up to date so reminder suggestions match your routine.',
+    tourStep: {
+      id: 'edit-profile',
+      path: '/patient/profile',
+      target: '#pm-tour-edit-profile',
+      title: 'Edit Your Profile',
+      description:
+        'Use Edit profile to open your details, then tap the pencil beside Medical information.',
+    },
+  },
 ];
 
 export const FAQ_CATEGORIES = [
@@ -193,6 +215,7 @@ export const FAQ_CATEGORIES = [
   'Pharmacist & Tokens',
   'Orders & Scans',
   'Family / Caregiver',
+  'Profile & Settings',
 ];
 
 export default faqData;

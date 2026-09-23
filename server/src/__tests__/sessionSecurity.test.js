@@ -5,7 +5,7 @@ import { pool } from '../db/connection.js';
 import { createAccessToken, createPrivilegedTestUser } from './helpers/testUsers.js';
 
 const CURRENT_PASSWORD = 'CorrectHorseBattery1';
-const NEW_PASSWORD = 'EvenSaferPassword2026';
+const NEW_PASSWORD = 'EvenSaferPassword!2026';
 
 afterAll(async () => {
   await pool.end();
@@ -42,6 +42,12 @@ describe('password changes and immediate session invalidation', () => {
 
     expect(changed.status).toBe(200);
     expect(changed.body).toEqual({ message: 'Password changed successfully' });
+    const [[passwordAudit]] = await pool.execute(
+      `SELECT metadata_json FROM audit_events
+       WHERE action='password_changed' AND entity_id=? ORDER BY created_at DESC LIMIT 1`,
+      [user.id]
+    );
+    expect(passwordAudit).toBeTruthy();
     expect(await protectedRequest(user.accessToken)).toHaveProperty('status', 401);
     for (const refreshToken of [user.refreshToken, secondLogin.body.refreshToken]) {
       const refreshed = await request(app).post('/api/auth/refresh').send({ refreshToken });
@@ -79,6 +85,10 @@ describe('password changes and immediate session invalidation', () => {
     ['short', 'too-short'],
     ['excessively long', 'x'.repeat(73)],
     ['the current password', CURRENT_PASSWORD],
+    ['without an uppercase letter', 'lowercasepassword123!'],
+    ['without a lowercase letter', 'UPPERCASEPASSWORD123!'],
+    ['without a number', 'NoNumberPassword!'],
+    ['without a special character', 'NoSpecialPassword123'],
   ])('rejects %s new passwords', async (_case, newPassword) => {
     const user = await createUser('admin');
     const response = await request(app)
@@ -110,6 +120,12 @@ describe('password changes and immediate session invalidation', () => {
       .set('Authorization', `Bearer ${user.accessToken}`)
       .send({});
     expect(response.status).toBe(200);
+    const [[logoutAllAudit]] = await pool.execute(
+      `SELECT metadata_json FROM audit_events
+       WHERE action='logout_all_completed' AND entity_id=? ORDER BY created_at DESC LIMIT 1`,
+      [user.id]
+    );
+    expect(logoutAllAudit).toBeTruthy();
     expect(await protectedRequest(secondLogin.body.accessToken)).toHaveProperty('status', 401);
     for (const refreshToken of [user.refreshToken, secondLogin.body.refreshToken]) {
       expect((await request(app).post('/api/auth/refresh').send({ refreshToken })).status).toBe(
@@ -127,6 +143,12 @@ describe('password changes and immediate session invalidation', () => {
       .post('/api/auth/logout')
       .set('Authorization', `Bearer ${user.accessToken}`)
       .send({ refreshToken: user.refreshToken });
+    const [[logoutAudit]] = await pool.execute(
+      `SELECT metadata_json FROM audit_events
+       WHERE action='logout_completed' AND entity_id=? ORDER BY created_at DESC LIMIT 1`,
+      [user.id]
+    );
+    expect(logoutAudit).toBeTruthy();
     expect(
       (await request(app).post('/api/auth/refresh').send({ refreshToken: user.refreshToken }))
         .status
@@ -138,6 +160,34 @@ describe('password changes and immediate session invalidation', () => {
         })
       ).status
     ).toBe(200);
+  });
+
+  test('reusing a rotated refresh token revokes its entire token family', async () => {
+    const user = await createUser();
+    const rotated = await request(app)
+      .post('/api/auth/refresh')
+      .send({ refreshToken: user.refreshToken });
+    expect(rotated.status).toBe(200);
+
+    const replay = await request(app)
+      .post('/api/auth/refresh')
+      .send({ refreshToken: user.refreshToken });
+    expect(replay.status).toBe(401);
+    expect(
+      (
+        await request(app)
+          .post('/api/auth/refresh')
+          .send({ refreshToken: rotated.body.refreshToken })
+      ).status
+    ).toBe(401);
+
+    const [[audit]] = await pool.execute(
+      `SELECT metadata_json FROM audit_events
+       WHERE action='refresh_token_reuse_detected' AND entity_id=?
+       ORDER BY created_at DESC LIMIT 1`,
+      [user.id]
+    );
+    expect(audit).toBeTruthy();
   });
 });
 

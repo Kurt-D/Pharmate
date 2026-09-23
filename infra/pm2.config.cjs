@@ -1,9 +1,11 @@
+const currentDir = process.env.PHARMATE_CURRENT_DIR || '/var/www/pharmate/current';
+
 module.exports = {
   apps: [
     {
       name: 'pharmate-server',
       script: './server/src/index.js',
-      cwd: '/var/www/pharmate',
+      cwd: currentDir,
       interpreter: 'node',
       instances: 1,
       autorestart: true,
@@ -12,7 +14,7 @@ module.exports = {
       env: {
         NODE_ENV: 'production',
       },
-      env_file: '/var/www/pharmate/server/.env',
+      env_file: `${currentDir}/server/.env`,
       error_file: '/var/log/pm2/pharmate-error.log',
       out_file: '/var/log/pm2/pharmate-out.log',
       log_date_format: 'YYYY-MM-DD HH:mm:ss',

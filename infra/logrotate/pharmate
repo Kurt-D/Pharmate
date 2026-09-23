@@ -1,0 +1,16 @@
+/var/log/pm2/pharmate-*.log /var/log/pharmate-backup.log /var/log/nginx/pharmate-*.log {
+    daily
+    rotate 30
+    maxsize 100M
+    missingok
+    notifempty
+    compress
+    delaycompress
+    dateext
+    dateformat -%Y%m%d
+    create 0640 www-data adm
+    sharedscripts
+    postrotate
+        systemctl reload nginx >/dev/null 2>&1 || true
+    endscript
+}

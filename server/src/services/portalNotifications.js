@@ -8,15 +8,19 @@ export async function createPortalNotification({
   title,
   body,
   actionPath = null,
+  category = null,
+  priority = 'INFO',
+  resourceType = null,
+  resourceId = null,
   eventKey = null,
   executor = pool,
 }) {
   const id = uuidv4();
   const [result] = await executor.execute(
     `INSERT IGNORE INTO portal_notifications
-       (id,user_id,type,title,body,action_path,event_key)
-     VALUES (?,?,?,?,?,?,?)`,
-    [id, userId, type, title, body, actionPath, eventKey]
+       (id,user_id,type,category,title,body,priority,resource_type,resource_id,action_path,event_key)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+    [id, userId, type, category, title, body, priority, resourceType, resourceId, actionPath, eventKey]
   );
   // A caller using a transaction connection publishes its domain event only
   // after commit. Never leak a notification for a transaction that may roll back.

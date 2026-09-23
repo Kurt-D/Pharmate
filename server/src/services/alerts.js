@@ -65,9 +65,17 @@ export async function pharmacistFollowups() {
             m.drug_name_raw AS drug_name, ms.scheduled_time
      FROM caregiver_alerts ca
      JOIN patients p ON p.id = ca.patient_id
+     JOIN users u ON u.id = p.id
      LEFT JOIN medication_schedules ms ON ms.id = ca.schedule_id
      LEFT JOIN medications m ON m.id = ms.medication_id
      WHERE ca.channel = 'pharmacist' AND ca.status = 'unseen'
+       AND u.role = 'patient'
+       AND u.is_active = 1
+       AND LOWER(u.email) <> 'patient@dev.pharmate'
+       AND EXISTS (
+         SELECT 1 FROM medications roster_med
+         WHERE roster_med.patient_id = p.id AND roster_med.status = 'active'
+       )
      ORDER BY ca.created_at DESC`
   );
   return rows;

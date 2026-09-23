@@ -24,7 +24,17 @@ router.get('/branches', async (_req, res) => {
 // ── GET /api/directory/branches/:id/pharmacists ───────────────────────────────
 router.get('/branches/:id/pharmacists', async (req, res) => {
   const [rows] = await pool.execute(
-    `SELECT id, full_name, license_number FROM pharmacists WHERE branch_id = ? ORDER BY full_name`,
+    `SELECT pharmacist.id, pharmacist.full_name, profile.professional_title,
+            profile.specialization, profile.languages
+     FROM pharmacists pharmacist
+     JOIN users user ON user.id=pharmacist.id
+     JOIN pharmacist_professional_profiles profile ON profile.pharmacist_id=pharmacist.id
+     WHERE pharmacist.branch_id=? AND user.is_active=1
+       AND pharmacist.license_status='VERIFIED'
+       AND pharmacist.license_verified_at IS NOT NULL
+       AND pharmacist.license_expires_on >= CURRENT_DATE()
+       AND profile.patient_visible=1 AND profile.chat_available=1
+     ORDER BY pharmacist.full_name`,
     [req.params.id]
   );
   res.json(rows);

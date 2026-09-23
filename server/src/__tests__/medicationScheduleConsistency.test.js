@@ -216,7 +216,7 @@ test('patient, linked caregiver and pharmacist receive the same definitions and 
   ).toBe(true);
 });
 
-test('historical dose deletion is rejected without erasing its dose log', async () => {
+test('selected historical doses can be deleted with their dose logs', async () => {
   const [[dose]] = await pool.execute(
     "SELECT ms.id FROM medication_schedules ms WHERE patient_id=? AND status='taken' LIMIT 1",
     [patientId]
@@ -225,11 +225,11 @@ test('historical dose deletion is rejected without erasing its dose log', async 
     .delete('/api/patient/schedule/items')
     .set(auth())
     .send({ schedule_ids: [dose.id] });
-  expect(removed.status).toBe(409);
-  expect(removed.body.code).toBe('DOSE_HISTORY_PROTECTED');
+  expect(removed.status).toBe(200);
+  expect(removed.body.deleted).toBe(1);
   const [[logged]] = await pool.execute(
     'SELECT COUNT(*) AS count FROM dose_logs WHERE schedule_id=?',
     [dose.id]
   );
-  expect(Number(logged.count)).toBeGreaterThan(0);
+  expect(Number(logged.count)).toBe(0);
 });

@@ -1,108 +1,74 @@
-name: CI
+name: PharMate CI
 
 on:
-  push:
-    branches: [main, develop]
   pull_request:
+  push:
     branches: [main]
 
-jobs:
-  server-tests:
-    name: Server tests & lint
-    runs-on: ubuntu-latest
+permissions:
+  contents: read
 
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
     services:
       mysql:
-        image: mysql:8.0
+        image: mysql:8.4
         env:
-          MYSQL_ROOT_PASSWORD: root
-          MYSQL_DATABASE: pharmate_test
+          MYSQL_DATABASE: pharmate_jest_test
           MYSQL_USER: pharmate
-          MYSQL_PASSWORD: pharmate
-        ports:
-          - 3306:3306
+          MYSQL_PASSWORD: test-password
+          MYSQL_ROOT_PASSWORD: root-test-password
+        ports: ['3306:3306']
         options: >-
-          --health-cmd="mysqladmin ping -h localhost"
-          --health-interval=10s
-          --health-timeout=5s
-          --health-retries=5
-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot-test-password"
+          --health-interval=10s --health-timeout=5s --health-retries=10
+    env:
+      NODE_ENV: test
+      DB_HOST: 127.0.0.1
+      DB_PORT: 3306
+      DB_NAME: pharmate_jest_test
+      DB_USER: pharmate
+      DB_PASS: test-password
+      TEST_DB_NAME: pharmate_jest_test
+      JWT_SECRET: test-access-secret-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+      JWT_REFRESH_SECRET: test-refresh-secret-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+      AES_KEY: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+      OTP_SECRET: test-otp-secret-cccccccccccccccccccccccccccccccccccccccccccccccc
+      RESET_TOKEN_SECRET: test-reset-secret-dddddddddddddddddddddddddddddddddddddddddddddd
+      GOOGLE_CLIENT_ID: test-client.apps.googleusercontent.com
+      CAPTCHA_PROVIDER: self-hosted
+      CAPTCHA_SIGNING_SECRET: test-captcha-secret-eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
     steps:
       - uses: actions/checkout@v4
-
-      - name: Use Node 20
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: server/package-lock.json
-
-      - name: Install server deps
-        run: npm --prefix server install
-
-      - name: Run migrations (test DB)
-        env:
-          DB_HOST: 127.0.0.1
-          DB_PORT: 3306
-          DB_NAME: pharmate_test
-          DB_USER: pharmate
-          DB_PASS: pharmate
-          JWT_SECRET: ci-secret-access
-          JWT_REFRESH_SECRET: ci-secret-refresh
-          AES_KEY: '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef'
-        run: npm --prefix server run migrate
-
-      - name: Seed formulary (provisional — R1 fallback until pharmacist signs)
-        env:
-          DB_HOST: 127.0.0.1
-          DB_PORT: 3306
-          DB_NAME: pharmate_test
-          DB_USER: pharmate
-          DB_PASS: pharmate
-        run: npm --prefix server run seed:formulary -- --allow-unverified
-
-      - name: Setup Jest Test Database Permissions
+          node-version: 20
+          cache: npm
+          cache-dependency-path: |
+            client/package-lock.json
+            server/package-lock.json
+      - name: Install locked dependencies
         run: |
-          mysql -h 127.0.0.1 -u root -proot -e "CREATE DATABASE IF NOT EXISTS pharmate_jest_test; GRANT ALL PRIVILEGES ON pharmate_jest_test.* TO 'pharmate'@'%'; FLUSH PRIVILEGES;"
-
-      - name: Jest unit tests
-        env:
-          DB_HOST: 127.0.0.1
-          DB_PORT: 3306
-          DB_NAME: pharmate_test
-          DB_USER: pharmate
-          DB_PASS: pharmate
-          JWT_SECRET: ci-secret-access
-          JWT_REFRESH_SECRET: ci-secret-refresh
-          OTP_SECRET: 'ci-only-otp-secret-0123456789abcdef0123456789abcdef0123456789abcdef'
-          AES_KEY: '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef'
-          BCRYPT_COST: '4'
+          npm --prefix server ci
+          npm --prefix client ci
+      - name: Lint server and client
+        run: |
+          npm --prefix server run lint
+          npm --prefix client run lint
+      - name: Dependency audit
+        run: |
+          npm --prefix server audit --omit=dev --audit-level=high
+          npm --prefix client audit --omit=dev --audit-level=high
+      - name: Run server tests
         run: npm --prefix server test
-
-      - name: ESLint (server)
-        run: npm --prefix server run lint
-
-  client-lint:
-    name: Client lint
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Use Node 20
-        uses: actions/setup-node@v4
+      - name: Build immutable web artifact
+        run: npm --prefix client run build
+      - name: Package release
+        run: tar --exclude-vcs --exclude='server/.env' --exclude='server/uploads' --exclude='server/node_modules' --exclude='client/node_modules' -czf pharmate-${{ github.sha }}.tgz .
+      - uses: actions/upload-artifact@v4
         with:
-          node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: client/package-lock.json
-
-      - name: Install client deps
-        run: npm --prefix client install
-
-      - name: Install root deps (for prettier)
-        run: npm install
-
-      - name: Oxlint
-        run: npm --prefix client run lint
-
-      - name: Prettier check
-        run: npm run format:check
+          name: pharmate-${{ github.sha }}
+          path: pharmate-${{ github.sha }}.tgz
+          retention-days: 30

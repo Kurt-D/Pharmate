@@ -34,6 +34,7 @@ export default function Notifications() {
   const { language } = useLanguage();
   const tr = (en, fil) => (language === 'fil' ? fil : en);
   const [items, setItems] = useState(null);
+  const latestReminder = items?.find((item) => ['dose_reminder', 'dose_missed'].includes(item.type));
 
   useEffect(() => {
     api('/api/patient/notifications?limit=30')
@@ -84,6 +85,17 @@ export default function Notifications() {
         <button className="pm-mark-read-button" onClick={markAllRead} type="button">
           {tr('Mark all as read', 'Markahang nabasa lahat')}
         </button>
+      )}
+      {latestReminder && (
+        <section className={`pm-reminder-preview notification-type-${latestReminder.type}`} aria-label={tr('Latest medicine reminder', 'Pinakabagong paalala sa gamot')}>
+          <span><Icon name="bell" size={25} /></span>
+          <div>
+            <small>{tr('LATEST SYSTEM REMINDER', 'PINAKABAGONG PAALALA NG SYSTEM')}</small>
+            <strong>{latestReminder.title}</strong>
+            <p>{latestReminder.message}</p>
+            <time>{new Date(latestReminder.created_at).toLocaleString()}</time>
+          </div>
+        </section>
       )}
       {items === null ? (
         <div className="pm-notification-empty">

@@ -199,20 +199,12 @@ export default function Orders() {
 
   return (
     <section className="admin-order-workspace">
-      <header className="admin-order-heading">
-        <div>
-          <span>ADMIN ORDER OPERATIONS</span>
-          <h2>Monitor and process orders</h2>
-          <p>
-            Accept incoming requests, monitor preparation, and advance each order through
-            fulfilment.
-          </p>
-        </div>
+      <div className="admin-workspace-actions">
         <button type="button" onClick={() => load()} disabled={loading}>
           <RefreshCw size={17} className={loading ? 'is-spinning' : ''} />
           Refresh orders
         </button>
-      </header>
+      </div>
 
       {error && (
         <div className="admin-order-message is-error" role="alert">

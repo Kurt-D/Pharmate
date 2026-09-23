@@ -8,7 +8,7 @@ export const PATIENT_ELDERLY_TOUR_STEPS = faqData.map((faq, index) => ({
 export const PATIENT_TUTORIAL_MODULES = {
   welcome: {
     title: 'Replay Full Tour',
-    description: 'Review all eight important PharMate patient features.',
+    description: 'Review all nine important PharMate patient features.',
     steps: PATIENT_ELDERLY_TOUR_STEPS,
   },
 };

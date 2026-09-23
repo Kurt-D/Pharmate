@@ -26,57 +26,24 @@ const EMPTY_ANCHORS = {
   sleep_anchor: '',
 };
 
-const GUIDED_HEALTH_OPTIONS = {
-  allergies: [
-    'No known medicine allergies',
-    'Penicillin or amoxicillin',
-    'Aspirin or anti-inflammatory medicines',
-    'Sulfa medicines',
-    'I am not sure',
-    'Something else — ask my caregiver or pharmacist',
-  ],
-  conditions: [
-    'No known health conditions',
-    'High blood pressure',
-    'Diabetes',
-    'Asthma or breathing problems',
-    'Heart condition',
-    'I am not sure',
-    'Something else — ask my caregiver or health professional',
-  ],
-  current_medicines: [
-    'I do not currently take medicines or supplements',
-    'Blood pressure medicine',
-    'Diabetes medicine',
-    'Pain or fever medicine',
-    'Vitamins or supplements',
-    'I am not sure — check my medicine packaging',
-    'Something else — ask my caregiver or pharmacist',
-  ],
-};
-
-const EXCLUSIVE_GUIDED_ANSWERS = new Set([
-  'No known medicine allergies',
-  'No known health conditions',
-  'I do not currently take medicines or supplements',
-  'I am not sure',
-  'I am not sure — check my medicine packaging',
-]);
-
-function readableStatus(value) {
-  if (!value || value === 'UNANSWERED') return 'Not provided';
-  return value
-    .toLowerCase()
-    .replaceAll('_', ' ')
-    .replace(/^./, (letter) => letter.toUpperCase());
-}
-
 function readableTime(value) {
   if (!value) return 'Not provided';
   const [hours, minutes] = String(value).slice(0, 5).split(':').map(Number);
   if (!Number.isInteger(hours) || !Number.isInteger(minutes)) return String(value);
   const suffix = hours >= 12 ? 'PM' : 'AM';
   return `${hours % 12 || 12}:${String(minutes).padStart(2, '0')} ${suffix}`;
+}
+
+function ageFromDateOfBirth(value) {
+  const match = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return null;
+  const [, year, month, day] = match.map(Number);
+  const today = new Date();
+  let age = today.getFullYear() - year;
+  if (today.getMonth() + 1 < month || (today.getMonth() + 1 === month && today.getDate() < day)) {
+    age -= 1;
+  }
+  return age >= 0 && age <= 130 ? age : null;
 }
 
 function Icon({ name, size = 22 }) {
@@ -218,7 +185,6 @@ export default function ProfileRedesign() {
     patient_code: user?.patientCode || '—',
     created_at: null,
   });
-  const [draft, setDraft] = useState({ full_name: '', medical_condition: '' });
   const [safetyProfile, setSafetyProfile] = useState(EMPTY_SAFETY_PROFILE);
   const [anchors, setAnchors] = useState(EMPTY_ANCHORS);
   const [healthDraft, setHealthDraft] = useState(EMPTY_SAFETY_PROFILE);
@@ -263,10 +229,6 @@ export default function ProfileRedesign() {
 
     const nextProfile = profileResult.value.data;
     setProfile(nextProfile);
-    setDraft({
-      full_name: nextProfile.full_name || '',
-      medical_condition: nextProfile.medical_condition || '',
-    });
     setError('');
     setErrorTitle('');
 
@@ -368,47 +330,12 @@ export default function ProfileRedesign() {
       setMessage('Share message copied.');
     }
   }
-  async function saveProfile() {
-    setBusy(true);
-    setError('');
-    try {
-      await api('/api/patient/profile', { method: 'PUT', body: draft });
-      setProfile((current) => ({ ...current, ...draft }));
-      setPanel('');
-      setMessage('Profile updated.');
-    } catch (e) {
-      setError(e.message);
-    } finally {
-      setBusy(false);
-    }
-  }
   function startHealthEdit(field) {
     setHealthDraft({ ...safetyProfile });
     setAnchorsDraft({ ...anchors });
     setEditingHealth(field);
     setError('');
     setMessage('');
-  }
-  function toggleGuidedAnswer(field, answer) {
-    setHealthDraft((current) => {
-      const selected = String(current[field] || '')
-        .split(', ')
-        .filter(Boolean);
-      const guidedOptions = GUIDED_HEALTH_OPTIONS[field];
-      if (selected.includes(answer)) {
-        return { ...current, [field]: selected.filter((item) => item !== answer).join(', ') };
-      }
-      if (EXCLUSIVE_GUIDED_ANSWERS.has(answer)) return { ...current, [field]: answer };
-      return {
-        ...current,
-        [field]: [
-          ...selected.filter(
-            (item) => guidedOptions.includes(item) && !EXCLUSIVE_GUIDED_ANSWERS.has(item)
-          ),
-          answer,
-        ].join(', '),
-      };
-    });
   }
   async function saveHealthDetail(field) {
     setBusy(true);
@@ -455,34 +382,27 @@ export default function ProfileRedesign() {
     .slice(0, 2)
     .join('')
     .toUpperCase();
+
   const memberSince = profile.created_at ? new Date(profile.created_at).getFullYear() : '—';
   const inviteSeconds = invite
     ? Math.max(0, Math.ceil((new Date(invite.expires_at).getTime() - inviteClock) / 1000))
     : 0;
   const inviteTime = `${Math.floor(inviteSeconds / 60)}:${String(inviteSeconds % 60).padStart(2, '0')}`;
+  const age = ageFromDateOfBirth(safetyProfile.date_of_birth);
   const healthDetails = [
     ['Date of birth', safetyProfile.date_of_birth || 'Not provided', 'date_of_birth', 'date'],
+    ['Age', age === null ? 'Add date of birth' : `${age} years old`, 'age', 'readonly'],
     [
       'Current weight',
       safetyProfile.weight_kg ? `${safetyProfile.weight_kg} kg` : 'Not provided',
       'weight_kg',
       'number',
     ],
-    ['Medicine allergies', safetyProfile.allergies || 'Not provided', 'allergies', 'guided'],
-    ['Health conditions', safetyProfile.conditions || 'Not provided', 'conditions', 'guided'],
-    ['Kidney status', readableStatus(safetyProfile.kidney_status), 'kidney_status', 'status'],
-    ['Liver status', readableStatus(safetyProfile.liver_status), 'liver_status', 'status'],
     [
-      'Pregnancy or breastfeeding',
-      readableStatus(safetyProfile.pregnancy_status),
-      'pregnancy_status',
-      'pregnancy',
-    ],
-    [
-      'Current medicines and supplements',
-      safetyProfile.current_medicines || 'Not provided',
-      'current_medicines',
-      'guided',
+      'Disease (if any)',
+      safetyProfile.conditions || 'No disease added',
+      'conditions',
+      'text',
     ],
     [
       'Daily routine',
@@ -567,30 +487,19 @@ export default function ProfileRedesign() {
         <button
           aria-expanded={showDetails}
           className="pm-profile-details-toggle"
+          id="pm-tour-edit-profile"
           onClick={() => setShowDetails((value) => !value)}
           type="button"
         >
           <span>
             {showDetails
-              ? tr('Hide details', 'Itago ang details')
-              : tr('View more details', 'Tingnan ang iba pang details')}
+              ? tr('Hide profile details', 'Itago ang profile details')
+              : tr('Edit profile', 'I-edit ang profile')}
           </span>
           <Icon name="chevron" size={20} />
         </button>
         {showDetails && (
           <div className="pm-profile-more-details">
-            <div>
-              <span>
-                <Icon name="heart" size={20} />
-              </span>
-              <p>
-                <small>{tr('Medical information', 'Medical information')}</small>
-                <strong>
-                  {profile.medical_condition ||
-                    tr('No medical condition added', 'Walang medical condition na inilagay')}
-                </strong>
-              </p>
-            </div>
             <div className="pm-profile-health-heading">
               <span>
                 <Icon name="shield" size={20} />
@@ -609,7 +518,7 @@ export default function ProfileRedesign() {
                     <small>{label}</small>
                     {editingHealth !== field && <strong>{value}</strong>}
                   </p>
-                  {editingHealth !== field && (
+                  {editingHealth !== field && type !== 'readonly' && (
                     <button
                       aria-label={`Edit ${label}`}
                       onClick={() => startHealthEdit(field)}
@@ -656,70 +565,21 @@ export default function ProfileRedesign() {
                           </select>
                         </label>
                       )}
-                      {type === 'guided' && (
-                        <div className="pm-profile-guided-choices">
-                          <p>Choose every option that applies to you:</p>
-                          {GUIDED_HEALTH_OPTIONS[field].map((answer) => {
-                            const selected = String(healthDraft[field] || '')
-                              .split(', ')
-                              .includes(answer);
-                            return (
-                              <button
-                                aria-pressed={selected}
-                                className={selected ? 'is-selected' : ''}
-                                key={answer}
-                                onClick={() => toggleGuidedAnswer(field, answer)}
-                                type="button"
-                              >
-                                {selected && <Icon name="check" size={17} />}
-                                {answer}
-                              </button>
-                            );
-                          })}
-                          {healthDraft[field] &&
-                            !String(healthDraft[field])
-                              .split(', ')
-                              .every((answer) => GUIDED_HEALTH_OPTIONS[field].includes(answer)) && (
-                              <small className="pm-profile-existing-answer">
-                                Your previous answer is kept until you choose a guided option:{' '}
-                                <strong>{healthDraft[field]}</strong>
-                              </small>
-                            )}
-                        </div>
-                      )}
-                      {type === 'status' && (
-                        <select
-                          value={healthDraft[field]}
-                          onChange={(event) =>
-                            setHealthDraft((current) => ({
-                              ...current,
-                              [field]: event.target.value,
-                            }))
-                          }
-                        >
-                          <option value="UNANSWERED">Not provided</option>
-                          <option value="YES">Yes</option>
-                          <option value="NO">No</option>
-                          <option value="UNSURE">Unsure</option>
-                        </select>
-                      )}
-                      {type === 'pregnancy' && (
-                        <select
-                          value={healthDraft[field]}
-                          onChange={(event) =>
-                            setHealthDraft((current) => ({
-                              ...current,
-                              [field]: event.target.value,
-                            }))
-                          }
-                        >
-                          <option value="UNANSWERED">Not provided</option>
-                          <option value="PREGNANT">Pregnant</option>
-                          <option value="BREASTFEEDING">Breastfeeding</option>
-                          <option value="NEITHER">Neither</option>
-                          <option value="NOT_APPLICABLE">Not applicable</option>
-                          <option value="UNSURE">Unsure</option>
-                        </select>
+                      {type === 'text' && (
+                        <label className="pm-profile-guided-field">
+                          <span>Enter the disease name, or leave this blank if none</span>
+                          <textarea
+                            rows="2"
+                            placeholder="Example: Diabetes"
+                            value={healthDraft[field] || ''}
+                            onChange={(event) =>
+                              setHealthDraft((current) => ({
+                                ...current,
+                                [field]: event.target.value,
+                              }))
+                            }
+                          />
+                        </label>
                       )}
                       {type === 'boolean' && (
                         <select
@@ -916,45 +776,6 @@ export default function ProfileRedesign() {
         )}
       </section>
       <section className="pm-profile-menu">
-        <button onClick={() => setPanel(panel === 'edit' ? '' : 'edit')}>
-          <i>
-            <Icon name="edit" />
-          </i>
-          <span>
-            <strong>{t('profile.edit')}</strong>
-            <small>
-              {tr(
-                'Update your personal and health details',
-                'I-update ang personal at health details'
-              )}
-            </small>
-          </span>
-          <b>
-            <Icon name="chevron" size={20} />
-          </b>
-        </button>
-        {panel === 'edit' && (
-          <div className="pm-profile-panel">
-            <label>
-              {t('profile.fullName')}
-              <input
-                value={draft.full_name}
-                onChange={(e) => setDraft((d) => ({ ...d, full_name: e.target.value }))}
-              />
-            </label>
-            <label>
-              {t('profile.condition')}
-              <textarea
-                rows="2"
-                value={draft.medical_condition}
-                onChange={(e) => setDraft((d) => ({ ...d, medical_condition: e.target.value }))}
-              />
-            </label>
-            <button onClick={saveProfile} disabled={busy}>
-              {t('profile.save')}
-            </button>
-          </div>
-        )}
         <button onClick={() => setPanel(panel === 'language' ? '' : 'language')}>
           <i>
             <Icon name="language" />
@@ -1078,6 +899,11 @@ export default function ProfileRedesign() {
           <b>
             <Icon name="chevron" size={20} />
           </b>
+        </button>
+        <button onClick={() => navigate('/patient/security')}>
+          <i><Icon name="lock" /></i>
+          <span><strong>{tr('Signed-in devices', 'Mga naka-sign in na device')}</strong><small>{tr('Review and sign out devices', 'Tingnan at i-sign out ang mga device')}</small></span>
+          <b><Icon name="chevron" size={20} /></b>
         </button>
         <button onClick={() => navigate('/patient/help')}>
           <i>

@@ -9,6 +9,7 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
+import sharp from 'sharp';
 import request from 'supertest';
 import app from '../index.js';
 import { createPrivilegedTestUser } from './helpers/testUsers.js';
@@ -19,10 +20,11 @@ import { UPLOADS_DIR } from '../middleware/upload.js';
 const PATIENT_EMAIL = `patient.s5.${Date.now()}@test.pharmate`;
 const PHARM_EMAIL = `pharm.s5.${Date.now()}@test.pharmate`;
 const PASSWORD = 'TestPass@123';
-const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]); // PNG magic bytes
+const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAAeklEQVR4nNXOQREAAAyDMPybZiL62BEFwTiMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwzi+A6sDylPSwv6dS34AAAAASUVORK5CYII=', 'base64');
 
 let patientToken;
 let pharmToken;
+let validPng;
 
 async function login(email) {
   const r = await request(app).post('/api/auth/login').send({ email, password: PASSWORD });
@@ -30,6 +32,9 @@ async function login(email) {
 }
 
 beforeAll(async () => {
+  validPng = await sharp({
+    create: { width: 128, height: 128, channels: 3, background: '#ffffff' },
+  }).png().toBuffer();
   await request(app)
     .post('/api/auth/register')
     .send({ email: PATIENT_EMAIL, password: PASSWORD, role: 'patient', full_name: 'S5 Tester' });
@@ -82,6 +87,31 @@ describe('Prescription upload', () => {
       });
     expect(res.status).toBe(400);
   });
+
+  test('rejects a fake PNG even when its client MIME type says image/png', async () => {
+    const medId = await encodeRxMed();
+    const res = await request(app)
+      .post(`/api/patient/medications/${medId}/prescription`)
+      .set('Authorization', `Bearer ${patientToken}`)
+      .attach('photo', Buffer.from('not really a PNG'), {
+        filename: 'spoofed.png',
+        contentType: 'image/png',
+      });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/valid supported image/i);
+  });
+
+  test('stores a sanitized JPEG instead of retaining the submitted image bytes', async () => {
+    const medId = await encodeRxMed();
+    const res = await request(app)
+      .post(`/api/patient/medications/${medId}/prescription`)
+      .set('Authorization', `Bearer ${patientToken}`)
+      .attach('photo', validPng, { filename: 'rx.png', contentType: 'image/png' });
+    expect(res.status).toBe(201);
+    const [[photo]] = await pool.execute('SELECT redacted_path FROM prescription_photos WHERE id=?', [res.body.photo_id]);
+    const stored = fs.readFileSync(path.join(UPLOADS_DIR, photo.redacted_path));
+    expect(stored.subarray(0, 3).toString('hex')).toBe('ffd8ff');
+  });
 });
 
 describe('Pharmacist validation queue + decision', () => {
@@ -90,7 +120,7 @@ describe('Pharmacist validation queue + decision', () => {
     const up = await request(app)
       .post(`/api/patient/medications/${medId}/prescription`)
       .set('Authorization', `Bearer ${patientToken}`)
-      .attach('photo', PNG, { filename: 'rx.png', contentType: 'image/png' });
+      .attach('photo', validPng, { filename: 'rx.png', contentType: 'image/png' });
     const photoId = up.body.photo_id;
 
     // Queue shows the item by patient_code, no plaintext name.
@@ -134,7 +164,7 @@ describe('Pharmacist validation queue + decision', () => {
     const up = await request(app)
       .post(`/api/patient/medications/${medId}/prescription`)
       .set('Authorization', `Bearer ${patientToken}`)
-      .attach('photo', PNG, { filename: 'rx.png', contentType: 'image/png' });
+      .attach('photo', validPng, { filename: 'rx.png', contentType: 'image/png' });
     const photoId = up.body.photo_id;
 
     const noReason = await request(app)
@@ -165,7 +195,7 @@ describe('Pharmacist validation queue + decision', () => {
     const up = await request(app)
       .post(`/api/patient/medications/${medId}/prescription`)
       .set('Authorization', `Bearer ${patientToken}`)
-      .attach('photo', PNG, { filename: 'rx.png', contentType: 'image/png' });
+      .attach('photo', validPng, { filename: 'rx.png', contentType: 'image/png' });
     const photoId = up.body.photo_id;
 
     await request(app)
@@ -211,7 +241,7 @@ describe('Priority derivation on approval (PART 2)', () => {
     const up = await request(app)
       .post(`/api/patient/medications/${med.body.id}/prescription`)
       .set('Authorization', `Bearer ${token}`)
-      .attach('photo', PNG, { filename: 'rx.png', contentType: 'image/png' });
+      .attach('photo', validPng, { filename: 'rx.png', contentType: 'image/png' });
     const decision = await request(app)
       .post('/api/pharmacist/validate')
       .set('Authorization', `Bearer ${pharmToken}`)

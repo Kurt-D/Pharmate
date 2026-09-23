@@ -234,7 +234,6 @@ export function generateClinicalSchedule(items = [], interactions = []) {
   const fixedItems = unique.filter((item) => !isPrn(item));
   const incompletePrn = prnItems.filter(
     (item) =>
-      !['VERIFIED', 'REFERENCE', 'PRESCRIPTION'].includes(item.clinical_rule_status) ||
       !String(item.dosage_instruction || '').trim() ||
       !String(item.label_direction || item.prescription_directions || '').trim() ||
       !Number.isInteger(Number(item.max_daily_doses)) ||

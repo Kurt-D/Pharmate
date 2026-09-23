@@ -144,47 +144,12 @@ export default function Dashboard() {
   const stats = [
     ['Patients', aggregate.patients || 0, Users, '/admin/users', 'blue'],
     ['Active medicines', aggregate.active_medications || 0, Pill, '/admin/medicines', 'teal'],
-    [
-      'Average adherence',
-      aggregate.adherence?.average_pct == null ? '—' : `${aggregate.adherence.average_pct}%`,
-      CheckCircle2,
-      '/admin/alerts',
-      'green',
-    ],
     ['Open orders', openOrders, PackageOpen, '/admin/orders', 'amber'],
-    ['System alerts', data.alertCounts.total || 0, BellRing, '/admin/alerts', 'red'],
+    ['System alerts', data.alertCounts.total || 0, BellRing, '/admin/reports', 'red'],
   ];
 
   return (
     <section className="admin-monitor-dashboard">
-      <section className="admin-monitor-hero">
-        <div>
-          <span>
-            <i />
-            System monitoring active
-          </span>
-          <h2>PharMate System Control Center</h2>
-          <p>
-            See adherence performance, operational alerts, medicine inventory, and order activity
-            from one privacy-conscious workspace.
-          </p>
-          <nav>
-            <button onClick={() => navigate('/admin/alerts')} type="button">
-              <BellRing size={16} />
-              Review system alerts
-            </button>
-            <button onClick={() => navigate('/admin/orders')} type="button">
-              <PackageOpen size={16} />
-              Open order operations
-            </button>
-          </nav>
-        </div>
-        <aside>
-          <ShieldCheck size={46} />
-          <small>Protected monitoring</small>
-          <b>Role-based controls active</b>
-        </aside>
-      </section>
       {error && (
         <div className="admin-dashboard-error">
           <AlertTriangle size={18} />

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { CheckCircle2 } from 'lucide-react';
 import { api } from '../../api.js';
 
 // Ask Your Pharmacist — pharmacist side (D-I). Queue and threads show
@@ -68,7 +69,7 @@ export default function Inquiries() {
           <div className="pw-card p-3">
             <strong className="d-block mb-2">Open inquiries</strong>
             {queue.length === 0 && (
-              <div className="text-muted small py-3 text-center">Nothing open. 🎉</div>
+              <div className="text-muted small py-3 text-center"><CheckCircle2 aria-hidden="true" size={16} /> Nothing open.</div>
             )}
             {queue.map((q) => (
               <button

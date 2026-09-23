@@ -10,7 +10,9 @@ import { v4 as uuidv4 } from 'uuid';
 import { pool } from '../db/connection.js';
 import { encrypt } from '../utils/crypto.js';
 
-const PAYMENT_METHODS = new Set(['CASH_ON_PICKUP', 'COD', 'CARD', 'GCASH']);
+// Online/card payments are outside PharMate's scope. Orders are paid in cash
+// only: at the branch for pickup, or to the rider for delivery.
+const PAYMENT_METHODS = new Set(['CASH_ON_PICKUP', 'COD']);
 function paymentMethod(value, fallback) {
   const method = String(value || fallback).toUpperCase();
   return PAYMENT_METHODS.has(method) ? method : null;
@@ -34,11 +36,11 @@ export async function createCatalogOrder(
   if (!Number.isInteger(amount) || amount < 1 || amount > 100) return { error: 'invalid_quantity' };
   if (!branch_id) return { error: 'branch_required' };
   const [[drug]] = await pool.execute(
-    `SELECT id,generic_name,rx_class,is_restricted,availability
+    `SELECT id,generic_name,rx_class,is_restricted,availability,admin_status,stock_quantity
      FROM drug_reference WHERE id=?`,
     [drug_id]
   );
-  if (!drug || !drug.availability) return { error: 'drug_not_found' };
+  if (!drug || !drug.availability || drug.admin_status !== 'ACTIVE') return { error: 'drug_not_found' };
   if (drug.is_restricted) return { error: 'restricted', generic_name: drug.generic_name };
   if (drug.rx_class === 'RX' && !prescriptionFilename) return { error: 'prescription_required' };
   const delivery = fulfillment === 'delivery';
@@ -57,6 +59,23 @@ export async function createCatalogOrder(
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
+    const [[lockedDrug]] = await conn.execute(
+      `SELECT id,generic_name,rx_class,is_restricted,availability,admin_status,stock_quantity
+         FROM drug_reference WHERE id=? FOR UPDATE`,
+      [drug_id]
+    );
+    if (!lockedDrug || !lockedDrug.availability || lockedDrug.admin_status !== 'ACTIVE') {
+      await conn.rollback();
+      return { error: 'drug_not_found' };
+    }
+    if (lockedDrug.rx_class !== drug.rx_class || lockedDrug.is_restricted) {
+      await conn.rollback();
+      return { error: 'restricted', generic_name: lockedDrug.generic_name };
+    }
+    if (Number(lockedDrug.stock_quantity) < amount) {
+      await conn.rollback();
+      return { error: 'out_of_stock' };
+    }
     if (delivery) {
       await conn.execute(
         `INSERT INTO ${table}
@@ -102,6 +121,7 @@ export async function createCatalogOrder(
         [uuidv4(), kind, id, patientId, prescriptionFilename]
       );
     }
+    await conn.execute('UPDATE drug_reference SET stock_quantity=stock_quantity-? WHERE id=?', [amount, drug.id]);
     await conn.commit();
     return {
       id,
@@ -221,7 +241,7 @@ export async function createRefill(
 
 export async function createDelivery(
   patientId,
-  { medication_id, branch_id, address, notes = null, payment_method }
+  { medication_id, branch_id, address, quantity = 1, notes = null, payment_method }
 ) {
   if (!branch_id) return { error: 'branch_required' }; // TC-08
   if (!medication_id) return { error: 'medication_not_found' };
@@ -230,15 +250,31 @@ export async function createDelivery(
   const branch = await branchDelivery(branch_id);
   if (!branch.exists) return { error: 'branch_not_found' };
   if (!branch.offersDelivery) return { error: 'no_delivery_coverage' }; // coverage limited to branch
+  const amount = Number(quantity);
+  if (!Number.isInteger(amount) || amount < 1) return { error: 'invalid_quantity' };
+  const [[balance]] = await pool.execute(
+    `SELECT pp.prescribed_quantity,
+       COALESCE((SELECT SUM(r.quantity) FROM refill_requests r
+         WHERE r.medication_id=m.id AND r.status<>'cancelled'),0)
+       + COALESCE((SELECT SUM(d.quantity) FROM delivery_requests d
+         WHERE d.medication_id=m.id AND d.status<>'cancelled'),0) AS purchased_quantity
+     FROM medications m JOIN prescription_photos pp ON pp.id=m.prescription_photo_id
+     WHERE m.id=? AND m.patient_id=? AND pp.status='approved'`,
+    [medication_id, patientId]
+  );
+  if (
+    Number(balance?.prescribed_quantity) > 0 &&
+    amount > Number(balance.prescribed_quantity) - Number(balance.purchased_quantity)
+  ) return { error: 'quantity_exceeds_prescription' };
   const payment = paymentMethod(payment_method, 'COD');
   if (!payment || payment === 'CASH_ON_PICKUP') return { error: 'invalid_payment_method' };
 
   const id = uuidv4();
   await pool.execute(
     `INSERT INTO delivery_requests
-       (id, patient_id, medication_id, branch_id, delivery_address_enc, notes, payment_method)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    [id, patientId, medication_id, branch_id, address ? encrypt(address) : null, notes, payment]
+     (id, patient_id, medication_id, quantity, branch_id, delivery_address_enc, notes, payment_method)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    [id, patientId, medication_id, amount, branch_id, address ? encrypt(address) : null, notes, payment]
   );
   return { id, status: 'pending' };
 }

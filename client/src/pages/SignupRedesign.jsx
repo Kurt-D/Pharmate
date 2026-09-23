@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Eye, EyeOff } from 'lucide-react';
 import { GoogleLogin } from '@react-oauth/google';
 import pharmateLogo from '../assets/pharmate-logo.png';
+import splashLogo from '../assets/pharmate-splash-logo.png';
 import CaptchaChallenge from '../components/CaptchaChallenge.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import { apiUrl } from '../config.js';
@@ -15,15 +16,29 @@ const PASSWORD_CHECKS = [
   { label: 'Uppercase letter', test: (value) => /[A-Z]/.test(value) },
   { label: 'Lowercase letter', test: (value) => /[a-z]/.test(value) },
   { label: 'Number', test: (value) => /\d/.test(value) },
+  { label: 'Special character', test: (value) => /[^A-Za-z0-9]/.test(value) },
 ];
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
-function PasswordField({ label, value, onChange, visible, onToggle, autoComplete }) {
+function PasswordField({
+  label,
+  value,
+  onChange,
+  visible,
+  onToggle,
+  autoComplete,
+  error,
+  errorId,
+}) {
   return (
     <label>
       <span>{label}</span>
       <div className="auth-password-field">
         <input
+          aria-describedby={error ? errorId : undefined}
+          aria-invalid={Boolean(error)}
           autoComplete={autoComplete}
+          maxLength={72}
           minLength={12}
           onChange={onChange}
           placeholder={label === 'Password' ? 'Create a strong password' : 'Repeat your password'}
@@ -43,6 +58,11 @@ function PasswordField({ label, value, onChange, visible, onToggle, autoComplete
           <span>{visible ? 'Hide' : 'Show'}</span>
         </button>
       </div>
+      {error && (
+        <small className="auth-field-error" id={errorId} role="alert">
+          {error}
+        </small>
+      )}
     </label>
   );
 }
@@ -63,16 +83,31 @@ export default function SignupRedesign() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [error, setError] = useState('');
+  const [message, setMessage] = useState('');
+  const [fieldErrors, setFieldErrors] = useState({});
   const [loading, setLoading] = useState(false);
   const [verificationEmail, setVerificationEmail] = useState('');
   const [verificationCode, setVerificationCode] = useState('');
   const [resendSeconds, setResendSeconds] = useState(0);
-  const set = (key, value) => setForm((current) => ({ ...current, [key]: value }));
+  const set = (key, value) => {
+    setForm((current) => ({ ...current, [key]: value }));
+    setFieldErrors((current) => ({ ...current, [key]: '' }));
+  };
   const passwordChecks = useMemo(
     () => PASSWORD_CHECKS.map((check) => ({ ...check, met: check.test(form.password) })),
     [form.password]
   );
   const captchaComplete = Boolean(captcha.captchaToken || captcha.captchaAnswer);
+  const formReadyForCaptcha =
+    form.name.trim().length >= 2 &&
+    EMAIL_PATTERN.test(form.email.trim()) &&
+    passwordChecks.every((check) => check.met) &&
+    form.password === form.confirm &&
+    agreed;
+
+  useEffect(() => {
+    if (!formReadyForCaptcha) setCaptcha({ captchaToken: '', captchaAnswer: '' });
+  }, [formReadyForCaptcha]);
 
   useEffect(() => {
     if (resendSeconds <= 0) return undefined;
@@ -84,7 +119,7 @@ export default function SignupRedesign() {
   }, [resendSeconds]);
 
   function finishAuthentication(data) {
-    login(data.user, data.accessToken, data.refreshToken);
+    login(data.user, data.accessToken, data.csrfToken);
     const role = data.role || data.user.role;
     navigate(role === 'patient' ? '/patient/onboarding' : homeForRole(role), { replace: true });
   }
@@ -92,25 +127,42 @@ export default function SignupRedesign() {
   async function submit(event) {
     event.preventDefault();
     setError('');
-    if (!passwordChecks.every((check) => check.met)) {
-      return setError('Use at least 12 characters with uppercase, lowercase, and a number.');
+    setMessage('');
+    const cleanName = form.name.trim();
+    const cleanEmail = form.email.trim().toLowerCase();
+    const nextErrors = {};
+    const nameLetters = cleanName.match(/\p{L}/gu) || [];
+    if (cleanName.length < 2 || cleanName.length > 100 || nameLetters.length < 2) {
+      nextErrors.name = 'Enter a valid full name using 2 to 100 characters.';
     }
-    if (form.password !== form.confirm) return setError('Passwords do not match.');
+    if (cleanEmail.length > 254 || !EMAIL_PATTERN.test(cleanEmail)) {
+      nextErrors.email = 'Enter a valid email address, such as name@example.com.';
+    }
+    if (!passwordChecks.every((check) => check.met)) {
+      nextErrors.password =
+        'Use 12+ characters with uppercase, lowercase, a number, and a special character.';
+    }
+    if (form.password !== form.confirm) nextErrors.confirm = 'Passwords do not match.';
+    if (Object.keys(nextErrors).length) {
+      setFieldErrors(nextErrors);
+      return setError('Please correct the highlighted fields.');
+    }
     if (!agreed) return setError('Please agree to the Terms of Service and Privacy Policy.');
     if (!captchaComplete) return setError('Please complete the security verification.');
     setLoading(true);
     try {
       const response = await fetch(apiUrl('/api/auth/register'), {
         method: 'POST',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify({
-          email: form.email.trim(),
+          email: cleanEmail,
           password: form.password,
           confirmPassword: form.confirm,
           ...captcha,
           role: form.role,
-          full_name: form.name.trim(),
+          full_name: cleanName,
         }),
       });
       const data = await response.json().catch(() => ({}));
@@ -126,8 +178,14 @@ export default function SignupRedesign() {
         return;
       }
       if (data.verificationRequired) {
-        setVerificationEmail(data.email || form.email.trim());
-        setResendSeconds(60);
+        setVerificationEmail(data.email || cleanEmail);
+        setVerificationCode('');
+        setResendSeconds(Number(data.retryAfter) || 60);
+        setMessage(
+          data.codeSent === false
+            ? data.message || 'A code was sent recently. Check your email before resending.'
+            : data.message || 'A new six-digit code was sent to your email.'
+        );
       } else {
         finishAuthentication(data);
       }
@@ -144,9 +202,11 @@ export default function SignupRedesign() {
     event.preventDefault();
     setLoading(true);
     setError('');
+    setMessage('');
     try {
       const response = await fetch(apiUrl('/api/auth/verify-email'), {
         method: 'POST',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: verificationEmail, otp: verificationCode }),
       });
@@ -163,6 +223,7 @@ export default function SignupRedesign() {
   async function resendVerification() {
     setLoading(true);
     setError('');
+    setMessage('');
     try {
       const response = await fetch(apiUrl('/api/auth/resend-verification-otp'), {
         method: 'POST',
@@ -177,7 +238,9 @@ export default function SignupRedesign() {
         setResendSeconds(response.status === 429 ? Number(data.retryAfter) || 60 : 0);
         return setError(data.error || 'Please wait before requesting another code.');
       }
+      setVerificationCode('');
       setResendSeconds(60);
+      setMessage('A new six-digit verification code was sent. The previous code no longer works.');
     } catch {
       setError('Cannot reach the server. Please try again.');
     } finally {
@@ -200,6 +263,11 @@ export default function SignupRedesign() {
           {error && (
             <div className="auth-alert error" role="alert">
               {error}
+            </div>
+          )}
+          {message && (
+            <div className="auth-alert success" role="status">
+              {message}
             </div>
           )}
           <form className="auth-form" onSubmit={verifyEmail}>
@@ -268,14 +336,16 @@ export default function SignupRedesign() {
 
   return (
     <main className="auth-page">
-      <section className="auth-shell signup" aria-labelledby="signup-title">
-        <div className="auth-logo" aria-label="PharMate">
-          <img src={pharmateLogo} alt="PharMate" />
-        </div>
-        <header className="auth-heading">
-          <span className="auth-kicker">Patient or caregiver registration</span>
-          <h1 id="signup-title">Create your account</h1>
-          <p>Set up your secure PharMate account.</p>
+      <section className="auth-shell signup auth-shell--signup-compact" aria-labelledby="signup-title">
+        <header className="auth-app-hero">
+          <button className="auth-app-hero__back" type="button" onClick={() => navigate('/login')} aria-label="Back">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5m7-7-7 7" /></svg>
+          </button>
+          <div className="auth-app-hero__brand">
+            <img src={splashLogo} alt="" />
+            <h1 id="signup-title">Sign up</h1>
+            <p>Create your account</p>
+          </div>
         </header>
         {error && (
           <div className="auth-alert error" role="alert">
@@ -307,23 +377,41 @@ export default function SignupRedesign() {
           <label>
             <span>Full name</span>
             <input
+              aria-describedby={fieldErrors.name ? 'signup-name-error' : undefined}
+              aria-invalid={Boolean(fieldErrors.name)}
               autoComplete="name"
+              maxLength={100}
+              minLength={2}
               value={form.name}
               onChange={(event) => set('name', event.target.value)}
-              placeholder="Enter your full name"
+              placeholder="e.g. Juan Dela Cruz"
               required
             />
+            {fieldErrors.name && (
+              <small className="auth-field-error" id="signup-name-error" role="alert">
+                {fieldErrors.name}
+              </small>
+            )}
           </label>
           <label>
             <span>Email address</span>
             <input
+              aria-describedby={fieldErrors.email ? 'signup-email-error' : undefined}
+              aria-invalid={Boolean(fieldErrors.email)}
               autoComplete="email"
+              maxLength={254}
+              spellCheck="false"
               type="email"
               value={form.email}
               onChange={(event) => set('email', event.target.value)}
-              placeholder="Enter your email"
+              placeholder="e.g. juan.delacruz@email.com"
               required
             />
+            {fieldErrors.email && (
+              <small className="auth-field-error" id="signup-email-error" role="alert">
+                {fieldErrors.email}
+              </small>
+            )}
           </label>
           <PasswordField
             label="Password"
@@ -332,15 +420,19 @@ export default function SignupRedesign() {
             visible={showPassword}
             onToggle={() => setShowPassword((current) => !current)}
             autoComplete="new-password"
+            error={fieldErrors.password}
+            errorId="signup-password-error"
           />
-          <ul className="auth-password-rules" aria-label="Password requirements">
-            {passwordChecks.map((check) => (
-              <li className={check.met ? 'met' : ''} key={check.label}>
-                <span aria-hidden="true">{check.met ? '✓' : '○'}</span>
-                {check.label}
-              </li>
-            ))}
-          </ul>
+          {form.password && (
+            <ul className="auth-password-rules" aria-label="Password requirements">
+              {passwordChecks.map((check) => (
+                <li className={check.met ? 'met' : ''} key={check.label}>
+                  <span aria-hidden="true">{check.met ? '✓' : '○'}</span>
+                  {check.label}
+                </li>
+              ))}
+            </ul>
+          )}
           <PasswordField
             label="Confirm password"
             value={form.confirm}
@@ -348,30 +440,36 @@ export default function SignupRedesign() {
             visible={showConfirm}
             onToggle={() => setShowConfirm((current) => !current)}
             autoComplete="new-password"
+            error={fieldErrors.confirm}
+            errorId="signup-confirm-error"
           />
-          <label className="auth-check">
-            <input
-              type="checkbox"
-              checked={agreed}
-              onChange={(event) => setAgreed(event.target.checked)}
+          <section className="auth-consent">
+            <label className="auth-check">
+              <input
+                type="checkbox"
+                checked={agreed}
+                onChange={(event) => setAgreed(event.target.checked)}
+              />
+              <span>
+                I agree to the <a href="#terms">Terms of Service</a> and{' '}
+                <a href="/privacy#inquiries" target="_blank" rel="noreferrer">
+                  Inquiry Privacy Policy
+                </a>
+              </span>
+            </label>
+            <p className="auth-privacy-note">
+              Pharmacist questions are optional. We will ask for your permission before saving a
+              conversation.
+            </p>
+          </section>
+          {formReadyForCaptcha && (
+            <CaptchaChallenge
+              ref={captchaRef}
+              action="register"
+              onChange={setCaptcha}
+              onError={setError}
             />
-            <span>
-              I agree to the <a href="#terms">Terms of Service</a> and{' '}
-              <a href="/privacy#inquiries" target="_blank" rel="noreferrer">
-                Inquiry Privacy Policy
-              </a>
-            </span>
-          </label>
-          <p className="auth-privacy-note">
-            Pharmacist inquiries are optional. Before sending one, you will be asked separately to
-            consent to storing the conversation and its history on PharMate’s server.
-          </p>
-          <CaptchaChallenge
-            ref={captchaRef}
-            action="register"
-            onChange={setCaptcha}
-            onError={setError}
-          />
+          )}
           <button className="auth-primary" disabled={loading || !captchaComplete}>
             {loading ? 'Creating account…' : 'Sign Up'}
           </button>
@@ -386,7 +484,7 @@ export default function SignupRedesign() {
               size="large"
               text="signup_with"
               theme="outline"
-              width="390"
+              width="300"
             />
           ) : (
             <button className="auth-google-disabled" disabled type="button">
@@ -395,7 +493,7 @@ export default function SignupRedesign() {
           )}
         </div>
         <p className="auth-signin">
-          Already have an account? <Link to="/login">Sign in</Link>
+          Already have an account? <Link to="/login?view=signin">Sign in</Link>
         </p>
       </section>
     </main>

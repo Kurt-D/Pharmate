@@ -1,8 +1,11 @@
 /* PharMate patient mobile shell — matches GUI draft (Figs 28–39). */
 
 :root {
-  --pm-blue: #2563eb;
-  --pm-blue-dark: #1d4ed8;
+  --pm-blue: #578EF5;
+  --pm-blue-dark: #1f5fd0;
+  --pm-blue-secondary: #578ef5;
+  --pm-blue-light: #C4F7CA;
+  --pm-highlight: #f2f7a0;
   --pm-green: #22c55e;
   --pm-bg: #f4f6fb;
   --pm-card: #ffffff;
@@ -117,6 +120,9 @@ body.pm-a11y-tts-off .pm-mic,
 body.pm-a11y-tts-off .pm-compact-reminder__voice {
   display: none !important;
 }
+body.pm-a11y-tts-off .pm-compact-reminder__message {
+  grid-template-columns: minmax(0, 1fr);
+}
 body.pm-a11y-dark-mode,
 body.pm-a11y-dark-mode #root {
   background: #070f1f;
@@ -222,7 +228,7 @@ body.pm-a11y-reduce-motion *::after {
   transition-duration: 0.01ms !important;
 }
 body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
-  outline: 4px solid #4c8ce4 !important;
+  outline: 4px solid #578EF5 !important;
   outline-offset: 3px !important;
   box-shadow: 0 0 0 2px #fff !important;
 }
@@ -243,14 +249,14 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   align-items: center;
   background: transparent;
   border: 0;
-  color: #1769f5;
+  color: #578EF5;
   display: flex;
   height: 52px;
   justify-content: center;
   width: 52px;
 }
 .pm-accessibility-page h1 {
-  color: #1769f5;
+  color: #578EF5;
   font-size: 1.5rem;
   margin: 0;
 }
@@ -279,7 +285,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   align-items: center;
   background: #eaf2ff;
   border-radius: 0.65rem;
-  color: #1769f5;
+  color: #578EF5;
   display: flex;
   height: 44px;
   justify-content: center;
@@ -318,7 +324,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 }
 .pm-a11y-segmented button.active {
   background: #eaf2ff;
-  border: 2px solid #1769f5;
+  border: 2px solid #578EF5;
   color: #1558c9;
 }
 .pm-a11y-segmented strong {
@@ -337,7 +343,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   padding: 0.9rem;
 }
 .pm-a11y-preview > small {
-  color: #1769f5;
+  color: #578EF5;
   font-size: 0.7rem;
   font-weight: 800;
   letter-spacing: 0.05em;
@@ -410,7 +416,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   width: 26px;
 }
 .pm-a11y-toggle-row > button.on {
-  background: #1769f5;
+  background: #578EF5;
 }
 .pm-a11y-toggle-row > button.on i {
   transform: translateX(24px);
@@ -470,7 +476,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 }
 .pm-a11y-listen-test {
   align-items: center;
-  background: #1769f5;
+  background: #578EF5;
   border: 0;
   border-radius: 0.65rem;
   color: #fff;
@@ -506,7 +512,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 .pm-a11y-reset {
   align-items: center;
   background: #fff;
-  border: 1.5px solid #4c8ce4;
+  border: 1.5px solid #578EF5;
   border-radius: 0.65rem;
   color: #1558c9;
   display: flex;
@@ -589,6 +595,32 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   height: 1.3rem;
   justify-content: center;
   line-height: 1;
+}
+
+/* A shared, subtle route transition keeps Back actions from feeling abrupt. */
+.pm-patient-route-transition {
+  animation: pm-patient-route-enter 220ms ease-out both;
+}
+
+/* Keep the senior-facing interface calm: cards use only subtle elevation. */
+.pm-phone .pm-dashboard-card,
+.pm-phone .pm-medication-calendar-summary,
+.pm-phone .pm-home-streak-card,
+.pm-phone .pm-a11y-section,
+.pm-phone .pm-voice-card,
+.pm-phone .pm-compact-reminder {
+  box-shadow: 0 3px 10px rgba(30, 46, 74, 0.07);
+}
+.pm-phone .pm-medication-calendar-summary__week button.selected,
+.pm-phone .pm-home-streak-card__hero > span {
+  box-shadow: none;
+}
+@keyframes pm-patient-route-enter {
+  from { opacity: 0; transform: translateX(-10px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pm-patient-route-transition { animation: none; }
 }
 
 /* Banners */
@@ -727,13 +759,13 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 }
 .pm-schedule-edit-grid select:focus,
 .pm-schedule-edit-grid input:focus {
-  border-color: #1769f5;
+  border-color: #578EF5;
   box-shadow: 0 0 0 3px rgba(23, 105, 245, 0.12);
   outline: 0;
 }
 .pm-schedule-add-medicine {
   background: #fff;
-  border: 1.5px solid #1769f5;
+  border: 1.5px solid #578EF5;
   border-radius: 0.6rem;
   color: #1558c9;
   font-size: 0.86rem;
@@ -764,7 +796,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   padding: 0.1rem 0.35rem 0.3rem;
 }
 .pm-home__header h1 {
-  color: #1769f5;
+  color: #578EF5;
   font-size: clamp(1.45rem, 7vw, 1.9rem);
   font-weight: 800;
   letter-spacing: -0.04em;
@@ -775,6 +807,22 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   font-size: 0.78rem;
   margin: 0.1rem 0 0;
 }
+.pm-show-streak-card {
+  align-items: center;
+  background: #f1f7ff;
+  border: 1px solid #b8d1f7;
+  border-radius: 999px;
+  color: #578EF5;
+  cursor: pointer;
+  display: inline-flex;
+  font-family: inherit;
+  font-size: 0.68rem;
+  font-weight: 800;
+  gap: 0.3rem;
+  min-height: 2.15rem;
+  padding: 0.35rem 0.65rem;
+}
+.pm-show-streak-card:hover { background: #e6f1ff; }
 .pm-profile-button {
   align-items: center;
   color: #59677d;
@@ -795,7 +843,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 }
 .pm-welcome-card {
   align-items: center;
-  background: linear-gradient(120deg, #eef7ff 0%, #fff 62%, #f3f9ff 100%);
+  background: #eef7ff;
   display: grid;
   gap: 0.8rem;
   grid-template-columns: 5.6rem 1fr;
@@ -806,7 +854,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 .pm-avatar {
   align-items: end;
   align-self: stretch;
-  background: radial-gradient(circle at 50% 55%, #cde8ff 0 49%, transparent 50%);
+  background: #cde8ff;
   display: flex;
   justify-content: center;
   position: relative;
@@ -870,7 +918,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   margin-right: 0.35rem;
 }
 .pm-section-heading > a {
-  color: #1769f5;
+  color: #578EF5;
   font-size: 0.61rem;
   font-weight: 600;
   text-decoration: none;
@@ -936,7 +984,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 }
 .pm-streak {
   align-items: center;
-  background: linear-gradient(90deg, #f0f6ff, #fff);
+  background: #f0f6ff;
   border: 1px solid #dce8fa;
   border-radius: 0.7rem;
   display: grid;
@@ -1055,7 +1103,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   opacity: 0.5;
 }
 .pm-scan-hint {
-  color: #1769f5;
+  color: #578EF5;
   display: block;
   font-size: 0.5rem;
   margin-top: 0.25rem;
@@ -1077,7 +1125,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 .pm-quick-grid i {
   background: #edf4ff;
   border-radius: 50%;
-  color: #1769f5;
+  color: #578EF5;
   display: grid;
   font-size: 0.85rem;
   font-style: normal;
@@ -1103,7 +1151,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 }
 
 .pm-priority-streak-card {
-  background: linear-gradient(145deg, #f7fbff 0%, #edf5ff 100%);
+  background: #f7fbff;
   border-color: #bcd4fa;
   overflow: hidden;
 }
@@ -1113,6 +1161,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   display: flex;
   justify-content: space-between;
   padding-bottom: 0.7rem;
+  position: relative;
 }
 .pm-priority-streak__top > div {
   align-items: center;
@@ -1128,15 +1177,15 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   font-size: 0.68rem;
 }
 .pm-priority-streak__top strong {
-  color: #1769f5;
+  color: #578EF5;
   font-size: 1.35rem;
   line-height: 1;
 }
 .pm-priority-token-icon {
-  background: linear-gradient(145deg, #2d82ff, #0b4fce);
+  background: #2d82ff;
   border: 3px solid #9dc5ff;
   border-radius: 0.65rem;
-  box-shadow: 0 4px 10px #1769f545;
+  box-shadow: 0 4px 10px #578EF545;
   color: #fff;
   display: grid;
   font-size: 1rem;
@@ -1160,6 +1209,21 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   padding: 0.35rem 0.65rem;
   text-decoration: none;
 }
+.pm-streak-card-dismiss {
+  align-items: center;
+  background: #fff;
+  border: 1px solid #c9daf4;
+  border-radius: 50%;
+  color: #49627f;
+  cursor: pointer;
+  display: inline-flex;
+  height: 1.65rem;
+  justify-content: center;
+  margin-left: 0.45rem;
+  padding: 0;
+  width: 1.65rem;
+}
+.pm-streak-card-dismiss:hover { background: #edf4ff; color: #1558c9; }
 .pm-priority-streak__hero {
   align-items: center;
   display: grid;
@@ -1168,7 +1232,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   padding: 1rem 0 0.8rem;
 }
 .pm-streak-ring {
-  background: conic-gradient(#1769f5 var(--streak-progress), #dce8fa 0);
+  background: #578EF5;
   border-radius: 50%;
   display: grid;
   height: 7rem;
@@ -1187,7 +1251,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   width: 100%;
 }
 .pm-streak-ring strong {
-  color: #1769f5;
+  color: #578EF5;
   font-size: 2rem;
   line-height: 1;
 }
@@ -1234,16 +1298,16 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   font-size: 0.48rem;
 }
 .pm-streak-week > span.complete {
-  color: #1769f5;
+  color: #578EF5;
 }
 .pm-streak-week > span.complete b {
-  background: #1769f5;
-  border-color: #1769f5;
+  background: #578EF5;
+  border-color: #578EF5;
   color: #fff;
 }
 .pm-streak-reward {
   align-items: center;
-  background: linear-gradient(135deg, #145fe6, #1941aa);
+  background: #145fe6;
   border-radius: 0.7rem;
   color: #fff;
   display: flex;
@@ -1254,7 +1318,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 .pm-streak-reward > span {
   background: #fff;
   border-radius: 50%;
-  color: #1769f5;
+  color: #578EF5;
   display: grid;
   flex: 0 0 auto;
   font-size: 1rem;
@@ -1276,7 +1340,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 }
 .pm-ask-pharmacist-button {
   align-items: center;
-  background: #1769f5;
+  background: #578EF5;
   border-radius: 0.6rem;
   color: #fff;
   display: flex;
@@ -1296,7 +1360,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 
 .pm-tip-card {
   align-items: center;
-  background: linear-gradient(105deg, #fff 0%, #f7fff1 100%);
+  background: #fff;
   display: grid;
   gap: 0.65rem;
   grid-template-columns: auto 1fr auto;
@@ -1332,7 +1396,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   justify-content: center;
   padding: 1rem;
   position: fixed;
-  z-index: 1000;
+  z-index: 10000;
 }
 .pm-log-success-modal {
   animation: pm-log-success-in 0.2s ease-out;
@@ -1341,7 +1405,10 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   border-radius: 1rem;
   box-shadow: 0 22px 60px rgba(12, 28, 54, 0.3);
   max-width: 390px;
+  max-height: calc(100dvh - 2rem);
+  overflow-y: auto;
   padding: 1.4rem 1.25rem 1.15rem;
+  position: relative;
   text-align: center;
   width: 100%;
 }
@@ -1401,7 +1468,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   margin: 0.18rem 0 0;
 }
 .pm-log-success-details > div:last-child dd {
-  color: #1769f5;
+  color: #578EF5;
 }
 .pm-log-success-encouragement {
   align-items: center;
@@ -1437,7 +1504,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   margin-top: 0.12rem;
 }
 .pm-log-success-done {
-  background: #1769f5;
+  background: #578EF5;
   border: 0;
   border-radius: 0.65rem;
   color: #fff;
@@ -1449,6 +1516,72 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 }
 .pm-log-success-done:hover {
   background: #0e55d1;
+}
+.pm-streak-start-modal {
+  max-width: 410px;
+  padding: 1.75rem 1.25rem 1.35rem;
+}
+.pm-streak-start-modal__flame {
+  align-items: center;
+  background: #78b9ff;
+  color: #578EF5;
+  display: flex;
+  height: 8.5rem;
+  justify-content: center;
+  margin: 0 auto 0.75rem;
+  width: 8.5rem;
+}
+.pm-streak-start-modal__flame svg {
+  fill: #578EF5;
+  filter: drop-shadow(0 0.3rem 0.45rem rgba(23, 105, 245, 0.2));
+  stroke: #578EF5;
+}
+.pm-streak-start-modal__week {
+  border: 2px solid #d8e3f1;
+  border-radius: 1rem;
+  display: grid;
+  gap: 0.25rem;
+  grid-template-columns: repeat(7, 1fr);
+  margin: 0 auto 1.6rem;
+  max-width: 360px;
+  padding: 0.75rem 0.4rem;
+}
+.pm-streak-start-modal__week > div {
+  align-items: center;
+  color: #64748b;
+  display: flex;
+  flex-direction: column;
+  font-size: 0.65rem;
+  font-weight: 700;
+  gap: 0.35rem;
+  min-width: 0;
+}
+.pm-streak-start-modal__week span {
+  align-items: center;
+  border: 2px solid #d7e0eb;
+  border-radius: 50%;
+  display: flex;
+  height: 2.4rem;
+  justify-content: center;
+  width: 2.4rem;
+}
+.pm-streak-start-modal__week .is-complete {
+  color: #173d7a;
+}
+.pm-streak-start-modal__week .is-complete span {
+  background: #19b56a;
+  border-color: #19b56a;
+  color: #fff;
+}
+.pm-streak-start-modal h2 {
+  color: #102f72;
+  font-size: 1.55rem;
+}
+.pm-streak-start-modal > p {
+  color: #536176;
+  font-size: 0.92rem;
+  line-height: 1.55;
+  max-width: 310px;
 }
 @keyframes pm-log-success-in {
   from {
@@ -1507,7 +1640,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 }
 .pm-header-streak-button b {
   align-items: center;
-  background: #1769f5;
+  background: #578EF5;
   border: 2px solid #fff;
   border-radius: 50%;
   color: #fff;
@@ -1562,7 +1695,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   background: #eef5ff;
 }
 .pm-home-account-menu svg {
-  color: #1769f5;
+  color: #578EF5;
 }
 .pm-home-account-menu span {
   display: flex;
@@ -1579,7 +1712,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 .pm-section-heading > button {
   background: transparent;
   border: 0;
-  color: #1769f5;
+  color: #578EF5;
   font-size: 0.75rem;
   font-weight: 700;
   min-height: 44px;
@@ -1631,7 +1764,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 }
 .pm-voice-card .pm-mic {
   align-items: center;
-  background: #1769f5;
+  background: #578EF5;
   border: 0.42rem solid #d7e9ff;
   box-shadow: 0 0 0 0.38rem #edf6ff;
   color: #fff;
@@ -1712,7 +1845,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 }
 .pm-summary-modal-tabs button.active {
   background: #fff;
-  border-color: #4c8ce4;
+  border-color: #578EF5;
   color: #1558c9;
 }
 .pm-summary-modal-tabs button span {
@@ -1843,7 +1976,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   background: #fff;
   border: 1px solid #d8e2f0;
   border-radius: 50%;
-  color: #1769f5;
+  color: #578EF5;
   font-size: 1.2rem;
   height: 44px;
   position: relative;
@@ -1883,7 +2016,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 .pm-notification-panel > div button {
   background: none;
   border: 0;
-  color: #1769f5;
+  color: #578EF5;
   font-size: 0.65rem;
 }
 .pm-notification-panel > p {
@@ -1903,7 +2036,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   background: #eef5ff;
 }
 .pm-notification-panel article > i {
-  color: #1769f5;
+  color: #578EF5;
   font-style: normal;
 }
 .pm-notification-panel article span {
@@ -2079,8 +2212,9 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   margin-top: 0.4rem;
 }
 .pm-scan-backdrop {
-  align-items: flex-end;
-  background: rgba(15, 23, 42, 0.55);
+  align-items: center;
+  background: transparent;
+  backdrop-filter: none;
   display: flex;
   inset: 0;
   justify-content: center;
@@ -2092,9 +2226,9 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   background: #fff;
   border-radius: 1.2rem;
   box-shadow: 0 18px 50px rgba(15, 23, 42, 0.25);
-  max-height: 92vh;
+  max-height: none;
   max-width: 430px;
-  overflow-y: auto;
+  overflow: visible;
   padding: 1.1rem;
   width: 100%;
 }
@@ -2104,7 +2238,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   justify-content: space-between;
 }
 .pm-scan-sheet__header h2 {
-  color: #1769f5;
+  color: #578EF5;
   font-size: 1.35rem;
   font-weight: 800;
   margin: 0;
@@ -2144,7 +2278,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   align-items: center;
   background: #e2edff;
   border-radius: 50%;
-  color: #1769f5;
+  color: #578EF5;
   display: flex;
   font-size: 1.35rem;
   grid-row: 1 / 3;
@@ -2192,7 +2326,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   padding: 0.7rem 0.8rem;
 }
 .pm-scan-review > input:focus {
-  border-color: #1769f5;
+  border-color: #578EF5;
   box-shadow: 0 0 0 3px rgba(23, 105, 245, 0.12);
   outline: 0;
 }
@@ -2286,7 +2420,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   justify-content: space-between;
 }
 .pm-profile-page > header h1 {
-  color: #1769f5;
+  color: #578EF5;
   font-size: 1.65rem;
   font-weight: 850;
   margin: 0;
@@ -2331,14 +2465,14 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   width: 10px;
 }
 .pm-profile-identity h2 {
-  color: #1769f5;
+  color: #578EF5;
   font-size: 1rem;
   font-weight: 850;
   margin: 0;
 }
 .pm-profile-identity > div > small {
   background: #e8f1ff;
-  color: #1769f5;
+  color: #578EF5;
   font-size: 0.55rem;
   padding: 0.15rem 0.35rem;
 }
@@ -2383,7 +2517,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   grid-template-columns: auto 1fr auto;
 }
 .pm-caregiver-intro > i {
-  color: #1769f5;
+  color: #578EF5;
   font-size: 1.5rem;
   font-style: normal;
 }
@@ -2415,7 +2549,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   font-size: 0.55rem;
 }
 .pm-caregiver-code > strong {
-  color: #1769f5;
+  color: #578EF5;
   display: block;
   font-size: 1rem;
   letter-spacing: 0.08em;
@@ -2436,7 +2570,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 .pm-caregiver-code button {
   background: transparent;
   border: 0;
-  color: #1769f5;
+  color: #578EF5;
   font-size: 0.58rem;
   font-weight: 750;
   min-height: 38px;
@@ -2480,7 +2614,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 .pm-profile-menu > button i {
   background: #eef4ff;
   border-radius: 0.35rem;
-  color: #1769f5;
+  color: #578EF5;
   display: grid;
   font-style: normal;
   height: 25px;
@@ -2521,7 +2655,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   padding: 0.5rem;
 }
 .pm-profile-panel > button {
-  background: #1769f5;
+  background: #578EF5;
   border: 0;
   border-radius: 0.5rem;
   color: #fff;
@@ -2569,7 +2703,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 .pm-med-flow button:focus-visible,
 .pm-med-flow input:focus-visible,
 .pm-med-flow select:focus-visible {
-  outline: 3px solid #4c8ce4;
+  outline: 3px solid #578EF5;
   outline-offset: 2px;
 }
 .pm-med-flow button {
@@ -2638,8 +2772,8 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   color: #1558c9;
 }
 .pm-medication-setup-progress li.active > span {
-  background: #1769f5;
-  border-color: #1769f5;
+  background: #578EF5;
+  border-color: #578EF5;
   color: #fff;
   box-shadow: 0 0 0 4px #e8f1ff;
 }
@@ -2674,7 +2808,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   align-items: center;
   background: transparent;
   border: 0;
-  color: #1769f5;
+  color: #578EF5;
   display: flex;
   font-size: 0.88rem;
   font-weight: 700;
@@ -2700,7 +2834,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 }
 .pm-med-empty-visual > i {
   align-items: center;
-  background: #1769f5;
+  background: #578EF5;
   border: 4px solid #fff;
   border-radius: 50%;
   bottom: 0.2rem;
@@ -2725,6 +2859,45 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   max-width: 28rem;
   text-align: center;
 }
+.pm-tour-schedule-preview {
+  background: #f7fbff;
+  border: 1px solid #bad3fb;
+  border-radius: 1rem;
+  box-shadow: 0 12px 28px #1d67d51a;
+  display: grid;
+  gap: 0.55rem;
+  margin-top: 0.25rem;
+  padding: 1.15rem;
+}
+.pm-tour-schedule-preview__heading {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+.pm-tour-schedule-preview__heading span { color: #578EF5; font-size: 0.68rem; font-weight: 800; text-transform: uppercase; }
+.pm-tour-schedule-preview__heading strong { color: #102b58; font-size: 0.9rem; }
+.pm-tour-schedule-preview > p { color: #526985; font-size: 0.74rem; margin: 0 0 0.2rem; text-align: left; }
+.pm-tour-schedule-preview__row {
+  align-items: center;
+  background: #fff;
+  border: 1px solid #dbe6f7;
+  border-left: 4px solid #4f8cff;
+  border-radius: 0.65rem;
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: 3.4rem 1fr auto;
+  padding: 0.6rem;
+}
+.pm-tour-schedule-preview__row.taken { border-left-color: #28a45c; }
+.pm-tour-schedule-preview__row.missed { border-left-color: #eb6e78; }
+.pm-tour-schedule-preview__row time { color: #183862; font-size: 0.67rem; font-weight: 800; }
+.pm-tour-schedule-preview__row span { display: grid; gap: 0.1rem; min-width: 0; }
+.pm-tour-schedule-preview__row b { color: #17345d; font-size: 0.72rem; }
+.pm-tour-schedule-preview__row small { color: #667b97; font-size: 0.61rem; }
+.pm-tour-schedule-preview__row em { border-radius: 999px; font-size: 0.55rem; font-style: normal; font-weight: 800; padding: 0.25rem 0.38rem; }
+.pm-tour-schedule-preview__row.upcoming em { background: #e9f1ff; color: #1c63d5; }
+.pm-tour-schedule-preview__row.taken em { background: #e7f8ee; color: #167343; }
+.pm-tour-schedule-preview__row.missed em { background: #ffecef; color: #c3384a; }
 .pm-primary-large,
 .pm-secondary-large {
   align-items: center;
@@ -2739,13 +2912,13 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   width: 100%;
 }
 .pm-primary-large {
-  background: #1769f5;
-  border: 2px solid #1769f5;
+  background: #578EF5;
+  border: 2px solid #578EF5;
   color: #fff;
 }
 .pm-secondary-large {
   background: #fff;
-  border: 2px solid #1769f5;
+  border: 2px solid #578EF5;
   color: #1558c9;
 }
 .pm-med-info {
@@ -2753,7 +2926,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   background: #f3f7ff;
   border: 1px solid #d8e5fb;
   border-radius: 0.75rem;
-  color: #1769f5;
+  color: #578EF5;
   display: flex;
   gap: 0.75rem;
   padding: 1rem;
@@ -2807,7 +2980,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   align-items: center;
   background: #e9f1ff;
   border-radius: 50%;
-  color: #1769f5;
+  color: #578EF5;
   display: flex;
   height: 2.8rem;
   justify-content: center;
@@ -2827,7 +3000,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 }
 .pm-medicine-dot.pm-medicine-kind--rx {
   background: #e9f1ff;
-  color: #1769f5;
+  color: #578EF5;
 }
 .pm-medicine-dot.pm-medicine-kind--otc {
   background: #e8f8ed;
@@ -2841,7 +3014,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   width: max-content;
 }
 .pm-medicine-type-label.rx {
-  color: #1769f5 !important;
+  color: #578EF5 !important;
 }
 .pm-medicine-type-label.otc {
   color: #16823a !important;
@@ -2868,7 +3041,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   background: #fff;
   border: 1px solid #91b9fa;
   border-radius: 0.45rem;
-  color: #1769f5;
+  color: #578EF5;
   display: flex;
   font-size: 0.78rem;
   font-weight: 700;
@@ -2931,7 +3104,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   background: #f4f8ff;
   border: 1px solid #b9d2fb;
   border-radius: 0.65rem;
-  color: #1769f5;
+  color: #578EF5;
   display: flex;
   height: 44px;
   justify-content: center;
@@ -2958,7 +3131,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   border-top: 1px solid #edf1f6;
 }
 .pm-suggested-time-list svg {
-  color: #1769f5;
+  color: #578EF5;
 }
 .pm-suggested-time-list strong {
   color: #1e2e4a;
@@ -3023,7 +3196,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   padding: 0.9rem;
 }
 .pm-schedule-ready > svg {
-  color: #1769f5;
+  color: #578EF5;
 }
 .pm-schedule-ready strong {
   font-size: 0.9rem;
@@ -3067,7 +3240,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   align-items: center;
   background: #edf4ff;
   border-radius: 50%;
-  color: #1769f5;
+  color: #578EF5;
   display: flex;
   height: 3.4rem;
   justify-content: center;
@@ -3083,7 +3256,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 .pm-choice-card strong small {
   background: #e7f0ff;
   border-radius: 99px;
-  color: #1769f5;
+  color: #578EF5;
   font-size: 0.65rem;
   margin-left: 0.25rem;
   padding: 0.2rem 0.4rem;
@@ -3102,7 +3275,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 .pm-view-title > button {
   background: transparent;
   border: 0;
-  color: #1769f5;
+  color: #578EF5;
   min-height: 48px;
   min-width: 48px;
 }
@@ -3119,7 +3292,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   align-items: center;
   background: #edf4ff;
   border-radius: 50%;
-  color: #1769f5;
+  color: #578EF5;
   display: flex;
   height: 4.2rem;
   justify-content: center;
@@ -3248,7 +3421,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 }
 .pm-frequency-options button.active {
   background: #edf4ff;
-  border: 2px solid #1769f5;
+  border: 2px solid #578EF5;
   color: #1558c9;
   font-weight: 750;
 }
@@ -3260,7 +3433,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 .pm-time-inputs button {
   align-items: center;
   background: #fff;
-  border: 1px solid #1769f5;
+  border: 1px solid #578EF5;
   border-radius: 0.55rem;
   color: #1558c9;
   display: flex;
@@ -3285,7 +3458,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   grid-template-columns: 1fr 1fr;
 }
 .pm-compact-reminder {
-  background: linear-gradient(145deg, #fff 0%, #fbfcff 100%);
+  background: #fff;
   border: 1px solid #d8e0ec;
   border-radius: 1rem;
   box-shadow: 0 5px 18px rgba(26, 56, 105, 0.08);
@@ -3300,7 +3473,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   justify-content: space-between;
 }
 .pm-compact-reminder__header h2 {
-  color: #1769f5;
+  color: #578EF5;
   font-size: 1rem;
   margin: 0;
 }
@@ -3388,7 +3561,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   line-height: 1.35;
 }
 .pm-compact-reminder__message strong span {
-  color: #1769f5;
+  color: #578EF5;
   font-size: 1.5rem;
   line-height: 0;
 }
@@ -3437,9 +3610,9 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 .pm-reminder-actions button {
   align-items: center;
   background: #fff;
-  border: 2px solid #1769f5;
+  border: 2px solid #578EF5;
   border-radius: 0.55rem;
-  color: #1769f5;
+  color: #578EF5;
   display: flex;
   font-size: 1rem;
   font-weight: 750;
@@ -3473,7 +3646,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   cursor: not-allowed;
 }
 .pm-compact-reminder__hint {
-  color: #1769f5;
+  color: #578EF5;
   display: block;
   font-size: 0.78rem;
   font-weight: 750;
@@ -3573,6 +3746,99 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   overflow: hidden;
   position: relative;
 }
+.pm-streak-earned {
+  align-items: center;
+  animation: pm-streak-earned-in 0.35s cubic-bezier(.2,.9,.25,1.2);
+  background: #fff4df;
+  border: 1px solid #ffd18a;
+  border-radius: 0.75rem;
+  color: #8d4a00;
+  display: flex;
+  gap: 0.65rem;
+  margin: -0.15rem 0 0.9rem;
+  padding: 0.65rem 0.75rem;
+  text-align: left;
+}
+.pm-streak-earned__fire {
+  align-items: center;
+  background: #ffb526;
+  border-radius: 50%;
+  box-shadow: 0 0 0 5px #fff0d3, 0 0 20px #ff9c2550;
+  color: #fff;
+  display: grid;
+  flex: 0 0 auto;
+  height: 2.6rem;
+  place-items: center;
+  position: relative;
+  width: 2.6rem;
+}
+.pm-streak-earned__fire svg { animation: pm-streak-flame 0.9s ease-in-out infinite alternate; }
+.pm-streak-earned__fire i {
+  animation: pm-streak-spark 1.1s ease-out infinite;
+  background: #ffb526;
+  border-radius: 50%;
+  height: 0.22rem;
+  position: absolute;
+  width: 0.22rem;
+}
+.pm-streak-earned__fire i:nth-child(1) { animation-delay: .1s; left: -0.1rem; top: 0.4rem; }
+.pm-streak-earned__fire i:nth-child(2) { animation-delay: .35s; right: -0.1rem; top: 0.15rem; }
+.pm-streak-earned__fire i:nth-child(3) { animation-delay: .6s; right: 0.45rem; top: -0.1rem; }
+.pm-streak-earned strong { display: block; font-size: 0.76rem; }
+.pm-streak-earned small { color: #9c6421; display: block; font-size: 0.61rem; margin-top: 0.12rem; }
+.pm-med-scan-preview--button {
+  cursor: zoom-in;
+  padding: 0;
+  width: 100%;
+}
+.pm-med-scan-preview--button:focus-visible {
+  outline: 3px solid #578EF5;
+  outline-offset: 3px;
+}
+.pm-label-full-view {
+  align-items: center;
+  background: rgba(9, 20, 40, 0.94);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  padding: 1rem;
+  position: fixed;
+  z-index: 10050;
+}
+.pm-label-full-view__content {
+  align-items: center;
+  display: flex;
+  height: 100%;
+  justify-content: center;
+  max-height: 100%;
+  max-width: 100%;
+  position: relative;
+  width: 100%;
+}
+.pm-label-full-view__content img {
+  display: block;
+  max-height: 100%;
+  max-width: 100%;
+  object-fit: contain;
+}
+.pm-label-full-view__close {
+  align-items: center;
+  background: #fff;
+  border: 0;
+  border-radius: 999px;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.25);
+  color: #123262;
+  display: flex;
+  font-size: 1.8rem;
+  height: 2.75rem;
+  justify-content: center;
+  line-height: 1;
+  position: absolute;
+  right: 0.15rem;
+  top: 0.15rem;
+  width: 2.75rem;
+  z-index: 1;
+}
 .pm-med-scan-preview img {
   display: block;
   height: 220px;
@@ -3580,7 +3846,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   width: 100%;
 }
 .pm-med-scan-preview > i {
-  border-color: #1769f5;
+  border-color: #578EF5;
   border-style: solid;
   height: 1.3rem;
   position: absolute;
@@ -3718,8 +3984,8 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   width: 100%;
 }
 .pm-med-scan-confirm {
-  background: #1769f5;
-  border: 1px solid #1769f5;
+  background: #578EF5;
+  border: 1px solid #578EF5;
   color: #fff;
 }
 .pm-med-scan-confirm:hover:not(:disabled) {
@@ -3727,7 +3993,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 }
 .pm-med-scan-cancel {
   background: #fff;
-  border: 1.5px solid #1769f5;
+  border: 1.5px solid #578EF5;
   color: #1558c9;
 }
 .pm-med-scan-confirm:disabled,
@@ -3745,7 +4011,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 }
 .pm-med-scan-manual > div {
   align-items: center;
-  color: #1769f5;
+  color: #578EF5;
   display: flex;
   gap: 0.55rem;
 }
@@ -3774,12 +4040,12 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   padding: 0.65rem 0.75rem;
 }
 .pm-med-scan-manual input:focus {
-  border-color: #1769f5;
+  border-color: #578EF5;
   box-shadow: 0 0 0 3px rgba(23, 105, 245, 0.12);
   outline: 0;
 }
 .pm-med-scan-manual button {
-  background: #1769f5;
+  background: #578EF5;
   border: 0;
   border-radius: 0.55rem;
   color: #fff;
@@ -3843,7 +4109,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 .pm-log-success-confetti i:nth-child(5) {
   right: 23%;
   top: 2.5rem;
-  background: #1769f5;
+  background: #578EF5;
 }
 .pm-log-success-confetti i:nth-child(6) {
   right: 8%;
@@ -3866,7 +4132,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   justify-content: center;
 }
 .pm-med-log-success .pm-log-success-details > div > svg {
-  color: #1769f5;
+  color: #578EF5;
   flex: 0 0 auto;
 }
 .pm-med-log-success .pm-log-success-details > div:last-child > svg,
@@ -3931,7 +4197,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 .pm-medication-editor-header > button {
   background: transparent;
   border: 0;
-  color: #1769f5;
+  color: #578EF5;
   font-size: 1.8rem;
   line-height: 1;
   min-height: 48px;
@@ -4003,8 +4269,8 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   color: #1558c9;
 }
 .pm-schedule-flow-steps li.active > span {
-  background: #1769f5;
-  border-color: #1769f5;
+  background: #578EF5;
+  border-color: #578EF5;
   box-shadow: 0 0 0 4px #e8f1ff;
   color: #fff;
 }
@@ -4038,7 +4304,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 }
 .pm-add-medicine-instruction > span {
   align-items: center;
-  background: #1769f5;
+  background: #578EF5;
   border-radius: 50%;
   color: #fff;
   display: flex;
@@ -4076,7 +4342,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 }
 .pm-medication-form-row > span.blue {
   background: #eef4ff;
-  color: #1769f5;
+  color: #578EF5;
 }
 .pm-medication-form-row > span.green {
   background: #eef9f1;
@@ -4121,7 +4387,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 }
 .pm-medication-form-row input:focus,
 .pm-medication-form-row select:focus {
-  border-color: #1769f5;
+  border-color: #578EF5;
   box-shadow: 0 0 0 3px rgba(23, 105, 245, 0.12);
   outline: 0;
 }
@@ -4148,11 +4414,11 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   width: 100%;
 }
 .pm-medicine-picker-button svg {
-  color: #1769f5;
+  color: #578EF5;
   flex: 0 0 auto;
 }
 .pm-medicine-picker-button:focus-visible {
-  border-color: #1769f5;
+  border-color: #578EF5;
   box-shadow: 0 0 0 3px rgba(23, 105, 245, 0.12);
   outline: 0;
 }
@@ -4184,7 +4450,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   padding: 0 0.65rem;
 }
 .pm-medicine-search-control svg {
-  color: #1769f5;
+  color: #578EF5;
   flex: 0 0 auto;
 }
 .pm-medicine-search-control input {
@@ -4244,8 +4510,8 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 }
 .pm-medication-frequency button.active {
   background: #eef5ff;
-  border: 2px solid #1769f5;
-  color: #1769f5;
+  border: 2px solid #578EF5;
+  color: #578EF5;
 }
 .pm-medication-frequency button small {
   color: inherit;
@@ -4270,7 +4536,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   align-items: center;
   background: #e8f1ff;
   border-radius: 50%;
-  color: #1769f5;
+  color: #578EF5;
   display: flex;
   height: 2.8rem;
   justify-content: center;
@@ -4324,7 +4590,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 .pm-schedule-question input:focus,
 .pm-schedule-question select:focus,
 .pm-schedule-question textarea:focus {
-  border-color: #1769f5;
+  border-color: #578EF5;
   box-shadow: 0 0 0 3px rgba(23, 105, 245, 0.14);
   outline: 0;
 }
@@ -4415,7 +4681,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 .pm-medication-time-entry > div button {
   background: transparent;
   border: 0;
-  color: #1769f5;
+  color: #578EF5;
   font-size: 1.2rem;
   min-height: 44px;
   position: absolute;
@@ -4425,9 +4691,9 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 }
 .pm-medication-time-entry > button {
   background: #fff;
-  border: 1.5px solid #1769f5;
+  border: 1.5px solid #578EF5;
   border-radius: 0.55rem;
-  color: #1769f5;
+  color: #578EF5;
   flex: 1 1 145px;
   font-size: 0.75rem;
   font-weight: 750;
@@ -4445,7 +4711,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   width: 22px;
 }
 .pm-medication-save {
-  background: #1769f5;
+  background: #578EF5;
   border: 0;
   border-radius: 0.65rem;
   bottom: 1rem;
@@ -4475,7 +4741,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   align-items: center;
   background: #eef4ff;
   border-radius: 0.35rem;
-  color: #1769f5;
+  color: #578EF5;
   display: flex;
   font-size: 0.65rem;
   font-weight: 750;
@@ -4556,7 +4822,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   align-items: center;
   background: #eef4ff;
   border-radius: 0.5rem;
-  color: #1769f5;
+  color: #578EF5;
   display: flex;
   height: 2.7rem;
   justify-content: center;
@@ -4612,7 +4878,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   text-align: left;
 }
 .pm-schedule-saved-modal > aside svg {
-  color: #1769f5;
+  color: #578EF5;
 }
 .pm-schedule-saved-modal > footer {
   display: grid;
@@ -4621,14 +4887,14 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 }
 .pm-schedule-saved-modal > footer button {
   background: #fff;
-  border: 1.5px solid #1769f5;
+  border: 1.5px solid #578EF5;
   border-radius: 0.55rem;
-  color: #1769f5;
+  color: #578EF5;
   font-weight: 750;
   min-height: 50px;
 }
 .pm-schedule-saved-modal > footer button:last-child {
-  background: #1769f5;
+  background: #578EF5;
   color: #fff;
 }
 .pm-flow-saved-summary {
@@ -4651,7 +4917,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   border-bottom: 0;
 }
 .pm-flow-saved-summary > div > svg {
-  color: #1769f5;
+  color: #578EF5;
 }
 .pm-flow-saved-summary span {
   align-items: center;
@@ -4721,7 +4987,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   align-items: center;
   background: #edf4ff;
   border-radius: 50%;
-  color: #1769f5;
+  color: #578EF5;
   display: flex;
   height: 4rem;
   justify-content: center;
@@ -4770,7 +5036,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   align-items: center;
   background: transparent;
   border: 0;
-  color: #1769f5;
+  color: #578EF5;
   display: flex;
   font-size: 0.78rem;
   font-weight: 700;
@@ -4872,7 +5138,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   min-width: 0;
 }
 .pm-dashboard-dose-time svg {
-  color: #1769f5;
+  color: #578EF5;
 }
 .pm-dashboard-dose-time time {
   color: #1e2e4a;
@@ -4887,18 +5153,31 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 }
 .pm-med-modal-backdrop {
   align-items: center;
-  background: rgba(15, 23, 42, 0.72);
+  background: transparent;
+  backdrop-filter: none;
   display: flex;
   inset: 0;
   justify-content: center;
   padding: 1rem;
   position: fixed;
   z-index: 100;
+  animation: pm-calendar-overlay-fade 180ms ease-out both;
+}
+.pm-med-modal-backdrop .pm-calendar-planner {
+  animation: pm-calendar-overlay-open 260ms ease-out both;
+}
+@keyframes pm-calendar-overlay-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes pm-calendar-overlay-open {
+  from { opacity: 0; transform: translateY(24px) scale(0.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
 }
 .pm-med-modal {
   background: #fff;
   border-radius: 1rem;
-  max-height: calc(100vh - 2rem);
+  max-height: none;
   max-width: 620px;
   overflow: auto;
   padding: 1.25rem;
@@ -4945,19 +5224,23 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   display: grid;
   gap: 0.85rem;
   padding: 1rem;
-  border: 1px solid #c9dcf5;
+  border: 1px solid #d5e4f2;
   border-radius: 1.25rem;
   background: #fff;
-  box-shadow: 0 7px 20px rgba(27, 73, 132, 0.06);
+  box-shadow: 0 7px 20px rgba(27, 73, 132, 0.08);
 }
 .pm-medication-calendar-summary > header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
+  margin: -1rem -1rem 0;
+  padding: 0.95rem 1rem;
+  border-radius: 1.18rem 1.18rem 0.9rem 0.9rem;
+  background: #92eeff;
 }
 .pm-medication-calendar-summary header small {
-  color: #1769f5;
+  color: #15586a;
   font-size: 0.65rem;
   font-weight: 800;
   letter-spacing: 0.05em;
@@ -4965,7 +5248,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 }
 .pm-medication-calendar-summary h2 {
   margin: 0.1rem 0 0;
-  color: #102446;
+  color: #1e2e4a;
   font-size: 1.08rem;
 }
 .pm-medication-calendar-summary > header > button {
@@ -4974,10 +5257,10 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   align-items: center;
   gap: 0.4rem;
   padding: 0 0.75rem;
-  border: 1px solid #9ec4fa;
+  border: 1px solid #578EF5;
   border-radius: 0.8rem;
-  background: #f7fbff;
-  color: #155dce;
+  background: #fff;
+  color: #1769f5;
   font: inherit;
   font-size: 0.72rem;
   font-weight: 800;
@@ -4996,13 +5279,13 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   border: 0;
   border-radius: 50%;
   background: transparent;
-  color: #1769f5;
+  color: #578EF5;
 }
 .pm-medication-calendar-summary__navigation button:last-child {
   justify-self: end;
 }
 .pm-medication-calendar-summary__navigation strong {
-  color: #1769f5;
+  color: #1e2e4a;
   font-size: 0.8rem;
 }
 .pm-medication-calendar-summary__week {
@@ -5019,18 +5302,18 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   border: 0;
   border-radius: 0.8rem;
   background: transparent;
-  color: #48617e;
+  color: #405474;
 }
 .pm-medication-calendar-summary__week small {
-  color: #74859d;
+  color: #52627a;
 }
 .pm-medication-calendar-summary__week strong {
   font-size: 0.85rem;
 }
 .pm-medication-calendar-summary__week button.selected {
-  background: #1769f5;
+  background: #578EF5;
   color: #fff;
-  box-shadow: 0 6px 14px rgba(23, 105, 245, 0.25);
+  box-shadow: 0 6px 14px rgba(48, 175, 255, 0.25);
 }
 .pm-medication-calendar-summary__week button.selected small {
   color: #fff;
@@ -5043,7 +5326,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 .pm-medication-calendar-summary__filters button {
   min-height: 44px;
   padding: 0.35rem;
-  border: 1px solid #aac9f2;
+  border: 1px solid #a8c9ed;
   border-radius: 999px;
   background: #fff;
   color: #31577f;
@@ -5052,17 +5335,27 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   font-weight: 750;
 }
 .pm-medication-calendar-summary__filters button.active {
-  border-color: #1769f5;
-  background: #edf5ff;
-  color: #1769f5;
+  border-color: #578EF5;
+  background: #578EF5;
+  color: #fff;
+}
+.pm-medication-calendar-summary__filters button.active:nth-child(2) {
+  border-color: #4eaf69;
+  background: #d8ffc5;
+  color: #1b5e32;
+}
+.pm-medication-calendar-summary__filters button.active:nth-child(3) {
+  border-color: #d86a6a;
+  background: #fff0f0;
+  color: #a12c2c;
 }
 .pm-medication-calendar-summary__date {
-  color: #102446;
+  color: #1e2e4a;
   font-size: 0.82rem;
 }
 .pm-medication-calendar-summary__result {
   min-height: 42px;
-  color: #75849a;
+  color: #52627a;
   font-size: 0.75rem;
   text-align: center;
 }
@@ -5085,7 +5378,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 .pm-calendar-month button {
   background: transparent;
   border: 0;
-  color: #1769f5;
+  color: #578EF5;
   min-height: 48px;
   min-width: 48px;
 }
@@ -5116,7 +5409,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   padding: 0.15rem;
 }
 .pm-calendar-grid > button.selected {
-  background: #1769f5;
+  background: #578EF5;
   color: #fff;
 }
 .pm-calendar-filters {
@@ -5136,8 +5429,8 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   padding: 0.45rem 0.3rem;
 }
 .pm-calendar-filters button.active {
-  background: #1769f5;
-  border-color: #1769f5;
+  background: #578EF5;
+  border-color: #578EF5;
   color: #fff;
 }
 .pm-calendar-grid i,
@@ -5221,8 +5514,8 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   min-height: 54px;
 }
 .pm-simple-history-modal .pm-calendar-filters button.active {
-  background: #1769f5;
-  border-color: #1769f5;
+  background: #578EF5;
+  border-color: #578EF5;
   box-shadow: 0 6px 14px rgba(23, 105, 245, 0.18);
 }
 .pm-simple-history-modal .pm-calendar-day-detail h3 {
@@ -5318,7 +5611,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 }
 .pm-streak-page button:focus-visible,
 .pm-streak-page a:focus-visible {
-  outline: 3px solid #4c8ce4;
+  outline: 3px solid #578EF5;
   outline-offset: 2px;
 }
 .pm-streak-page__header {
@@ -5359,7 +5652,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 }
 .pm-token-badge {
   align-items: center;
-  background: linear-gradient(145deg, #4c9cff, #073eb9);
+  background: #4c9cff;
   border: 4px solid #9bc7ff;
   border-radius: 1rem;
   box-shadow: 0 5px 10px #135ac744;
@@ -5380,7 +5673,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   font-weight: 700;
 }
 .pm-streak-token-panel strong {
-  color: #1769f5;
+  color: #578EF5;
   font-size: 1.65rem;
 }
 .pm-streak-token-panel p {
@@ -5413,7 +5706,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 }
 .pm-streak-celebration {
   align-items: center;
-  background: linear-gradient(135deg, #f1f7ff, #fff);
+  background: #f1f7ff;
   border-radius: 0.8rem;
   display: grid;
   gap: 1rem;
@@ -5425,7 +5718,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   width: 9rem;
 }
 .pm-streak-ring--large svg {
-  color: #1769f5;
+  color: #578EF5;
 }
 .pm-streak-celebration h2 {
   color: #173d7a;
@@ -5469,7 +5762,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 }
 .pm-streak-explainer li > span {
   align-items: center;
-  background: #1769f5;
+  background: #578EF5;
   border-radius: 50%;
   color: #fff;
   display: flex;
@@ -5489,7 +5782,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 }
 .pm-streak-reward-card {
   align-items: center;
-  background: linear-gradient(135deg, #2448c9, #1237a7);
+  background: #2448c9;
   border-radius: 1rem;
   color: #fff;
   display: flex;
@@ -5519,7 +5812,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   gap: 0.7rem;
 }
 .pm-streak-progress > div > svg {
-  color: #1769f5;
+  color: #578EF5;
 }
 .pm-streak-progress span {
   display: flex;
@@ -5527,14 +5820,14 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   flex-direction: column;
 }
 .pm-streak-progress small {
-  color: #1769f5;
+  color: #578EF5;
   font-size: 0.8rem;
 }
 .pm-streak-progress > b {
   font-size: 0.85rem;
 }
 .pm-streak-progress progress {
-  accent-color: #1769f5;
+  accent-color: #578EF5;
   height: 0.85rem;
   margin-top: 0.8rem;
   width: 100%;
@@ -5561,7 +5854,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   width: 3.4rem;
 }
 .pm-streak-journey article.complete {
-  color: #1769f5;
+  color: #578EF5;
 }
 .pm-streak-journey article.complete > span {
   background: #e8f1ff;
@@ -5585,7 +5878,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   background: #f2f7ff;
   border: 1px solid #d7e5fb;
   border-radius: 0.8rem;
-  color: #1769f5;
+  color: #578EF5;
   display: flex;
   gap: 0.7rem;
   padding: 1rem;
@@ -5649,7 +5942,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   align-items: center;
   background: #eaf2ff;
   border-radius: 0.65rem;
-  color: #1769f5;
+  color: #578EF5;
   display: flex;
   height: 44px;
   justify-content: center;
@@ -5665,13 +5958,13 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   font-weight: 700;
 }
 .pm-streak-overview__tokens strong {
-  color: #1769f5;
+  color: #578EF5;
   font-size: 1.45rem;
   line-height: 1;
 }
 .pm-streak-overview__tokens > a {
   align-items: center;
-  border: 1.5px solid #4c8ce4;
+  border: 1.5px solid #578EF5;
   border-radius: 0.6rem;
   color: #1558c9;
   display: flex;
@@ -5695,7 +5988,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   width: 7.5rem;
 }
 .pm-streak-ring--clean strong {
-  color: #1769f5;
+  color: #578EF5;
   font-size: 2rem;
 }
 .pm-streak-ring--clean span {
@@ -5703,7 +5996,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   font-size: 0.78rem;
 }
 .pm-streak-overview__status > div:last-child > small {
-  color: #1769f5;
+  color: #578EF5;
   font-size: 0.72rem;
   font-weight: 850;
   letter-spacing: 0.05em;
@@ -5765,7 +6058,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   align-items: center;
   background: #eaf2ff;
   border-radius: 0.6rem;
-  color: #1769f5;
+  color: #578EF5;
   display: flex;
   height: 42px;
   justify-content: center;
@@ -5800,7 +6093,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   gap: 0.6rem;
 }
 .pm-streak-reward-path > header > div > svg {
-  color: #1769f5;
+  color: #578EF5;
 }
 .pm-streak-reward-path > header span {
   display: flex;
@@ -5814,7 +6107,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   font-size: 1rem;
 }
 .pm-streak-reward-path progress {
-  accent-color: #1769f5;
+  accent-color: #578EF5;
   height: 0.8rem;
   margin: 0.8rem 0;
   width: 100%;
@@ -5851,7 +6144,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   z-index: 1;
 }
 .pm-streak-milestones article.complete {
-  color: #1769f5;
+  color: #578EF5;
 }
 .pm-streak-milestones article.complete > span {
   background: #eaf2ff;
@@ -6072,7 +6365,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   border: 2px solid #fff;
   border-radius: 50%;
   bottom: -4px;
-  color: #1769f5;
+  color: #578EF5;
   display: flex;
   height: 21px;
   justify-content: center;
@@ -6146,7 +6439,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 .pm-global-notification-panel header button {
   background: transparent;
   border: 0;
-  color: #1769f5;
+  color: #578EF5;
   min-height: 44px;
   padding: 0.35rem;
 }
@@ -6161,7 +6454,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   background: #eef5ff;
 }
 .pm-global-notification-panel article > svg {
-  color: #1769f5;
+  color: #578EF5;
   flex: 0 0 auto;
 }
 .pm-global-notification-panel article span {
@@ -6193,6 +6486,33 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 .pm-bottomnav a {
   min-height: 52px;
   justify-content: center;
+}
+.pm-bottomnav a.pm-bottomnav__medications {
+  align-self: flex-start;
+  color: #578EF5;
+  font-weight: 800;
+  position: relative;
+  transform: translateY(-1.35rem);
+}
+.pm-bottomnav a.pm-bottomnav__medications .pm-navicon {
+  background: #578EF5;
+  border: 4px solid #fff;
+  border-radius: 50%;
+  box-shadow: 0 3px 9px rgba(35, 115, 244, 0.22);
+  color: #fff;
+  height: 3.65rem;
+  width: 3.65rem;
+}
+.pm-bottomnav a.pm-bottomnav__medications .pm-navicon svg {
+  height: 1.65rem;
+  width: 1.65rem;
+}
+.pm-bottomnav a.pm-bottomnav__medications > span:last-child {
+  font-size: 0.68rem;
+  margin-top: 0.05rem;
+}
+body.pm-a11y-large-touch .pm-bottomnav a.pm-bottomnav__medications {
+  transform: translateY(-1.1rem);
 }
 .pm-home__header {
   display: block;
@@ -6312,12 +6632,12 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 .pm-notifications-page > header button {
   background: transparent;
   border: 0;
-  color: #1769f5;
+  color: #578EF5;
   min-height: 48px;
   min-width: 48px;
 }
 .pm-notifications-page h1 {
-  color: #1769f5;
+  color: #578EF5;
   font-size: 1.55rem;
   margin: 0;
 }
@@ -6359,7 +6679,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   align-items: center;
   background: #e8f1ff;
   border-radius: 50%;
-  color: #1769f5;
+  color: #578EF5;
   display: flex;
   height: 2.7rem;
   justify-content: center;
@@ -6415,7 +6735,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   text-align: center;
 }
 .pm-notification-empty > span {
-  color: #1769f5;
+  color: #578EF5;
 }
 .pm-notification-empty h2 {
   color: #1e2e4a;
@@ -6494,7 +6814,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 .pm-notification-modal header button {
   background: transparent;
   border: 0;
-  color: #1769f5;
+  color: #578EF5;
   min-height: 48px;
   min-width: 48px;
 }
@@ -6529,7 +6849,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   align-items: center;
   background: #e8f1ff;
   border-radius: 50%;
-  color: #1769f5;
+  color: #578EF5;
   display: flex;
   height: 2.4rem;
   justify-content: center;
@@ -6551,7 +6871,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 .pm-notification-item-read {
   background: transparent;
   border: 0;
-  color: #1769f5;
+  color: #578EF5;
   font-size: 0.72rem;
   font-weight: 750;
   min-height: 38px;
@@ -6579,7 +6899,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   text-align: center;
 }
 .pm-notification-modal-empty svg {
-  color: #1769f5;
+  color: #578EF5;
 }
 
 /* Ask a Pharmacist — elder-friendly request and secure chat */
@@ -6589,7 +6909,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   gap: 0.85rem;
 }
 .pm-ask-page > header h1 {
-  color: #1769f5;
+  color: #578EF5;
   font-size: 1.55rem;
   font-weight: 850;
   margin: 0;
@@ -6639,8 +6959,8 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   font-weight: 750;
 }
 .pm-ask-steps .active i {
-  background: #1769f5;
-  border-color: #1769f5;
+  background: #578EF5;
+  border-color: #578EF5;
   color: #fff;
 }
 .pm-ask-card {
@@ -6694,7 +7014,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 .pm-pharmacist-option > b {
   background: #eaf2ff;
   border-radius: 50%;
-  color: #1769f5;
+  color: #578EF5;
   display: grid;
   height: 2.5rem;
   place-items: center;
@@ -6722,10 +7042,10 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 }
 .pm-pharmacist-option.selected {
   background: #eef5ff;
-  border-color: #1769f5;
+  border-color: #578EF5;
 }
 .pm-ask-primary {
-  background: #1769f5;
+  background: #578EF5;
   border: 0;
   border-radius: 0.65rem;
   color: #fff;
@@ -6744,7 +7064,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   align-items: center;
   background: #eaf2ff;
   border-radius: 0.75rem;
-  color: #1769f5;
+  color: #578EF5;
   display: flex;
   height: 48px;
   justify-content: center;
@@ -6781,13 +7101,13 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   font-weight: 700;
 }
 .pm-ask-priority-balance strong {
-  color: #1769f5;
+  color: #578EF5;
   font-size: 1.5rem;
 }
 .pm-ask-priority-toggle {
   align-items: center;
   background: #fff;
-  border: 2px solid #4c8ce4;
+  border: 2px solid #578EF5;
   border-radius: 0.7rem;
   color: #1558c9;
   display: flex;
@@ -6805,7 +7125,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   width: 22px;
 }
 .pm-ask-priority-toggle.selected {
-  background: #1769f5;
+  background: #578EF5;
   color: #fff;
 }
 .pm-ask-priority-toggle:disabled {
@@ -6881,7 +7201,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   align-items: center;
   background: #eaf2ff;
   border-radius: 0.6rem;
-  color: #1769f5;
+  color: #578EF5;
   display: flex;
   grid-row: 1/4;
   height: 44px;
@@ -6911,10 +7231,10 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 }
 .pm-ask-chat-options > button.selected {
   background: #eef5ff;
-  border-color: #1769f5;
+  border-color: #578EF5;
 }
 .pm-ask-chat-options > button.selected b {
-  background: #1769f5;
+  background: #578EF5;
   color: #fff;
 }
 .pm-ask-chat-options > button.priority > span {
@@ -6945,7 +7265,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   background: #fff;
   border: 1px solid #e4eaf3;
   border-radius: 0.8rem;
-  color: #1769f5;
+  color: #578EF5;
   display: flex;
   gap: 0.65rem;
   padding: 0.75rem;
@@ -6979,13 +7299,13 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 .pm-chat-header > button {
   background: transparent;
   border: 0;
-  color: #1769f5;
+  color: #578EF5;
   font-size: 2rem;
 }
 .pm-chat-header > b {
   background: #eaf2ff;
   border-radius: 50%;
-  color: #1769f5;
+  color: #578EF5;
   display: grid;
   height: 2.6rem;
   place-items: center;
@@ -7025,7 +7345,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   align-items: center;
   background: #eaf2ff;
   border-radius: 0.6rem;
-  color: #1769f5;
+  color: #578EF5;
   display: flex;
   height: 42px;
   justify-content: center;
@@ -7051,7 +7371,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 .pm-chat-priority-booking button,
 .pm-chat-priority-booking a {
   align-items: center;
-  background: #1769f5;
+  background: #578EF5;
   border: 0;
   border-radius: 0.55rem;
   color: #fff;
@@ -7132,7 +7452,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 }
 .pm-priority-chat-sign {
   align-items: center;
-  background: linear-gradient(90deg, #fff1a8, #fff8cf);
+  background: #fff1a8;
   border: 1px solid #e1bf42;
   border-radius: 999px;
   color: #604700;
@@ -7151,24 +7471,24 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   width: 15px;
 }
 .pm-chat-shell.priority-chat {
-  border: 2px solid #4c8ce4;
-  box-shadow: 0 7px 24px #1769f51f;
+  border: 2px solid #578EF5;
+  box-shadow: 0 7px 24px #578EF51f;
 }
 .pm-chat-shell.priority-chat .pm-chat-header {
-  background: linear-gradient(110deg, #f7fbff, #fffbea);
+  background: #f7fbff;
   border-bottom-color: #b8d1f7;
 }
 .pm-chat-shell.priority-chat .pm-chat-secure {
-  background: linear-gradient(90deg, #eaf2ff, #fff9d8);
+  background: #eaf2ff;
   border: 1px solid #c8daf6;
 }
 .pm-chat-messages.premium {
-  background: linear-gradient(180deg, #fbfdff, #fffdf4);
+  background: #fbfdff;
 }
 .pm-chat-messages.premium .mine span {
-  background: linear-gradient(135deg, #1769f5, #2a67b8);
+  background: #578EF5;
   color: #fff;
-  box-shadow: 0 4px 12px #1769f530;
+  box-shadow: 0 4px 12px #578EF530;
 }
 .pm-chat-messages.premium .theirs span {
   background: #fff;
@@ -7200,7 +7520,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   padding: 0.7rem;
 }
 .pm-chat-compose button {
-  background: #1769f5;
+  background: #578EF5;
   border: 0;
   border-radius: 0.65rem;
   color: #fff;
@@ -7224,7 +7544,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 }
 .pm-chat-new {
   background: #fff;
-  border: 1.5px solid #1769f5;
+  border: 1.5px solid #578EF5;
   border-radius: 0.65rem;
   color: #1558c9;
   font-weight: 800;
@@ -7253,9 +7573,9 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 }
 .pm-chat-history-header > button {
   background: #fff;
-  border: 1.5px solid #4c8ce4;
+  border: 1.5px solid #578EF5;
   border-radius: 0.55rem;
-  color: #2a67b8;
+  color: #578EF5;
   flex: 0 0 auto;
   font-size: 0.75rem;
   font-weight: 800;
@@ -7284,7 +7604,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 }
 .pm-chat-history > button.selected {
   background: #eef5ff;
-  border-color: #1769f5;
+  border-color: #578EF5;
 }
 .pm-chat-history > button span {
   display: flex;
@@ -7318,7 +7638,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 }
 .pm-history-entry.selected {
   background: #eef5ff;
-  border-color: #1769f5;
+  border-color: #578EF5;
 }
 .pm-history-entry-summary {
   align-items: flex-start;
@@ -7345,7 +7665,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   align-items: center;
   background: #eaf2ff;
   border-radius: 0.55rem;
-  color: #1769f5;
+  color: #578EF5;
   display: flex;
   height: 38px;
   justify-content: center;
@@ -7375,7 +7695,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   padding: 0.45rem 0.65rem;
 }
 .pm-history-entry-actions button:first-child {
-  background: #1769f5;
+  background: #578EF5;
   color: #fff;
 }
 .pm-history-entry-actions svg {
@@ -7409,7 +7729,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   overflow: hidden;
 }
 .pm-ask-progress span {
-  background: #1769f5;
+  background: #578EF5;
   border-radius: inherit;
   display: block;
   height: 100%;
@@ -7444,7 +7764,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   align-items: center;
   background: #eaf3ff;
   border-radius: 12px;
-  color: #1769f5;
+  color: #578EF5;
   display: flex;
   height: 46px;
   justify-content: center;
@@ -7457,6 +7777,127 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 .pm-ask-home-card > button {
   grid-column: 1 / -1;
   margin-top: 0;
+}
+
+.pm-chat-completion-pending {
+  margin: 0.75rem 1rem 1rem;
+  color: #51657f;
+  font-size: 0.78rem;
+  line-height: 1.4;
+  text-align: center;
+}
+.pm-streak-claim-card {
+  align-items: center;
+  background: #eaf3ff;
+  border: 1px solid #bcd5fb;
+  border-radius: 1rem;
+  color: #123d82;
+  display: grid;
+  gap: 0.9rem;
+  grid-template-columns: auto 1fr;
+  margin: 1rem 0;
+  padding: 0.9rem;
+}
+.pm-streak-claim-card > span {
+  align-items: center;
+  background: #578EF5;
+  border-radius: 50%;
+  color: #fff;
+  display: flex;
+  height: 3rem;
+  justify-content: center;
+  width: 3rem;
+}
+.pm-streak-claim-card strong,
+.pm-streak-claim-card small { display: block; }
+.pm-streak-claim-card strong { font-size: 0.9rem; }
+.pm-streak-claim-card small { color: #526b92; font-size: 0.7rem; line-height: 1.35; margin-top: 0.15rem; }
+.pm-streak-claim-card button {
+  background: #578EF5;
+  border: 0;
+  border-radius: 0.6rem;
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 800;
+  grid-column: 1 / -1;
+  min-height: 2.8rem;
+  padding: 0.55rem 0.8rem;
+}
+.pm-streak-claim-card button:hover { background: #0e55d1; }
+.pm-streak-claim-card button:disabled { cursor: wait; opacity: 0.7; }
+.pm-streak-dashboard {
+  background: #fff;
+  border: 1px solid #dbe6f5;
+  border-radius: 1.15rem;
+  margin: 0 0 1rem;
+  overflow: hidden;
+  padding: 0 1.15rem 1.15rem;
+}
+.pm-streak-dashboard__top {
+  background: #578EF5;
+  color: #fff;
+  margin: 0 -1.15rem 1.35rem;
+  padding: 1rem 1.15rem 1.2rem;
+}
+.pm-streak-dashboard__top > small { font-size: 0.65rem; font-weight: 850; letter-spacing: 0.08em; }
+.pm-streak-dashboard__hero { align-items: center; display: flex; justify-content: space-between; padding: 0.7rem 0.25rem 0.8rem; }
+.pm-streak-dashboard__hero > div { display: flex; flex-direction: column; }
+.pm-streak-dashboard__hero strong { color: #fff; font-size: 4.2rem; line-height: 0.9; text-shadow: 0 0.25rem 0 rgba(7, 53, 145, 0.14); }
+.pm-streak-dashboard__hero div span { color: #fff; font-size: 1.25rem; font-weight: 850; margin-top: 0.35rem; }
+.pm-streak-dashboard__flame { align-items: center; background: rgba(255,255,255,0.16); border: 4px solid rgba(255,255,255,0.9); border-radius: 50%; color: #fff; display: flex; height: 7rem; justify-content: center; width: 7rem; }
+.pm-streak-dashboard__flame svg { fill: #fff; stroke: #fff; }
+.pm-streak-dashboard__tip { align-items: center; background: #fff; border: 0; border-radius: 1rem; box-shadow: 0 0.5rem 1.1rem rgba(5, 48, 128, 0.2); color: #526275; display: flex; gap: 0.8rem; margin: 0.15rem 0 0; padding: 0.95rem; }
+.pm-streak-dashboard__tip > span { color: #578EF5; display: flex; flex: 0 0 auto; }
+.pm-streak-dashboard__tip > span svg { fill: #578EF5; stroke: #578EF5; }
+.pm-streak-dashboard__tip p { color: #627086; font-size: 0.92rem; line-height: 1.45; margin: 0; }
+.pm-streak-dashboard__tip b { color: #578EF5; }
+.pm-streak-dashboard__month { align-items: center; display: flex; justify-content: space-between; margin: 0 0 0.65rem; }
+.pm-streak-dashboard__month h2 { color: #263a5d; font-size: 1.35rem; margin: 0; }
+.pm-streak-dashboard__month span { color: #578EF5; font-size: 2rem; font-weight: 600; letter-spacing: 1.3rem; }
+.pm-streak-dashboard__stats { display: grid; gap: 0.6rem; grid-template-columns: repeat(2, 1fr); }
+.pm-streak-dashboard__stats article { align-items: center; border: 2px solid #e0e9f4; border-radius: 0.9rem; display: flex; gap: 0.5rem; padding: 0.7rem; }
+.pm-streak-dashboard__stats article > span { align-items: center; background: #e5f8ed; border-radius: 50%; color: #18a75b; display: flex; height: 2rem; justify-content: center; width: 2rem; }
+.pm-streak-dashboard__stats article:nth-child(2) > span { background: #e9f2ff; color: #578EF5; }
+.pm-streak-dashboard__stats strong,.pm-streak-dashboard__stats small { display: block; }
+.pm-streak-dashboard__stats strong { color: #1b355d; font-size: 1.15rem; line-height: 1; }
+.pm-streak-dashboard__stats small { color: #75839a; font-size: 0.62rem; margin-top: 0.22rem; }
+.pm-streak-dashboard__calendar { display: grid; gap: 0.32rem; grid-template-columns: repeat(7, 1fr); margin-top: 1.2rem; text-align: center; }
+.pm-streak-dashboard__calendar b { color: #718099; font-size: 0.66rem; padding-bottom: 0.25rem; }
+.pm-streak-dashboard__calendar span { align-items: center; border-radius: 50%; color: #718099; display: flex; font-size: 0.72rem; font-weight: 750; height: 2rem; justify-content: center; margin: auto; width: 2rem; }
+.pm-streak-dashboard__calendar span.is-complete { background: #578EF5; color: #fff; }
+.pm-streak-dashboard__calendar span.is-complete svg { fill: #fff; stroke: #fff; }
+.pm-streak-dashboard__calendar span.is-today { box-shadow: 0 0 0 3px #cfe1ff; }
+.pm-streak-dashboard__message { align-items: center; color: #267342; display: flex; font-size: 0.75rem; font-weight: 700; gap: 0.4rem; justify-content: center; line-height: 1.35; margin: 1.1rem 0 0; text-align: center; }
+.pm-streak-dashboard__message svg { color: #19ad5f; flex: 0 0 auto; }
+.pm-streak-dashboard__week {
+  display: grid;
+  gap: 0.3rem;
+  grid-template-columns: repeat(7, 1fr);
+  margin: 0.15rem 0 0.9rem;
+}
+.pm-streak-dashboard__week > div { align-items: center; color: #66768c; display: flex; flex-direction: column; gap: 0.42rem; }
+.pm-streak-dashboard__week b { font-size: 0.72rem; }
+.pm-streak-dashboard__week span { align-items: center; border: 2px solid #c8d9f2; border-radius: 50%; color: #578EF5; display: flex; height: 2.45rem; justify-content: center; width: 2.45rem; }
+.pm-streak-dashboard__week span.is-complete { background: #578EF5; border-color: #578EF5; color: #fff; }
+.pm-streak-dashboard__week span.is-complete svg { fill: #fff; stroke: #fff; }
+.pm-streak-dashboard__week .is-today b { background: #578EF5; border-radius: 999px; color: #fff; padding: 0.2rem 0.5rem; }
+.pm-streak-dashboard__daily { border: 1px solid #d8e4f4; border-radius: 0.9rem; margin-top: 0.9rem; padding: 0.85rem; }
+.pm-streak-dashboard__daily > div { align-items: center; color: #173d7a; display: flex; font-size: 0.88rem; justify-content: space-between; }
+.pm-streak-dashboard__daily > div b { color: #578EF5; font-size: 1.1rem; }
+.pm-streak-dashboard__daily progress { accent-color: #578EF5; height: 0.75rem; margin: 0.65rem 0 0.35rem; width: 100%; }
+.pm-streak-dashboard__daily small { color: #687b95; font-size: 0.68rem; }
+.pm-ask-home-card--pharmacist .pm-ask-home-card__art {
+  grid-column: 1 / -1;
+  display: block;
+  width: min(100%, 15rem);
+  height: 9rem;
+  justify-self: center;
+  margin: -0.3rem auto 0.1rem;
+  object-fit: contain;
+}
+.pm-ask-home-card--pharmacist > div {
+  grid-column: 1 / -1;
+  text-align: center;
 }
 .pm-ask-secondary {
   background: #fff;
@@ -7504,7 +7945,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   background: #e2edff;
 }
 .pm-chat-history > .pm-history-see-all:focus-visible {
-  outline: 3px solid #4c8ce4;
+  outline: 3px solid #578EF5;
   outline-offset: 2px;
 }
 .pm-history-label-editor {
@@ -7531,7 +7972,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   padding: 0.55rem;
 }
 .pm-history-label-editor button {
-  background: #1769f5;
+  background: #578EF5;
   border: 0;
   border-radius: 0.5rem;
   color: #fff;
@@ -7597,7 +8038,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   justify-content: space-between;
 }
 .pm-orders-page > header h1 {
-  color: #1769f5;
+  color: #578EF5;
   font-size: 1.75rem;
   font-weight: 850;
   margin: 0;
@@ -7628,7 +8069,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   padding: 0 0.75rem;
 }
 .pm-order-search span {
-  color: #1769f5;
+  color: #578EF5;
   font-size: 1.35rem;
 }
 .pm-order-search input {
@@ -7678,7 +8119,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   max-width: 360px;
 }
 .pm-order-suggestions b {
-  color: #1769f5;
+  color: #578EF5;
   font-size: 0.7rem;
 }
 .pm-order-suggestions em,
@@ -7739,7 +8180,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   padding: 0.75rem;
 }
 .pm-catalog-grid article > button:last-child {
-  background: #1769f5;
+  background: #578EF5;
   border: 0;
   border-radius: 0.4rem;
   color: #fff;
@@ -7752,9 +8193,9 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 .pm-medicine-info-button {
   align-items: center !important;
   background: #fff !important;
-  border: 1px solid #1769f5 !important;
+  border: 1px solid #578EF5 !important;
   border-radius: 50% !important;
-  color: #1769f5 !important;
+  color: #578EF5 !important;
   display: inline-flex !important;
   font-family: serif;
   font-size: 0.7rem !important;
@@ -7767,7 +8208,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 .pm-catalog-icon {
   background: #eaf2ff;
   border-radius: 0.55rem;
-  color: #1769f5;
+  color: #578EF5;
   display: grid;
   font-weight: 900;
   height: 42px;
@@ -7788,7 +8229,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 .pm-catalog-grid .pm-catalog-description,
 .pm-medicine-info-panel {
   background: #f4f8ff;
-  border-left: 3px solid #1769f5;
+  border-left: 3px solid #578EF5;
   color: #38465d !important;
   font-size: 0.68rem !important;
   margin: 0.4rem 0 !important;
@@ -7889,12 +8330,12 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   width: 42px;
 }
 .pm-order-categories .active {
-  color: #1769f5;
+  color: #578EF5;
   font-weight: 800;
 }
 .pm-order-categories .active i {
   background: #e8f1ff;
-  border-color: #1769f5;
+  border-color: #578EF5;
 }
 .pm-rx-steps {
   align-items: center;
@@ -7913,7 +8354,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   text-align: center;
 }
 .pm-rx-steps i {
-  color: #1769f5;
+  color: #578EF5;
   font-size: 1rem;
   font-style: normal;
 }
@@ -7950,7 +8391,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 }
 .pm-order-pack {
   align-items: center;
-  background: #1769f5;
+  background: #578EF5;
   border-radius: 0.25rem;
   color: #fff;
   display: flex;
@@ -8015,7 +8456,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   text-align: center;
 }
 .pm-upload-order-rx {
-  background: #1769f5;
+  background: #578EF5;
   border: 0;
   border-radius: 0.45rem;
   color: #fff;
@@ -8056,7 +8497,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 }
 .pm-order-options button.active {
   background: #e8f1ff;
-  border-color: #1769f5;
+  border-color: #578EF5;
   color: #1558c9;
   font-weight: 750;
 }
@@ -8082,14 +8523,14 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   text-align: right;
 }
 .pm-order-total strong {
-  color: #1769f5;
+  color: #578EF5;
   font-size: 1.15rem;
 }
 .pm-order-total small {
   font-size: 0.5rem;
 }
 .pm-order-total button {
-  background: #1769f5;
+  background: #578EF5;
   border: 0;
   border-radius: 0.55rem;
   color: #fff;
@@ -8147,7 +8588,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   justify-content: space-between;
 }
 .pm-medications-header h1 {
-  color: #1769f5;
+  color: #578EF5;
   font-size: 1.75rem;
   font-weight: 800;
   letter-spacing: -0.035em;
@@ -8160,7 +8601,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 }
 .pm-add-med-button {
   align-items: center;
-  background: #1769f5;
+  background: #578EF5;
   border: 0;
   border-radius: 0.7rem;
   color: #fff;
@@ -8185,7 +8626,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 .pm-med-entry-actions button {
   align-items: center;
   background: #fff;
-  border: 1.5px solid #1769f5;
+  border: 1.5px solid #578EF5;
   border-radius: 0.85rem;
   color: #164aa5;
   display: grid;
@@ -8208,7 +8649,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   font-size: 0.7rem;
 }
 .pm-med-entry-actions__scan {
-  background: #1769f5 !important;
+  background: #578EF5 !important;
   color: #fff !important;
 }
 .pm-med-entry-actions__scan small {
@@ -8219,7 +8660,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   background: #fff;
   border: 2px solid #d7e1f0;
   border-radius: 0.75rem;
-  color: #1769f5;
+  color: #578EF5;
   display: flex;
   gap: 0.65rem;
   min-height: 52px;
@@ -8241,7 +8682,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   color: #66758c;
 }
 .pm-med-search:focus-within {
-  border-color: #1769f5;
+  border-color: #578EF5;
   box-shadow: 0 0 0 3px rgba(23, 105, 245, 0.12);
 }
 .pm-med-filters {
@@ -8261,7 +8702,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 }
 .pm-med-filters button.active {
   background: #eaf2ff;
-  border-color: #1769f5;
+  border-color: #578EF5;
   color: #1558c9;
 }
 .pm-med-loading,
@@ -8344,7 +8785,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   width: 4rem;
 }
 .pm-medication-visual span {
-  background: #1769f5;
+  background: #578EF5;
   border-radius: 999px;
   color: #fff;
   font-size: 0.8rem;
@@ -8468,7 +8909,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 }
 .pm-upload-rx-button {
   align-items: center;
-  background: #1769f5;
+  background: #578EF5;
   border: 0;
   border-radius: 0.65rem;
   color: #fff;
@@ -8502,7 +8943,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 }
 .pm-med-schedule-prompt {
   align-items: center;
-  background: linear-gradient(120deg, #eef5ff, #fff);
+  background: #eef5ff;
   border: 1px solid #cfe0fa;
   border-radius: 0.9rem;
   display: grid;
@@ -8513,7 +8954,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 .pm-med-schedule-prompt > span {
   background: #dceaff;
   border-radius: 50%;
-  color: #1769f5;
+  color: #578EF5;
   display: grid;
   font-size: 1.2rem;
   height: 2.7rem;
@@ -8531,7 +8972,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   margin: 0.15rem 0 0;
 }
 .pm-med-schedule-prompt button {
-  background: #1769f5;
+  background: #578EF5;
   border: 0;
   border-radius: 0.65rem;
   color: #fff;
@@ -8575,9 +9016,9 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   font-size: 0.85rem;
 }
 .pm-med-date-strip button.active {
-  background: #1769f5;
-  border-color: #1769f5;
-  box-shadow: 0 6px 12px #1769f540;
+  background: #578EF5;
+  border-color: #578EF5;
+  box-shadow: 0 6px 12px #578EF540;
   color: #fff;
 }
 .pm-med-section-label {
@@ -8600,7 +9041,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   justify-content: space-between;
 }
 .pm-med-voice-heading strong {
-  color: #1769f5;
+  color: #578EF5;
   font-size: 0.68rem;
 }
 .pm-med-voice-heading > span {
@@ -8619,7 +9060,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   margin-top: 0.65rem;
 }
 .pm-med-reminder-mic {
-  background: #1769f5;
+  background: #578EF5;
   border: 7px solid #e7f0ff;
   border-radius: 50%;
   box-shadow: 0 0 0 8px #f2f6ff;
@@ -8685,21 +9126,21 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 }
 .pm-med-mark-button {
   background: #fff;
-  border: 1.5px solid #1769f5;
-  color: #1769f5;
+  border: 1.5px solid #578EF5;
+  color: #578EF5;
 }
 .pm-med-mark-button:disabled {
   border-color: #b7c3d5;
   color: #8b96a8;
 }
 .pm-med-scan-button {
-  background: #1769f5;
-  border: 1.5px solid #1769f5;
+  background: #578EF5;
+  border: 1.5px solid #578EF5;
   color: #fff;
   margin-top: 0.28rem;
 }
 .pm-med-scan-caption {
-  color: #1769f5;
+  color: #578EF5;
   display: block;
   font-size: 0.55rem;
   margin-top: 0.3rem;
@@ -8803,7 +9244,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   align-items: center;
   background: transparent;
   border: 0;
-  color: #1769f5;
+  color: #578EF5;
   display: flex;
   justify-content: center;
   min-height: 44px;
@@ -8815,7 +9256,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   padding-top: 0.05rem;
 }
 .pm-saved-schedule__title h1 {
-  color: #1769f5;
+  color: #578EF5;
   font-size: 1.4rem;
   line-height: 1.25;
   margin: 0;
@@ -8846,7 +9287,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 }
 .pm-saved-schedule__title > button.pm-schedule-calendar-link:hover,
 .pm-saved-schedule__title > button.pm-schedule-calendar-link:focus-visible {
-  background: #1769f5;
+  background: #578EF5;
   color: #fff;
 }
 .pm-schedule-loading {
@@ -8871,7 +9312,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   align-items: center;
   background: #e8f1ff;
   border-radius: 50%;
-  color: #1769f5;
+  color: #578EF5;
   display: flex;
   height: 3rem;
   justify-content: center;
@@ -8925,7 +9366,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   border-right: 0;
 }
 .pm-schedule-overview svg {
-  color: #1769f5;
+  color: #578EF5;
 }
 .pm-schedule-overview span {
   display: flex;
@@ -8943,13 +9384,12 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   background: transparent;
   border: 0;
   box-shadow: none;
-  display: flex;
+  display: grid;
   gap: 0.4rem;
-  justify-content: flex-end;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  justify-content: stretch;
   padding: 0.15rem 0;
-  position: sticky;
-  top: 0.5rem;
-  z-index: 20;
+  position: static;
 }
 .pm-schedule-week-calendar {
   display: grid;
@@ -8958,6 +9398,101 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   border: 1px solid #c9dcf5;
   border-radius: 1rem;
   background: #fff;
+}
+.pm-streak-shortcut-menu {
+  background: #fff;
+  border: 1px solid #cbd9ec;
+  border-radius: 0.75rem;
+  box-shadow: 0 12px 28px rgba(16, 43, 87, 0.16);
+  display: grid;
+  gap: 0.2rem;
+  padding: 0.35rem;
+  position: absolute;
+  right: 3.5rem;
+  top: 3.3rem;
+  width: 8.6rem;
+  z-index: 40;
+}
+.pm-streak-shortcut-menu button {
+  background: #fff;
+  border: 0;
+  border-radius: 0.5rem;
+  color: #173d7a;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 750;
+  padding: 0.58rem 0.65rem;
+  text-align: left;
+}
+.pm-streak-shortcut-menu button:hover { background: #edf5ff; color: #578EF5; }
+.pm-schedule-overview {
+  display: grid;
+  gap: 0.8rem;
+  grid-template-columns: minmax(0, 1fr);
+  background: transparent;
+  border: 0;
+  padding: 0;
+}
+.pm-schedule-overview > * {
+  min-width: 0;
+}
+.pm-schedule-status-filters {
+  display: grid;
+  gap: 0.45rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.pm-schedule-status-filters button {
+  background: #fff;
+  border: 1.5px solid #bfd5f7;
+  border-radius: 999px;
+  color: #365174;
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 800;
+  min-height: 42px;
+  padding: 0.45rem 0.3rem;
+}
+.pm-schedule-status-filters button.active {
+  background: #eef5ff;
+  border-color: #578EF5;
+  color: #fff;
+}
+/* Reset the old overview-card rules for these live schedule controls. Without
+   this, their parent `> div` rule turns both controls into a narrow vertical
+   stack on phones. */
+.pm-schedule-overview > .pm-schedule-status-filters {
+  align-items: stretch;
+  border: 0;
+  display: grid;
+  flex-direction: initial;
+  text-align: initial;
+}
+.pm-schedule-overview > .pm-schedule-icon-toolbar {
+  align-items: stretch;
+  border: 0;
+  display: grid;
+  gap: 0.28rem;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  justify-content: stretch;
+  text-align: initial;
+}
+.pm-schedule-overview > .pm-schedule-icon-toolbar > button {
+  min-height: 52px;
+  min-width: 0;
+  padding: 0.25rem 0.1rem;
+}
+.pm-schedule-overview > .pm-schedule-icon-toolbar > button small {
+  font-size: 0.58rem;
+  line-height: 1.05;
+  white-space: nowrap;
+}
+.pm-schedule-overview > .pm-schedule-groups {
+  align-items: stretch;
+  border: 0;
+  display: grid;
+  flex-direction: initial;
+  text-align: initial;
 }
 .pm-schedule-week-calendar__title {
   display: flex;
@@ -8975,7 +9510,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   display: block;
 }
 .pm-schedule-week-calendar__title small {
-  color: #1769f5;
+  color: #578EF5;
   font-size: 0.62rem;
   font-weight: 850;
   letter-spacing: 0.05em;
@@ -9015,7 +9550,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   border: 0;
   border-radius: 50%;
   background: #f0f6ff;
-  color: #1769f5;
+  color: #578EF5;
 }
 .pm-schedule-week-calendar > header button:last-child {
   transform: rotate(180deg);
@@ -9025,7 +9560,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   display: block;
 }
 .pm-schedule-week-calendar > header small {
-  color: #1769f5;
+  color: #578EF5;
   font-size: 0.65rem;
   font-weight: 800;
 }
@@ -9054,7 +9589,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   color: #74859d;
 }
 .pm-schedule-week-calendar__days button.selected {
-  background: #1769f5;
+  background: #578EF5;
   color: #fff;
   box-shadow: 0 6px 14px rgba(23, 105, 245, 0.24);
 }
@@ -9075,15 +9610,15 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   background: #fff;
   border: 1px solid #cddcf1;
   border-radius: 0.65rem;
-  color: #1769f5;
+  color: #578EF5;
   display: flex;
-  flex: 0 1 68px;
+  flex: none;
   flex-direction: column;
   gap: 0.25rem;
   justify-content: center;
   min-height: 62px;
   padding: 0.35rem 0.25rem;
-  width: auto;
+  width: 100%;
 }
 .pm-schedule-icon-toolbar button small {
   color: #42516a;
@@ -9097,7 +9632,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 .pm-schedule-icon-toolbar button:focus-visible,
 .pm-schedule-icon-toolbar button.active {
   background: #eef5ff;
-  border-color: #1769f5;
+  border-color: #578EF5;
   color: #1558c9;
   outline: none;
 }
@@ -9147,7 +9682,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 }
 .pm-schedule-groups header b {
   align-items: center;
-  background: #1769f5;
+  background: #578EF5;
   border-radius: 50%;
   color: #fff;
   display: flex;
@@ -9170,7 +9705,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 }
 .pm-schedule-groups time {
   align-items: center;
-  color: #1769f5;
+  color: #578EF5;
   display: flex;
   flex-direction: column;
   gap: 0.15rem;
@@ -9184,7 +9719,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   align-items: center;
   background: #e8f1ff;
   border-radius: 50%;
-  color: #1769f5;
+  color: #578EF5;
   display: flex;
   height: 2.6rem;
   justify-content: center;
@@ -9235,7 +9770,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   align-items: center;
   background: #e8f1ff;
   border-radius: 50%;
-  color: #1769f5;
+  color: #578EF5;
   display: flex;
   height: 2.45rem;
   justify-content: center;
@@ -9250,22 +9785,22 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 }
 .pm-schedule-groups article.selected {
   background: #eef5ff;
-  box-shadow: inset 3px 0 #1769f5;
+  box-shadow: inset 3px 0 #578EF5;
 }
 .pm-schedule-row-select {
   align-items: center;
   background: #fff;
   border: 2px solid #a9c8f8;
   border-radius: 0.5rem;
-  color: #1769f5;
+  color: #578EF5;
   display: flex;
   height: 42px;
   justify-content: center;
   width: 42px;
 }
 .pm-schedule-groups article.selected .pm-schedule-row-select {
-  background: #1769f5;
-  border-color: #1769f5;
+  background: #578EF5;
+  border-color: #578EF5;
   color: #fff;
 }
 .pm-schedule-groups.is-editing article {
@@ -9287,7 +9822,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 }
 .pm-schedule-row-edit:hover,
 .pm-schedule-row-edit:focus-visible {
-  background: #1769f5;
+  background: #578EF5;
   color: #fff;
   outline: 3px solid #9ec1fa;
   outline-offset: 1px;
@@ -9314,7 +9849,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 }
 .pm-edit-saved-schedule {
   align-items: center;
-  background: #1769f5;
+  background: #578EF5;
   border: 0;
   border-radius: 0.65rem;
   color: #fff;
@@ -9340,7 +9875,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   align-items: center;
   background: #e8f1ff;
   border-radius: 50%;
-  color: #1769f5;
+  color: #578EF5;
   display: flex;
   height: 4rem;
   justify-content: center;
@@ -9356,7 +9891,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   line-height: 1.5;
 }
 .pm-schedule-empty button {
-  background: #1769f5;
+  background: #578EF5;
   border: 0;
   border-radius: 0.6rem;
   color: #fff;
@@ -9507,11 +10042,18 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   max-width: 430px;
   text-align: center;
 }
+.pm-confirm-dose-backdrop {
+  background: transparent !important;
+  backdrop-filter: none !important;
+}
+.pm-confirm-dose-backdrop .pm-confirm-dose-modal {
+  box-shadow: none;
+}
 .pm-confirm-dose-icon {
   align-items: center;
   background: #e8f1ff;
   border-radius: 50%;
-  color: #1769f5;
+  color: #578EF5;
   display: flex;
   height: 68px;
   justify-content: center;
@@ -9572,13 +10114,13 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   width: 100%;
 }
 .pm-confirm-dose-primary {
-  background: #1769f5;
-  border: 1px solid #1769f5;
+  background: #578EF5;
+  border: 1px solid #578EF5;
   color: #fff;
 }
 .pm-confirm-dose-scan {
   background: #fff;
-  border: 2px solid #1769f5;
+  border: 2px solid #578EF5;
   color: #1558c9;
 }
 .pm-confirm-dose-cancel {
@@ -9695,8 +10237,8 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   width: 100%;
 }
 .pm-medicine-action-edit {
-  background: #1769f5;
-  border: 1px solid #1769f5;
+  background: #578EF5;
+  border: 1px solid #578EF5;
   color: #fff;
 }
 .pm-medicine-action-delete {
@@ -9759,7 +10301,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   align-items: center;
   background: #eaf2ff;
   border-radius: 50%;
-  color: #1769f5;
+  color: #578EF5;
   display: flex;
   height: 42px;
   justify-content: center;
@@ -9897,7 +10439,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 }
 .pm-shop-header h1,
 .pm-orders-header h1 {
-  color: #1769f5;
+  color: #578EF5;
   font-size: 1.55rem;
   font-weight: 800;
   letter-spacing: -0.03em;
@@ -9915,7 +10457,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   background: #fff;
   border: 1px solid #cddcf1;
   border-radius: 50%;
-  color: #1769f5;
+  color: #578EF5;
   display: flex;
   height: 50px;
   justify-content: center;
@@ -9945,14 +10487,14 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   background: #fff;
   border: 2px solid #cddcf1;
   border-radius: 0.8rem;
-  color: #1769f5;
+  color: #578EF5;
   display: flex;
   gap: 0.65rem;
   min-height: 56px;
   padding: 0 0.9rem;
 }
 .pm-shop-search:focus-within {
-  border-color: #1769f5;
+  border-color: #578EF5;
   box-shadow: 0 0 0 3px #b7d1fa;
 }
 .pm-shop-search input {
@@ -9982,9 +10524,9 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   padding: 0.55rem 0.9rem;
 }
 .pm-shop-filters button.active {
-  background: #1769f5;
-  border-color: #1769f5;
-  color: #fff;
+  background: #fff !important;
+  border-color: #216bf3 !important;
+  color: #216bf3 !important;
 }
 .pm-shop-intro {
   align-items: center;
@@ -10031,6 +10573,33 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   font-size: 0.76rem;
   margin: 0.15rem 0 0;
 }
+.pm-tracker-heading {
+  align-items: center;
+  display: flex;
+  gap: 0.75rem;
+  justify-content: space-between;
+}
+.pm-order-view-tabs {
+  background: #eef4ff;
+  border: 1px solid #cfe0ff;
+  border-radius: 0.75rem;
+  display: flex;
+  padding: 0.2rem;
+}
+.pm-order-view-tabs button {
+  background: transparent;
+  border: 0;
+  border-radius: 0.55rem;
+  color: #52647d;
+  font-size: 0.72rem;
+  font-weight: 800;
+  min-height: 36px;
+  padding: 0.4rem 0.65rem;
+}
+.pm-order-view-tabs button.active {
+  background: #578EF5;
+  color: #fff;
+}
 .pm-shop-heading button {
   background: transparent;
   border: 0;
@@ -10072,10 +10641,10 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 }
 .pm-product-visual {
   align-items: center;
-  background: linear-gradient(145deg, #edf4ff, #f8fafc);
+  background: #edf4ff;
   border: 0;
   border-radius: 0.7rem;
-  color: #1769f5;
+  color: #578EF5;
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
@@ -10145,7 +10714,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   min-height: 48px;
 }
 .pm-product-add {
-  background: #1769f5;
+  background: #578EF5;
   border: 0;
   color: #fff;
   font-size: 0.88rem;
@@ -10203,7 +10772,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   background: #fff;
   border: 1px solid #cddcf1;
   border-radius: 0.85rem;
-  bottom: 82px;
+  bottom: calc(5.25rem + env(safe-area-inset-bottom));
   box-shadow: 0 8px 28px #1e2e4a2b;
   display: flex;
   justify-content: space-between;
@@ -10211,13 +10780,34 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   max-width: 500px;
   padding: 0.65rem;
   position: fixed;
+  pointer-events: auto;
   transform: translateX(-50%);
   width: calc(100% - 2rem);
-  z-index: 32;
+  z-index: 1500;
 }
+.pm-shop-cart-bar { cursor: pointer; }
 .pm-shop-cart-bar > span {
   display: flex;
   flex-direction: column;
+}
+.pm-shop-cart-bar > .pm-shop-cart-bar__item {
+  align-items: center;
+  flex-direction: row;
+  gap: 0.55rem;
+  min-width: 0;
+}
+.pm-shop-cart-bar__item > span:last-child { display: grid; min-width: 0; }
+.pm-shop-cart-bar__item strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pm-shop-cart-bar__icon {
+  align-items: center;
+  background: #eaf2ff;
+  border-radius: 0.62rem;
+  color: #578EF5;
+  display: flex;
+  flex: 0 0 auto;
+  height: 2.45rem;
+  justify-content: center;
+  width: 2.45rem;
 }
 .pm-shop-cart-bar small {
   color: #64748b;
@@ -10228,7 +10818,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 }
 .pm-shop-cart-bar button {
   align-items: center;
-  background: #1769f5;
+  background: #578EF5;
   border: 0;
   border-radius: 0.6rem;
   color: #fff;
@@ -10247,8 +10837,9 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   inset: 0;
   justify-content: center;
   position: fixed;
-  z-index: 100;
+  z-index: 2000;
 }
+.pm-checkout-backdrop { align-items: stretch; background: #f4f7fb; }
 .pm-product-drawer,
 .pm-checkout-modal {
   background: #fff;
@@ -10278,9 +10869,9 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 }
 .pm-product-detail-visual {
   align-items: center;
-  background: linear-gradient(145deg, #eef5ff, #fff);
+  background: #eef5ff;
   border-radius: 1rem;
-  color: #1769f5;
+  color: #578EF5;
   display: flex;
   height: 150px;
   justify-content: center;
@@ -10363,7 +10954,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 }
 .pm-pack-toggle button.active {
   background: #eef5ff;
-  border: 2px solid #1769f5;
+  border: 2px solid #578EF5;
   color: #1558c9;
 }
 .pm-pack-toggle strong {
@@ -10393,7 +10984,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 }
 .pm-drawer-add,
 .pm-checkout-primary {
-  background: #1769f5;
+  background: #2373F4;
   border: 0;
   border-radius: 0.7rem;
   color: #fff;
@@ -10417,10 +11008,29 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   font-size: 1.3rem;
   margin: 0.1rem 0;
 }
+.pm-checkout-primary:active { background: #65D0F4; }
+/* Checkout is a phone page: retain comfortable tap targets while using the
+   narrow screen efficiently. */
+@media (max-width: 600px) {
+  .pm-checkout-modal { padding: .9rem .85rem calc(1.1rem + env(safe-area-inset-bottom)); }
+  .pm-checkout-modal > header { align-items: flex-start; gap: .55rem; }
+  .pm-checkout-modal > header h2 { font-size: 1.15rem; line-height: 1.2; }
+  .pm-checkout-modal > header > button.pm-checkout-back { min-height: 2.5rem; padding: 0 .55rem; }
+  .pm-checkout-progress { gap: .3rem; margin: .75rem 0; }
+  .pm-checkout-progress span { font-size: .58rem; min-height: 4px; padding: 0; text-indent: -9999px; }
+  .pm-checkout-step { display: grid; gap: .7rem; }
+  .pm-checkout-step > label { gap: .3rem; margin: 0; }
+  .pm-checkout-step input, .pm-checkout-step select, .pm-checkout-step textarea { min-height: 2.75rem; }
+  .pm-fulfillment-options { gap: .55rem; }
+  .pm-fulfillment-options button { min-height: 4.1rem; padding: .65rem; }
+  .pm-price-summary { margin: .2rem 0; }
+  .pm-checkout-actions { gap: .55rem; }
+  .pm-checkout-actions button, .pm-checkout-primary { min-height: 3.15rem; margin-top: .35rem; }
+}
 .pm-checkout-progress {
   display: grid;
   gap: 0.4rem;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, 1fr);
   margin: 1rem 0;
 }
 .pm-checkout-progress span {
@@ -10429,7 +11039,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   height: 6px;
 }
 .pm-checkout-progress span.active {
-  background: #1769f5;
+  background: #578EF5;
 }
 .pm-shop-error {
   background: #fee2e2;
@@ -10465,7 +11075,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 .pm-fulfillment-options button.active,
 .pm-payment-options button.active {
   background: #eef5ff;
-  border: 2px solid #1769f5;
+  border: 2px solid #578EF5;
   color: #1558c9;
 }
 .pm-fulfillment-options button > span {
@@ -10520,6 +11130,80 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   font-size: 0.72rem;
   font-weight: 500;
 }
+.pm-cash-payment-notice {
+  align-items: center;
+  background: #f0f8f2;
+  border: 1px solid #a8d7b1;
+  border-radius: 0.75rem;
+  color: #174e28;
+  display: flex;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+  padding: 0.85rem;
+}
+.pm-checkout-modal > header > button.pm-checkout-back { border-radius: .65rem; font-size: .78rem; font-weight: 800; gap: .3rem; padding: 0 .7rem; width: auto; }
+.pm-checkout-modal { border-radius: 0; box-shadow: none; box-sizing: border-box; margin: .65rem auto; max-height: none; max-width: 430px; min-height: calc(100% - 1.3rem); width: calc(100% - 1.25rem); }
+.pm-checkout-modal { background:#f4f7fb; }.pm-checkout-modal > header { background:#fff; border:1px solid #d7e3f2; border-radius:1rem; padding:.8rem; }.pm-checkout-modal .pm-checkout-progress { display:none; }.pm-checkout-step fieldset,.pm-checkout-step > label { background:transparent; border:0; border-radius:0; padding:0; }.pm-checkout-step > label { display:grid; }.pm-checkout-step > label small { margin-top:.25rem; }
+.pm-checkout-modal { gap:1.05rem; padding:1rem; }.pm-checkout-modal > header { padding:1rem; }.pm-checkout-modal > header > button.pm-checkout-back { border-radius:50%; min-width:2.65rem; padding:0; width:2.65rem; }.pm-checkout-modal .pm-cart-type-tabs { margin-top:0; }.pm-checkout-step { gap:1rem; }.pm-checkout-step fieldset { margin:0 0 .2rem; }.pm-checkout-step > label { gap:.5rem; }.pm-checkout-step input,.pm-checkout-step select { background:#fff; border-color:#c8d8eb; min-height:3.15rem; }.pm-fulfillment-options { gap:.75rem; }.pm-fulfillment-options button { border-radius:.8rem; min-height:4.9rem; padding:.9rem; }.pm-checkout-step > label:nth-of-type(1) { margin-top:.25rem; }
+.pm-cart-review { display: grid; gap: 1rem; }
+.pm-cart-review__items { display: grid; gap: 0.7rem; }
+.pm-cart-review__items article {
+  align-items: center;
+  border-bottom: 1px solid #e6edf6;
+  display: grid;
+  gap: 0.65rem;
+  grid-template-columns: 3.45rem minmax(0, 1fr) auto;
+  padding: 0 0 0.7rem;
+}
+.pm-cart-review__items article:last-child { border-bottom: 0; padding-bottom: 0; }
+.pm-cart-review__visual {
+  align-items: center;
+  background: #edf4ff;
+  border-radius: 0.75rem;
+  color: #578EF5;
+  display: flex;
+  height: 3.45rem;
+  justify-content: center;
+  width: 3.45rem;
+}
+.pm-cart-review__items article > div:nth-child(2) { display: grid; gap: 0.12rem; min-width: 0; }
+.pm-cart-review__items article > div:nth-child(2) strong { font-size: 0.86rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pm-cart-review__items article > div:nth-child(2) small { color: #68778d; font-size: 0.7rem; }
+.pm-cart-review__items article > div:nth-child(2) b { color: #243b63; font-size: 0.78rem; }
+.pm-cart-review__quantity { align-items: center; display: flex; gap: 0.45rem; }
+.pm-cart-review__quantity button {
+  align-items: center;
+  background: #f3f7fc;
+  border: 0;
+  border-radius: 50%;
+  color: #578EF5;
+  display: flex;
+  height: 1.7rem;
+  justify-content: center;
+  width: 1.7rem;
+}
+.pm-cart-review__quantity button:disabled { color: #aab7c8; }
+.pm-cart-review__quantity strong { font-size: 0.78rem; min-width: 0.8rem; text-align: center; }
+.pm-cart-review__totals { border-top: 1px solid #dfe8f3; display: grid; gap: 0.5rem; padding-top: 0.8rem; }
+.pm-cart-review__totals > div { color: #68778d; display: flex; font-size: 0.8rem; justify-content: space-between; }
+.pm-cart-review__totals .total { color: #1c3154; font-size: 1rem; font-weight: 800; margin-top: 0.15rem; }
+.pm-cart-review__totals .total strong { color: #578EF5; }
+.pm-cash-payment-notice > svg {
+  color: #19733a;
+  flex: 0 0 auto;
+}
+.pm-cash-payment-notice strong,
+.pm-cash-payment-notice span {
+  display: block;
+}
+.pm-cash-payment-notice strong {
+  font-size: 0.9rem;
+}
+.pm-cash-payment-notice span {
+  font-size: 0.75rem;
+  line-height: 1.4;
+  margin-top: 0.12rem;
+}
 .pm-payment-options {
   display: grid;
   gap: 0.55rem;
@@ -10539,7 +11223,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   padding: 0.75rem;
 }
 .pm-discount-check input {
-  accent-color: #1769f5;
+  accent-color: #578EF5;
   flex: 0 0 auto;
   height: 24px;
   min-height: 24px !important;
@@ -10578,7 +11262,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   font-weight: 800;
 }
 .pm-price-summary .total strong {
-  color: #1769f5;
+  color: #578EF5;
   font-size: 1.25rem;
 }
 .pm-checkout-actions {
@@ -10588,7 +11272,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 }
 .pm-checkout-actions button {
   background: #fff;
-  border: 2px solid #1769f5;
+  border: 2px solid #578EF5;
   border-radius: 0.7rem;
   color: #1558c9;
   font-size: 0.95rem;
@@ -10596,7 +11280,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   min-height: 56px;
 }
 .pm-checkout-actions button:last-child {
-  background: #1769f5;
+  background: #578EF5;
   color: #fff;
 }
 .pm-checkout-actions button:disabled {
@@ -10632,9 +11316,14 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   line-height: 1.45;
   margin: 0.15rem 0;
 }
+.pm-order-receipt { background:#fff; border:1px solid #d7e3f2; border-radius:1rem; color:#1e2e4a; margin:.8rem 0 1rem; overflow:hidden; padding:1rem; }
+.pm-order-receipt header { align-items:flex-start; display:flex; justify-content:space-between; }.pm-order-receipt header small { color:#578EF5; font-size:.67rem; font-weight:800; text-transform:uppercase; }.pm-order-receipt h2 { font-size:1.12rem; margin:.12rem 0; }.pm-order-receipt header p,.pm-order-receipt time { color:#6b7a90; font-size:.66rem; margin:0; }.pm-order-receipt time { max-width:7rem; text-align:right; }
+.pm-order-receipt__timeline { display:flex; justify-content:space-between; list-style:none; margin:1rem 0; padding:0; position:relative; }.pm-order-receipt__timeline::before { background:#d5dfec; content:''; height:2px; left:10%; position:absolute; right:10%; top:.42rem; }.pm-order-receipt__timeline li { background:#fff; color:#748398; font-size:.58rem; padding-top:1.15rem; position:relative; text-align:center; width:33.33%; z-index:1; }.pm-order-receipt__timeline li::before { background:#d5dfec; border:3px solid #fff; border-radius:50%; content:''; height:.65rem; left:calc(50% - .33rem); position:absolute; top:0; width:.65rem; }.pm-order-receipt__timeline li.active::before { background:#2373F4; }
+.pm-order-receipt__store,.pm-order-receipt__items > div { align-items:center; border-top:1px solid #e5ebf3; display:flex; gap:.65rem; padding:.7rem 0; }.pm-order-receipt__store > span,.pm-order-receipt__items > div > span { align-items:center; background:#eef5ff; border-radius:.65rem; color:#2373F4; display:flex; height:2.35rem; justify-content:center; width:2.35rem; }.pm-order-receipt__store strong,.pm-order-receipt__store small,.pm-order-receipt__items strong,.pm-order-receipt__items small { display:block; }.pm-order-receipt__store small,.pm-order-receipt__items small { color:#6b7a90; font-size:.68rem; margin-top:.12rem; }.pm-order-receipt__items p { flex:1; margin:0; }.pm-order-receipt__items strong { font-size:.78rem; }.pm-order-receipt__items b { font-size:.73rem; }
+.pm-order-receipt dl { border-top:1px solid #e5ebf3; margin:0; padding:.45rem 0; }.pm-order-receipt dl > div { display:flex; justify-content:space-between; padding:.32rem 0; }.pm-order-receipt dt,.pm-order-receipt dd { color:#52647d; font-size:.73rem; margin:0; }.pm-order-receipt .total dt,.pm-order-receipt .total dd { color:#1e2e4a; font-size:.92rem; font-weight:850; }.pm-order-receipt__detail { border-top:1px solid #e5ebf3; display:grid; gap:.15rem; padding:.65rem 0; }.pm-order-receipt__detail strong { font-size:.74rem; }.pm-order-receipt__detail span { color:#65758b; font-size:.7rem; line-height:1.4; }
 .pm-order-shop-card {
   align-items: center;
-  background: linear-gradient(120deg, #eaf2ff, #fff);
+  background: #eaf2ff;
   border: 1px solid #b9d0f2;
   border-radius: 0.9rem;
   display: grid;
@@ -10644,7 +11333,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 }
 .pm-order-shop-card > span {
   align-items: center;
-  background: #1769f5;
+  background: #578EF5;
   border-radius: 50%;
   color: #fff;
   display: flex;
@@ -10665,7 +11354,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 .pm-order-shop-card button,
 .pm-no-active-orders button {
   align-items: center;
-  background: #1769f5;
+  background: #578EF5;
   border: 0;
   border-radius: 0.65rem;
   color: #fff;
@@ -10690,7 +11379,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 }
 .pm-active-orders > article.expanded {
   border-color: #8db7f4;
-  box-shadow: 0 5px 16px #1769f51a;
+  box-shadow: 0 5px 16px #578EF51a;
 }
 .pm-order-card-summary {
   align-items: center;
@@ -10709,7 +11398,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   align-items: center;
   background: #e8f1ff;
   border-radius: 50%;
-  color: #1769f5;
+  color: #578EF5;
   display: flex;
   height: 48px;
   justify-content: center;
@@ -10757,7 +11446,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   width: 2px;
 }
 .pm-order-stepper > div.complete:not(:last-child)::after {
-  background: #1769f5;
+  background: #578EF5;
 }
 .pm-order-stepper > div > span {
   align-items: center;
@@ -10772,8 +11461,8 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   z-index: 1;
 }
 .pm-order-stepper > div.active > span {
-  background: #1769f5;
-  border-color: #1769f5;
+  background: #578EF5;
+  border-color: #578EF5;
   color: #fff;
 }
 .pm-order-stepper > div.complete > span {
@@ -10835,20 +11524,67 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   margin: 0.5rem 0 0;
 }
 .pm-order-history-new article {
-  align-items: center;
   background: #fff;
   border: 1px solid #dce4ef;
   border-radius: 0.7rem;
+  overflow: hidden;
+}
+.pm-order-history-summary {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: inherit;
   display: grid;
   gap: 0.6rem;
-  grid-template-columns: auto 1fr auto;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   padding: 0.7rem;
+  text-align: left;
+  width: 100%;
 }
-.pm-order-history-new article > span {
+.pm-drawer-add {
+  align-items: center;
+  bottom: -1.1rem;
+  box-shadow: 0 -0.6rem 1.1rem rgba(255, 255, 255, 0.92);
+  display: flex;
+  justify-content: space-between;
+  position: sticky;
+  z-index: 2;
+}
+.pm-drawer-add strong { font-size: 1rem; }
+.pm-shop-voice-search {
+  align-items: center;
+  background: #edf5ff;
+  border: 1px solid #a9c8f7;
+  border-radius: 0.6rem;
+  color: #1558c9;
+  display: inline-flex;
+  flex: 0 0 auto;
+  height: 42px;
+  justify-content: center;
+  min-height: 42px;
+  padding: 0;
+  width: 42px;
+}
+.pm-shop-voice-search.is-listening {
+  animation: pm-shop-voice-pulse 1s ease-in-out infinite alternate;
+  background: #578EF5;
+  border-color: #578EF5;
+  color: #fff;
+}
+.pm-shop-voice-search-message {
+  color: #31527d;
+  font-size: 0.78rem;
+  margin: 0.35rem 0 0;
+}
+@keyframes pm-shop-voice-pulse {
+  from { box-shadow: 0 0 0 0 rgba(23, 105, 245, 0.35); }
+  to { box-shadow: 0 0 0 7px rgba(23, 105, 245, 0); }
+}
+.pm-order-history-summary > span {
   align-items: center;
   background: #eef5ff;
   border-radius: 50%;
-  color: #1769f5;
+  color: #578EF5;
   display: flex;
   height: 42px;
   justify-content: center;
@@ -10871,6 +11607,32 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   font-weight: 750;
   padding: 0.3rem 0.5rem;
   text-transform: capitalize;
+}
+.pm-order-history-new article.status-rejected em,
+.pm-order-history-new article.status-needs_resubmission em,
+.pm-order-history-new article.status-cancelled em {
+  background: #fff0f0;
+  color: #b42318;
+}
+.pm-order-history-new article.status-approved em,
+.pm-order-history-new article.status-ready em,
+.pm-order-history-new article.status-delivered em,
+.pm-order-history-new article.status-completed em {
+  background: #eaf8ef;
+  color: #137333;
+}
+.pm-order-history-detail {
+  background: #f8faff;
+  border-top: 1px solid #e2e8f0;
+  padding: 0.65rem 0.75rem;
+}
+.pm-order-history-detail p {
+  color: #52647d;
+  font-size: 0.72rem;
+  margin: 0.25rem 0;
+}
+.pm-order-history-detail strong {
+  color: #172b4d;
 }
 @media (max-width: 390px) {
   .pm-product-grid {
@@ -11019,7 +11781,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 }
 .pm-shop-mode-arrow {
   align-items: center;
-  background: #1769f5;
+  background: #578EF5;
   border-radius: 50%;
   color: #fff;
   display: flex;
@@ -11036,9 +11798,16 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   box-shadow: 0 0 0 4px #bcd5ff;
 }
 .pm-rx-shop {
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 1rem;
+  padding-bottom: 7.2rem;
 }
+.pm-rx-upload-card { order: 1; }
+.pm-rx-guide { order: 2; }
+.pm-rx-message,
+.pm-rx-pending-card { order: 3; }
+.pm-rx-medicines { order: 4; }
 .pm-rx-guide > h2 {
   font-size: 1rem;
   margin: 0 0 0.55rem;
@@ -11049,7 +11818,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   border-radius: 0.8rem;
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  padding: 0.65rem 0.35rem;
+  padding: 0.8rem 0.35rem;
 }
 .pm-rx-guide article {
   align-items: center;
@@ -11072,7 +11841,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   align-items: center;
   background: #eef5ff;
   border-radius: 0.45rem;
-  color: #1769f5;
+  color: #578EF5;
   display: flex;
   height: 42px;
   justify-content: center;
@@ -11080,7 +11849,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 }
 .pm-rx-guide article > b {
   align-items: center;
-  background: #1769f5;
+  background: #578EF5;
   border-radius: 50%;
   color: #fff;
   display: flex;
@@ -11099,7 +11868,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 }
 .pm-rx-guide article small {
   color: #64748b;
-  font-size: 0.52rem;
+  font-size: 0.58rem;
   line-height: 1.25;
   margin-top: 0.1rem;
 }
@@ -11117,17 +11886,17 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   background: #fff;
   border: 1px solid #d7e0ec;
   border-radius: 0.9rem;
-  padding: 0.9rem;
+  padding: 1.15rem;
 }
 .pm-rx-upload-title {
   align-items: center;
   display: grid;
-  gap: 0.7rem;
+  gap: 0.9rem;
   grid-template-columns: auto 1fr;
 }
 .pm-rx-upload-title > span {
   align-items: center;
-  background: #1769f5;
+  background: #578EF5;
   border-radius: 50%;
   color: #fff;
   display: flex;
@@ -11145,7 +11914,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   color: #536176;
   font-size: 0.78rem;
   line-height: 1.45;
-  margin: 0.15rem 0;
+  margin: 0.3rem 0 0;
 }
 .pm-rx-upload-card ul {
   color: #42516a;
@@ -11156,7 +11925,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 }
 .pm-rx-upload-button {
   align-items: center;
-  background: #1769f5;
+  background: #578EF5;
   border: 0;
   border-radius: 0.7rem;
   color: #fff;
@@ -11165,6 +11934,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   font-weight: 800;
   gap: 0.45rem;
   justify-content: center;
+  margin-top: 1rem;
   min-height: 54px;
   width: 100%;
 }
@@ -11174,7 +11944,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 }
 .pm-rx-upload-button.secondary {
   background: #fff;
-  border: 2px solid #1769f5;
+  border: 2px solid #578EF5;
   color: #1558c9;
 }
 .pm-rx-upload-card > small {
@@ -11244,7 +12014,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   align-items: center;
   background: #eef5ff;
   border-radius: 0.5rem;
-  color: #1769f5;
+  color: #578EF5;
   display: flex;
   height: 58px;
   justify-content: center;
@@ -11313,7 +12083,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   align-items: center;
   background: #e8f1ff;
   border-radius: 50%;
-  color: #1769f5;
+  color: #578EF5;
   display: flex;
   height: 44px;
   justify-content: center;
@@ -11427,7 +12197,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   background: #fff;
   border: 1px solid #cddcf1;
   border-radius: 0.85rem;
-  bottom: 82px;
+  bottom: calc(5.25rem + env(safe-area-inset-bottom));
   box-shadow: 0 8px 28px #1e2e4a2b;
   display: flex;
   justify-content: space-between;
@@ -11437,7 +12207,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   position: fixed;
   transform: translateX(-50%);
   width: calc(100% - 2rem);
-  z-index: 32;
+  z-index: 1500;
 }
 .pm-rx-order-bar > span {
   display: flex;
@@ -11448,11 +12218,11 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   font-size: 0.68rem;
 }
 .pm-rx-order-bar strong {
-  color: #1769f5;
+  color: #578EF5;
   font-size: 1.1rem;
 }
 .pm-rx-order-bar button {
-  background: #1769f5;
+  background: #578EF5;
   border: 0;
   border-radius: 0.65rem;
   color: #fff;
@@ -11465,6 +12235,37 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 .pm-rx-order-bar button:disabled {
   background: #aab8cc;
 }
+
+.pm-rx-checkout { background: #fff; border: 1px solid #d7e3f2; border-radius: 1rem; display: grid; gap: 1rem; padding: 1rem; }
+.pm-rx-checkout.pm-cart-page { background:transparent; border:0; border-radius:0; gap:1rem; padding:0; }
+.pm-rx-checkout.pm-cart-page > .pm-cart-page__header { background:#fff; border:1px solid #d7e3f2; border-radius:1rem; padding:.85rem; }
+.pm-rx-checkout.pm-cart-page > .pm-cart-page__header > button { align-items:center; background:#fff; border:1px solid #d7e3f2; border-radius:.65rem; color:#2373F4; display:flex; font:inherit; font-size:.74rem; font-weight:800; min-height:2.7rem; padding:0 .65rem; }
+.pm-rx-checkout.pm-cart-page > .pm-cart-page__header h2 { color:#1d3152; font-size:1.3rem; margin:.05rem 0 0; }.pm-rx-checkout.pm-cart-page > .pm-cart-page__header small { color:#578EF5; font-size:.68rem; font-weight:800; }
+.pm-rx-checkout.pm-cart-page .pm-rx-checkout__items { background:#fff; border:1px solid #d7e3f2; border-radius:1rem; padding:.8rem; }.pm-rx-checkout.pm-cart-page .pm-rx-checkout__notice { background:#f6f9fd; border-radius:.7rem; }.pm-rx-checkout.pm-cart-page .pm-rx-checkout__submit { background:#2373F4; border-radius:.75rem; min-height:3.4rem; }
+.pm-cart-type-tabs { background:#fff; border:1px solid #d7e3f2; border-radius:.75rem; display:grid; gap:.35rem; grid-template-columns:1fr 1fr; padding:.3rem; }.pm-cart-type-tabs button { background:transparent; border:0; border-radius:.55rem; color:#52647d; font:inherit; font-size:.7rem; font-weight:800; min-height:2.55rem; padding:.35rem; }.pm-cart-type-tabs button.active { background:#eaf2ff; color:#2373F4; }
+.pm-phone:has(.pm-cart-page) .pm-header-streak-button,
+.pm-phone:has(.pm-cart-page) .pm-notification-button,
+.pm-phone:has(.pm-checkout-modal) .pm-header-streak-button,
+.pm-phone:has(.pm-checkout-modal) .pm-notification-button { display:none; }
+.pm-rx-checkout > header { align-items: center; display: flex; gap: .7rem; }
+.pm-rx-checkout > header button { background: #f1f6ff; border: 0; border-radius: .55rem; color: #2373F4; font: inherit; font-weight: 800; padding: .55rem .65rem; }
+.pm-rx-checkout > header small { color: #578EF5; font-size: .7rem; font-weight: 800; }
+.pm-rx-checkout > header h2 { color: #172d50; font-size: 1.15rem; margin: .1rem 0 0; }
+.pm-rx-checkout__items { display: grid; gap: .6rem; }
+.pm-rx-checkout__items article { align-items: center; border-bottom: 1px solid #e4ebf4; display: grid; gap: .65rem; grid-template-columns: auto 1fr; padding: .2rem 0 .75rem; }
+.pm-rx-checkout__items article > span { align-items: center; background: #eef5ff; border-radius: .7rem; color: #578EF5; display: flex; height: 2.7rem; justify-content: center; width: 2.7rem; }
+.pm-rx-checkout__items strong,.pm-rx-checkout__items small { display: block; }
+.pm-rx-checkout__items small { color: #65758b; font-size: .72rem; margin-top: .15rem; }
+.pm-rx-checkout__items b { color: #596b82; font-size: .68rem; grid-column: 2; }
+.pm-rx-checkout__notice { background: #f5f8fc; border-radius: .65rem; color: #526982; font-size: .72rem; line-height: 1.45; margin: 0; padding: .7rem; }
+.pm-rx-checkout__fulfillment { border: 0; display: grid; gap: .65rem; margin: 0; padding: 0; }
+.pm-rx-checkout__fulfillment legend { color: #172d50; font-size: .82rem; font-weight: 800; margin-bottom: .35rem; }
+.pm-rx-checkout__fulfillment button { background:#fff; border:1px solid #d7e3f2; border-radius:.65rem; color:#284366; display:grid; font:inherit; gap:.14rem; padding:.72rem; text-align:left; }.pm-rx-checkout__fulfillment button strong { font-size:.82rem; }.pm-rx-checkout__fulfillment button small { color:#64758b; font-size:.7rem; }.pm-rx-checkout__fulfillment button.active { background:#eef5ff; border:2px solid #578EF5; color:#1558c9; }
+.pm-rx-checkout__field { color: #284366; display: grid; font-size: .76rem; font-weight: 800; gap: .35rem; }
+.pm-rx-checkout__field small { color: #687990; font-size: .66rem; font-weight: 500; line-height: 1.35; }
+.pm-rx-checkout__field input,.pm-rx-checkout__field textarea,.pm-rx-checkout__field select { background: #fff; border: 1px solid #c9d9ed; border-radius: .6rem; font: inherit; min-height: 2.7rem; padding: .65rem; resize: vertical; }
+.pm-rx-checkout__field select:disabled { background: #f3f6fa; color: #8a98aa; }
+.pm-rx-checkout__submit { background: #578EF5; border: 0; border-radius: .7rem; color: #fff; font: inherit; font-weight: 850; min-height: 3.1rem; }
 @media (max-width: 390px) {
   .pm-rx-guide > div {
     padding: 0.55rem 0.15rem;
@@ -11522,7 +12323,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 .pm-shop-track-button {
   align-items: center;
   background: #fff;
-  border: 2px solid #1769f5;
+  border: 2px solid #578EF5;
   border-radius: 0.7rem;
   color: #1558c9;
   display: flex;
@@ -11551,7 +12352,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   background: transparent;
   border: 0;
   border-radius: 0.5rem;
-  color: #1769f5;
+  color: #578EF5;
   display: flex;
   height: 44px;
   justify-content: center;
@@ -11572,7 +12373,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   align-items: center;
   background: #e8f1ff;
   border-radius: 0.5rem;
-  color: #1769f5;
+  color: #578EF5;
   display: flex;
   height: 38px;
   justify-content: center;
@@ -11661,7 +12462,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   align-items: center;
   background: transparent;
   border: 0;
-  color: #1769f5;
+  color: #578EF5;
   display: flex;
   height: 48px;
   justify-content: center;
@@ -11679,7 +12480,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   background: #eaf2ff;
   border: 1px solid #cfe0fb;
   border-radius: 50%;
-  color: #1769f5;
+  color: #578EF5;
   display: flex;
   flex: 0 0 auto;
   justify-content: center;
@@ -11704,7 +12505,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   margin: 0;
 }
 .pm-history-chat-header strong {
-  color: #1769f5;
+  color: #578EF5;
   font-size: 0.76rem;
   line-height: 1.4;
   overflow: hidden;
@@ -11725,7 +12526,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   margin: 0.25rem 0 0;
 }
 .pm-history-modal-subject svg {
-  color: #1769f5;
+  color: #578EF5;
   height: 15px;
   width: 15px;
 }
@@ -11754,10 +12555,10 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   color: #604700;
 }
 .pm-history-modal.priority-history .pm-history-chat-header {
-  background: linear-gradient(110deg, #f7fbff, #fffbea);
+  background: #f7fbff;
 }
 .pm-history-modal.priority-history .pm-history-message-list {
-  background: linear-gradient(180deg, #fbfdff, #fffdf4);
+  background: #fbfdff;
 }
 .pm-history-secure {
   align-items: center;
@@ -11770,7 +12571,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   padding: 0.65rem 0.75rem;
 }
 .pm-history-secure svg {
-  color: #1769f5;
+  color: #578EF5;
   flex: 0 0 auto;
   height: 20px;
   stroke-width: 2.4;
@@ -11857,7 +12658,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   text-align: right;
 }
 .pm-history-message-row.patient article time span {
-  color: #1769f5;
+  color: #578EF5;
   display: inline-flex;
   margin-left: 0.25rem;
   vertical-align: middle;
@@ -11886,7 +12687,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   text-align: center;
 }
 .pm-history-readonly svg {
-  color: #1769f5;
+  color: #578EF5;
   flex: 0 0 auto;
   height: 19px;
   stroke-width: 2.4;
@@ -11943,7 +12744,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   border-width: 2px !important;
 }
 .pm-phone.pm-a11y-high-contrast :where(button, a):focus-visible {
-  outline: 4px solid #1769f5 !important;
+  outline: 4px solid #578EF5 !important;
   outline-offset: 3px !important;
 }
 .pm-phone.pm-a11y-dark-mode,
@@ -12044,7 +12845,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   transition-duration: 0.01ms !important;
 }
 .pm-phone.pm-a11y-enhanced-focus :focus-visible {
-  outline: 4px solid #4c8ce4 !important;
+  outline: 4px solid #578EF5 !important;
   outline-offset: 3px !important;
   box-shadow: 0 0 0 2px #fff !important;
 }
@@ -12062,7 +12863,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 }
 .pm-global-page-listen {
   align-items: center;
-  background: #1769f5;
+  background: #578EF5;
   border: 2px solid #fff;
   border-radius: 999px;
   bottom: calc(4.7rem + env(safe-area-inset-bottom));
@@ -12076,7 +12877,15 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   padding: 0.5rem 0.75rem;
   position: fixed;
   right: calc(50% - min(215px, 50vw) + 1rem);
+  touch-action: none;
+  user-select: none;
   z-index: 55;
+}
+.pm-global-page-listen:active {
+  cursor: grabbing;
+}
+@media (pointer: fine) {
+  .pm-global-page-listen { cursor: grab; }
 }
 .pm-global-page-listen span {
   white-space: nowrap;
@@ -12113,7 +12922,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   align-items: center;
   background: #eaf2ff;
   border-radius: 0.55rem;
-  color: #1769f5;
+  color: #578EF5;
   display: flex;
   height: 42px;
   justify-content: center;
@@ -12153,7 +12962,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 }
 .pm-listen-important {
   align-items: center;
-  background: #1769f5;
+  background: #578EF5;
   border: 0;
   color: #fff;
   display: flex;
@@ -12216,7 +13025,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   align-items: center;
   background: #e8f1ff;
   border-radius: 0.7rem;
-  color: #1769f5;
+  color: #578EF5;
   display: flex;
   height: 46px;
   justify-content: center;
@@ -12269,7 +13078,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 }
 .pm-caregiver-alert__medicine > span {
   align-items: center;
-  background: #1769f5;
+  background: #578EF5;
   border-radius: 50%;
   box-shadow: 0 0 0 8px #e8f1ff;
   color: #fff;
@@ -12320,7 +13129,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 .pm-caregiver-alert__listen {
   align-items: center;
   background: #eef5ff;
-  border: 1.5px solid #4c8ce4;
+  border: 1.5px solid #578EF5;
   border-radius: 0.7rem;
   color: #1558c9;
   display: flex;
@@ -12363,7 +13172,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 }
 .pm-caregiver-alert__actions .snooze {
   background: #fff;
-  border: 1.5px solid #4c8ce4;
+  border: 1.5px solid #578EF5;
   color: #1558c9;
 }
 .pm-caregiver-alert > p {
@@ -12410,6 +13219,11 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 .pm-streak-alert > div {
   min-width: 0;
 }
+.pm-streak-alert__actions {
+  display: grid;
+  gap: 0.45rem;
+  min-width: 124px;
+}
 .pm-streak-alert strong {
   color: #123a72;
   display: block;
@@ -12427,7 +13241,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   background: #e8f2ff;
   border: 0;
   border-radius: 50%;
-  color: #1769f5;
+  color: #578EF5;
   display: inline-flex;
   height: 52px;
   justify-content: center;
@@ -12436,7 +13250,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 }
 .pm-streak-alert button {
   align-items: center;
-  background: #1769f5;
+  background: #578EF5;
   border: 0;
   border-radius: 0.75rem;
   box-shadow: 0 5px 12px rgba(23, 105, 245, 0.2);
@@ -12463,7 +13277,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   outline-offset: 3px;
 }
 .pm-streak-alert--risk {
-  background: linear-gradient(135deg, #fff5f5 0%, #fffafa 100%);
+  background: #fff5f5;
   border-color: #f3aaaa;
   color: #c62828;
 }
@@ -12487,6 +13301,20 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 .pm-streak-alert--risk button:hover {
   background: #b91c1c;
   box-shadow: 0 7px 16px rgba(220, 38, 38, 0.26);
+}
+.pm-streak-alert--risk .pm-streak-alert__voice,
+.pm-streak-alert--risk .pm-streak-alert__scan {
+  background: #fff;
+  border: 1px solid #f29b9b;
+  box-shadow: none;
+  color: #b91c1c;
+  min-height: 40px;
+  padding: 0.45rem 0.6rem;
+}
+.pm-streak-alert--risk .pm-streak-alert__voice:hover,
+.pm-streak-alert--risk .pm-streak-alert__scan:hover {
+  background: #fff1f1;
+  box-shadow: none;
 }
 .pm-streak-alert--risk button:focus-visible {
   outline-color: rgba(220, 38, 38, 0.25);
@@ -12520,8 +13348,14 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
     width: 48px;
   }
   .pm-streak-alert button {
-    grid-column: 1 / -1;
     width: 100%;
+  }
+  .pm-streak-alert__actions {
+    grid-column: 1 / -1;
+    grid-template-columns: 1fr 1fr;
+  }
+  .pm-streak-alert__voice {
+    grid-column: 1 / -1;
   }
 }
 
@@ -12551,7 +13385,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   background: #fff;
   border: 1.5px solid #9fc2f5;
   border-radius: 50%;
-  color: #1769f5;
+  color: #578EF5;
   display: flex;
   flex: 0 0 46px;
   height: 46px;
@@ -12562,6 +13396,9 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   font-size: 23px;
   line-height: 1.2;
   margin: 0;
+}
+.pm-wizard__header--schedule-choice h1 {
+  color: #578EF5;
 }
 .pm-wizard__header p {
   color: #50627a;
@@ -12577,7 +13414,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   overflow: hidden;
 }
 .pm-wizard__progress span {
-  background: #1769f5;
+  background: #578EF5;
   border-radius: inherit;
   display: block;
   height: 100%;
@@ -12618,7 +13455,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   grid-template-columns: 24px minmax(0, 1fr) 46px 46px;
 }
 .pm-wizard__search:focus-within {
-  border-color: #1769f5;
+  border-color: #578EF5;
   box-shadow: 0 0 0 4px #d7e7ff;
 }
 .pm-wizard__search input {
@@ -12634,7 +13471,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   background: #fff;
   border: 0;
   border-left: 1px solid #d4e0ef;
-  color: #1769f5;
+  color: #578EF5;
   display: flex;
   height: 52px;
   justify-content: center;
@@ -12686,7 +13523,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 .pm-wizard__date-buttons button.selected,
 .pm-wizard__presets button.selected {
   background: #eaf3ff;
-  border-color: #1769f5;
+  border-color: #578EF5;
   color: #0d55cd;
 }
 .pm-wizard__primary,
@@ -12706,8 +13543,8 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   width: 100%;
 }
 .pm-wizard__primary {
-  background: #1769f5;
-  border: 2px solid #1769f5;
+  background: #578EF5;
+  border: 2px solid #578EF5;
   color: #fff;
   gap: 9px;
   margin-top: 22px;
@@ -12724,7 +13561,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 .pm-wizard__unsure,
 .pm-wizard__add-time {
   background: #fff;
-  border: 2px solid #1769f5;
+  border: 2px solid #578EF5;
   color: #0d55cd;
   margin-top: 12px;
 }
@@ -12790,11 +13627,23 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   padding: 18px;
 }
 .pm-wizard__method > svg {
-  color: #1769f5;
+  color: #578EF5;
 }
 .pm-wizard__method h3 {
   font-size: 20px;
   margin: 0;
+}
+.pm-wizard__method-label {
+  display: block;
+  margin-bottom: 0.28rem;
+  color: #578EF5;
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  line-height: 1.2;
+}
+.pm-wizard__method.manual .pm-wizard__method-label {
+  color: #536b90;
 }
 .pm-wizard__method p {
   color: #50627a;
@@ -12802,8 +13651,8 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   margin: 5px 0;
 }
 .pm-wizard__method > button {
-  background: #1769f5;
-  border: 2px solid #1769f5;
+  background: #578EF5;
+  border: 2px solid #578EF5;
   border-radius: 13px;
   color: #fff;
   font-weight: 800;
@@ -12831,15 +13680,17 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   margin-top: 16px;
 }
 .pm-wizard__schedule-choice .pm-wizard__method.suggested {
-  background: #f1fbf5;
-  border-color: #80c99a;
+  background: #f4f9ff;
+  border-color: #84baff;
+  box-shadow: 0 0.45rem 1rem rgba(23, 105, 245, 0.08);
 }
 .pm-wizard__schedule-choice .pm-wizard__method.suggested > svg {
-  color: #16864a;
+  color: #578EF5;
 }
 .pm-wizard__schedule-choice .pm-wizard__method.suggested > button {
-  background: #16864a;
-  border-color: #16864a;
+  background: #578EF5;
+  border-color: #578EF5;
+  box-shadow: 0 0.35rem 0.75rem rgba(23, 105, 245, 0.2);
 }
 .pm-wizard__schedule-choice .pm-wizard__method > button {
   align-items: center;
@@ -12853,6 +13704,79 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 }
 .pm-wizard__schedule-choice .pm-wizard__method p {
   font-size: 16px;
+}
+.pm-wizard__schedule-choice--redesign {
+  max-width: 720px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.pm-wizard__schedule-choice--redesign .pm-wizard__method {
+  grid-template-columns: 4.4rem minmax(0, 1fr);
+  gap: 0.85rem;
+  margin: 0 0 1rem;
+  padding: 1.15rem;
+  border: 1px solid #cfe2fb;
+  border-radius: 1.2rem;
+  background: #fff;
+  box-shadow: 0 0.45rem 1.1rem rgba(32, 91, 169, 0.06);
+}
+.pm-wizard__schedule-choice--redesign .pm-wizard__method.suggested {
+  border-color: #bfdbff;
+  background: #f7fbff;
+}
+.pm-wizard__schedule-choice--redesign .pm-wizard__method-icon {
+  display: grid;
+  width: 3.6rem;
+  height: 3.6rem;
+  place-items: center;
+  align-self: center;
+  border-radius: 1rem;
+  background: #e9f8ff;
+  color: #578EF5;
+}
+.pm-wizard__schedule-choice--redesign .pm-wizard__method-icon svg {
+  width: 2rem;
+  height: 2rem;
+  stroke-width: 2.3;
+}
+.pm-wizard__schedule-choice--redesign .pm-wizard__method.manual .pm-wizard__method-icon {
+  background: #d8ffc5;
+  color: #1769f5;
+}
+.pm-wizard__schedule-choice--redesign .pm-wizard__method h3 {
+  color: #102f72;
+  font-size: clamp(1.25rem, 5.5vw, 1.55rem);
+  line-height: 1.14;
+}
+.pm-wizard__schedule-choice--redesign .pm-wizard__method.manual h3 {
+  font-size: clamp(1.05rem, 4.5vw, 1.25rem);
+  white-space: nowrap;
+}
+.pm-wizard__schedule-choice--redesign .pm-wizard__method p {
+  margin-top: 0.5rem;
+  color: #60718d;
+  font-size: 1rem;
+  line-height: 1.35;
+}
+.pm-wizard__schedule-choice--redesign .pm-wizard__method > button {
+  min-height: 3.65rem;
+  margin-top: 0.25rem;
+  border-radius: 1rem;
+  font-size: 1rem;
+}
+.pm-wizard__schedule-choice--redesign .pm-wizard__method.manual > button {
+  border-color: #578EF5;
+  background: #fff;
+  color: #578EF5;
+  box-shadow: none;
+}
+@media (max-width: 380px) {
+  .pm-wizard__schedule-choice--redesign .pm-wizard__method {
+    grid-template-columns: 4.4rem minmax(0, 1fr);
+    padding: 0.9rem;
+  }
 }
 .pm-wizard__notice,
 .pm-wizard__error,
@@ -12895,7 +13819,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 .pm-wizard__error button,
 .pm-wizard__generation-error button {
   background: #fff;
-  border: 2px solid #1769f5;
+  border: 2px solid #578EF5;
   border-radius: 10px;
   color: #0d55cd;
   font-weight: 800;
@@ -12929,7 +13853,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 }
 .pm-wizard__counter button {
   align-items: center;
-  background: #1769f5;
+  background: #578EF5;
   border: 0;
   border-radius: 50%;
   color: #fff;
@@ -12983,7 +13907,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   padding: 16px;
 }
 .pm-wizard__summary > svg {
-  color: #1769f5;
+  color: #578EF5;
   flex: 0 0 auto;
 }
 .pm-wizard__summary h3 {
@@ -13049,7 +13973,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   width: 24px;
 }
 .pm-wizard__medicine-editors article > svg {
-  color: #1769f5;
+  color: #578EF5;
 }
 .pm-wizard__medicine-editors article > div {
   display: grid;
@@ -13062,7 +13986,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 .pm-wizard__medicine-editors button {
   align-items: center;
   background: #fff;
-  border: 1.5px solid #1769f5;
+  border: 1.5px solid #578EF5;
   border-radius: 10px;
   color: #0d55cd;
   display: flex;
@@ -13164,8 +14088,8 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
   display: block;
 }
 .pm-wizard__day-tabs button.active {
-  background: #1769f5;
-  border-color: #1769f5;
+  background: #578EF5;
+  border-color: #578EF5;
   color: #fff;
 }
 .pm-wizard__day-picker {
@@ -13205,7 +14129,7 @@ body.pm-a11y-enhanced-focus .pm-phone :focus-visible {
 .pm-wizard__compact-schedule article > svg {
   background: #eaf3ff;
   border-radius: 50%;
-  color: #1769f5;
+  color: #578EF5;
   height: 34px;
   padding: 8px;
   width: 34px;
@@ -14544,7 +15468,7 @@ body.pm-a11y-dark-mode .pm-wizard {
 
 .pm-week-calendar__header {
   align-items: center;
-  background: linear-gradient(135deg, #1769f5 0%, #2f91f3 100%);
+  background: #578EF5;
   border-bottom: 0;
   display: flex;
   gap: 0.75rem;
@@ -14697,7 +15621,7 @@ body.pm-a11y-dark-mode .pm-wizard {
 }
 
 .pm-week-calendar__days button.is-today:not(.selected) i {
-  background: #1769f5;
+  background: #578EF5;
 }
 
 .pm-week-calendar__days button.selected i {
@@ -14874,7 +15798,7 @@ body.pm-a11y-dark-mode .pm-wizard {
   animation: pm-week-calendar-spin 800ms linear infinite;
   border: 2px solid #cfe0f8;
   border-radius: 50%;
-  border-top-color: #1769f5;
+  border-top-color: #578EF5;
   height: 1.15rem;
   width: 1.15rem;
 }
@@ -14983,7 +15907,7 @@ body.pm-a11y-reduce-motion .pm-week-calendar * {
   padding: 17px 17px 13px;
 }
 .pm-simple-dose-calendar .pm-week-calendar__header small {
-  color: #1769f5;
+  color: #578EF5;
   font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.05em;
@@ -15045,7 +15969,7 @@ body.pm-a11y-reduce-motion .pm-week-calendar * {
 }
 .pm-simple-dose-calendar__week button.selected,
 .pm-generated-calendar__week button.selected {
-  background: #1769f5;
+  background: #578EF5;
   box-shadow: 0 5px 12px rgba(23, 105, 245, 0.22);
   color: #fff;
 }
@@ -15092,7 +16016,7 @@ body.pm-a11y-reduce-motion .pm-week-calendar * {
 }
 .pm-simple-dose-calendar__filters button.active {
   background: #eaf3ff;
-  border-color: #1769f5;
+  border-color: #578EF5;
   color: #1558c9;
   box-shadow: none;
 }
@@ -15126,7 +16050,7 @@ body.pm-a11y-reduce-motion .pm-week-calendar * {
   align-items: center;
   background: #fff;
   border: 1px solid #e0e8f2;
-  border-left: 4px solid #1769f5;
+  border-left: 4px solid #578EF5;
   border-radius: 12px;
   box-shadow: 0 5px 14px rgba(31, 63, 111, 0.07);
   display: grid;
@@ -15186,7 +16110,7 @@ body.pm-a11y-reduce-motion .pm-week-calendar * {
   padding: 14px;
 }
 .pm-generated-calendar .pm-wizard__planner-title small {
-  color: #1769f5;
+  color: #578EF5;
   font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.05em;
@@ -15259,7 +16183,7 @@ body.pm-a11y-reduce-motion .pm-week-calendar * {
   align-items: center;
   background: #fff;
   border: 1px solid #e0e8f2;
-  border-left: 4px solid #1769f5;
+  border-left: 4px solid #578EF5;
   border-radius: 12px;
   box-shadow: 0 5px 14px rgba(31, 63, 111, 0.07);
   display: grid;
@@ -15348,7 +16272,7 @@ body.pm-a11y-reduce-motion .pm-week-calendar * {
   align-items: center;
   background: #eaf3ff;
   border-radius: 10px;
-  color: #1769f5;
+  color: #578EF5;
   display: flex;
   height: 38px;
   justify-content: center;
@@ -15398,7 +16322,7 @@ body.pm-a11y-reduce-motion .pm-week-calendar * {
 .pm-wizard__medicine-panel .pm-wizard__medicine-actions button {
   align-items: center;
   background: #fff;
-  border: 1.5px solid #1769f5;
+  border: 1.5px solid #578EF5;
   border-radius: 10px;
   color: #0d5ed7;
   display: flex;
@@ -15431,7 +16355,7 @@ body.pm-a11y-reduce-motion .pm-week-calendar * {
 .pm-wizard__add-medicine-review {
   align-items: center;
   background: #fff;
-  border: 2px dashed #1769f5;
+  border: 2px dashed #578EF5;
   border-radius: 13px;
   color: #0d5ed7;
   display: flex;
@@ -15537,9 +16461,9 @@ body.pm-a11y-reduce-motion .pm-week-calendar * {
 /* Supporting controls shared by the calendar timeline. */
 .pm-simple-dose-calendar__show {
   background: #eef5ff !important;
-  border: 1.5px solid #1769f5 !important;
+  border: 1.5px solid #578EF5 !important;
   border-radius: 10px !important;
-  color: #1769f5 !important;
+  color: #578EF5 !important;
   font-size: 13px !important;
   font-weight: 800;
   min-height: 44px;
@@ -15565,7 +16489,7 @@ body.pm-a11y-reduce-motion .pm-week-calendar * {
   align-items: center;
   background: #eaf3ff;
   border-radius: 50%;
-  color: #1769f5;
+  color: #578EF5;
   display: flex;
   flex: 0 0 52px;
   height: 52px;
@@ -15600,7 +16524,7 @@ body.pm-a11y-reduce-motion .pm-week-calendar * {
   margin: 0 2px 12px;
 }
 .pm-wizard__review-page .pm-wizard__checked {
-  background: linear-gradient(135deg, #edf9f1, #f6fcf8);
+  background: #edf9f1;
   border: 1px solid #9ed9b2;
   border-left: 4px solid #198754;
   box-shadow: 0 4px 12px rgba(25, 135, 84, 0.06);
@@ -15690,10 +16614,12 @@ body.pm-a11y-reduce-motion .pm-week-calendar * {
 }
 .pm-confirm-backdrop {
   align-items: center;
-  background: rgba(14, 27, 43, 0.55);
+  background: transparent;
   display: flex;
   inset: 0;
   justify-content: center;
+  overflow: hidden;
+  overscroll-behavior: contain;
   padding: 20px;
   position: fixed;
   z-index: 1000;
@@ -15705,15 +16631,19 @@ body.pm-a11y-reduce-motion .pm-week-calendar * {
   box-shadow: 0 20px 50px rgba(14, 27, 43, 0.24);
   color: #172542;
   max-width: 380px;
+  max-height: calc(100dvh - 40px);
+  overflow: hidden;
   padding: 21px;
+  position: static;
   text-align: center;
+  transform: none;
   width: 100%;
 }
 .pm-confirm-dialog__icon {
   align-items: center;
   background: #eaf3ff;
   border-radius: 50%;
-  color: #1769f5;
+  color: #578EF5;
   display: flex;
   height: 48px;
   justify-content: center;
@@ -15753,9 +16683,52 @@ body.pm-a11y-reduce-motion .pm-week-calendar * {
   color: #344b6c;
 }
 .pm-confirm-dialog button.continue {
-  background: #1769f5;
-  border: 1.5px solid #1769f5;
+  background: #578EF5;
+  border: 1.5px solid #578EF5;
   color: #fff;
+}
+.pm-confirm-dialog--delete {
+  max-width: 320px;
+  padding: 1.15rem;
+}
+.pm-confirm-dialog--delete .pm-confirm-dialog__icon {
+  width: 42px;
+  height: 42px;
+  margin-bottom: 8px;
+  background: #fff0f0;
+  color: #c43c3c;
+}
+.pm-confirm-dialog--delete .pm-confirm-dialog__icon svg {
+  width: 20px;
+  height: 20px;
+}
+.pm-confirm-dialog--delete h2 { font-size: 1.05rem; }
+.pm-confirm-dialog--delete p { font-size: 0.84rem; margin: 6px 0 14px; }
+.pm-confirm-dialog--delete button { min-height: 44px; font-size: 0.84rem; }
+.pm-confirm-dialog--delete button.continue {
+  border-color: #578EF5;
+  background: #578EF5;
+}
+
+/* Patient card dialogs share one unobtrusive overlay treatment. Full-screen
+   viewers and side drawers deliberately keep their own layouts. */
+.pm-summary-modal-backdrop,
+.pm-log-success-backdrop,
+.pm-schedule-saved-backdrop,
+.pm-med-modal-backdrop,
+.pm-notification-modal-backdrop,
+.pm-history-modal-backdrop,
+.pm-caregiver-alert-backdrop,
+.pm-caregiver-confirm-backdrop {
+  align-items: center;
+  background: transparent !important;
+  backdrop-filter: none !important;
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  overflow: hidden;
+  overscroll-behavior: contain;
+  position: fixed;
 }
 
 /* Compact, calm reminder-time editor. */
@@ -15854,7 +16827,7 @@ body.pm-a11y-reduce-motion .pm-week-calendar * {
 }
 .pm-wizard__time-list > header span {
   align-items: center;
-  background: #1769f5;
+  background: #578EF5;
   border-radius: 999px;
   color: #fff;
   display: flex;
@@ -15921,8 +16894,8 @@ body.pm-a11y-reduce-motion .pm-week-calendar * {
   color: #344b6c;
 }
 .pm-wizard__edit-actions button.apply {
-  background: #1769f5;
-  border: 1.5px solid #1769f5;
+  background: #578EF5;
+  border: 1.5px solid #578EF5;
   color: #fff;
 }
 .pm-wizard__edit-actions button svg {
@@ -15936,7 +16909,7 @@ body.pm-a11y-reduce-motion .pm-week-calendar * {
   margin: 13px 0 15px;
 }
 .pm-wizard__review-page .pm-generated-calendar .pm-wizard__planner-title {
-  background: linear-gradient(135deg, #f7faff, #fff);
+  background: #f7faff;
   padding: 14px 13px 12px;
 }
 .pm-wizard__review-page .pm-generated-calendar__week {
@@ -15964,12 +16937,130 @@ body.pm-a11y-reduce-motion .pm-week-calendar * {
   padding: 5px 0;
 }
 .pm-wizard__review-page .pm-generated-calendar .pm-wizard__compact-schedule article > time {
-  font-size: 11px;
-  padding-top: 16px;
+  font-size: 13px;
+  padding-top: 17px;
 }
+.pm-product-copy .pm-product-stock--out {
+  background: #fff0f0;
+  color: #bd2636;
+}
+.pm-rx-pending-card {
+  align-items: center;
+  background: #eff9f3;
+  border: 1px solid #a9dfbd;
+  border-radius: 0.9rem;
+  color: #195c39;
+  display: grid;
+  gap: 0.7rem;
+  grid-template-columns: auto 1fr;
+  padding: 0.9rem;
+}
+.pm-rx-pending-card > span {
+  align-items: center;
+  background: #d9f3e2;
+  border-radius: 50%;
+  display: flex;
+  height: 2.65rem;
+  justify-content: center;
+  width: 2.65rem;
+}
+.pm-rx-pending-card strong { display: block; font-size: 0.9rem; }
+.pm-rx-pending-card p { color: #397255; font-size: 0.72rem; line-height: 1.4; margin: 0.18rem 0 0; }
+.pm-rx-pending-card > b {
+  background: #fff;
+  border: 1px solid #b6e2c4;
+  border-radius: 99px;
+  font-size: 0.62rem;
+  grid-column: 2;
+  justify-self: start;
+  padding: 0.25rem 0.5rem;
+}
+.pm-rx-pending-card > button {
+  grid-column: 1 / -1;
+  width: max-content;
+  min-height: 34px;
+  margin-top: 0.1rem;
+  padding: 0.4rem 0.75rem;
+  border: 1px solid #82c99b;
+  border-radius: 999px;
+  background: #fff;
+  color: #176b42;
+  font-size: 0.75rem;
+  font-weight: 800;
+}
+.pm-rx-upload-viewer {
+  position: fixed;
+  z-index: 80;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 1.25rem;
+  background: rgb(7 25 49 / 70%);
+}
+.pm-rx-upload-viewer > div {
+  width: min(100%, 620px);
+  max-height: min(90vh, 760px);
+  overflow: visible;
+  border-radius: 1.1rem;
+  background: #fff;
+  box-shadow: 0 22px 52px rgb(2 26 65 / 32%);
+}
+.pm-rx-upload-viewer header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem;
+  border-bottom: 1px solid #e4ebf6;
+}
+.pm-rx-upload-viewer header strong,
+.pm-rx-upload-viewer header small { display: block; }
+.pm-rx-upload-viewer header strong { color: #102446; }
+.pm-rx-upload-viewer header small { margin-top: 0.2rem; color: #62748a; font-size: 0.72rem; }
+.pm-rx-upload-viewer header button {
+  width: 34px;
+  height: 34px;
+  border: 1px solid #cbd9eb;
+  border-radius: 50%;
+  background: #fff;
+  color: #173e74;
+  font-size: 1.5rem;
+  line-height: 1;
+}
+.pm-rx-upload-viewer img { display: block; width: 100%; height: auto; }
+.pm-reminder-preview {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.85rem;
+  margin: 0.9rem 0 1rem;
+  padding: 1rem;
+  border: 1px solid #b9d4fb;
+  border-radius: 1rem;
+  background: #edf5ff;
+  color: #173a70;
+}
+.pm-reminder-preview > span {
+  display: grid;
+  width: 2.6rem;
+  height: 2.6rem;
+  place-items: center;
+  border-radius: 50%;
+  background: #578EF5;
+  color: #fff;
+}
+.pm-reminder-preview small,
+.pm-reminder-preview strong,
+.pm-reminder-preview p,
+.pm-reminder-preview time { display: block; }
+.pm-reminder-preview small { color: #3670c9; font-size: 0.62rem; font-weight: 850; letter-spacing: 0.07em; }
+.pm-reminder-preview strong { margin-top: 0.18rem; font-size: 0.9rem; }
+.pm-reminder-preview p { margin: 0.25rem 0; font-size: 0.78rem; line-height: 1.4; }
+.pm-reminder-preview time { color: #587292; font-size: 0.68rem; }
+.pm-reminder-preview.notification-type-dose_missed { border-color: #f1c4c9; background: #fff6f6; color: #8f2637; }
+.pm-reminder-preview.notification-type-dose_missed > span { background: #d34358; }
 .pm-wizard__review-page .pm-generated-calendar__event {
   border: 1px solid #dde6f1;
-  border-left: 4px solid #1769f5;
+  border-left: 4px solid #578EF5;
   box-shadow: 0 4px 12px rgba(28, 61, 108, 0.06);
   grid-template-columns: 34px minmax(0, 1fr);
   padding: 10px;
@@ -15979,16 +17070,70 @@ body.pm-a11y-reduce-motion .pm-week-calendar * {
   width: 34px;
 }
 .pm-wizard__review-page .pm-generated-calendar__event strong {
-  font-size: 14px;
+  font-size: 16px;
 }
 .pm-wizard__review-page .pm-generated-calendar__event small {
-  font-size: 12px;
+  font-size: 14px;
+  line-height: 1.45;
 }
 .pm-wizard__review-page .pm-wizard__why summary {
   background: #f1f6ff;
 }
 .pm-wizard__review-page .pm-wizard__review-actions {
   margin-top: 2px;
+}
+.pm-wizard__review-more {
+  border: 1px solid #c8daf1;
+  border-radius: 12px;
+  margin-top: 16px;
+  overflow: hidden;
+}
+.pm-wizard__review-more summary {
+  background: #f7faff;
+  color: #24558f;
+  cursor: pointer;
+  font-size: 15px;
+  font-weight: 800;
+  padding: 14px 16px;
+}
+.pm-wizard__review-more > div {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+}
+.pm-wizard__review-more button {
+  align-items: center;
+  background: #fff;
+  border: 1px solid #b7cde9;
+  border-radius: 10px;
+  color: #24558f;
+  display: flex;
+  font-size: 14px;
+  font-weight: 750;
+  gap: 8px;
+  min-height: 44px;
+  padding: 9px 12px;
+}
+.pm-wizard__prn-guide > div {
+  display: grid;
+  gap: 7px;
+}
+.pm-wizard__prn-guide .pm-wizard__prn-item {
+  background: rgba(255, 255, 255, 0.55);
+  border-radius: 10px;
+  display: grid;
+  gap: 3px;
+  padding: 8px 10px;
+}
+.pm-wizard__prn-guide .pm-wizard__prn-item b {
+  color: #5d4305;
+  font-size: 16px;
+}
+.pm-wizard__prn-guide .pm-wizard__prn-item span,
+.pm-wizard__prn-guide small {
+  color: #71530d;
+  font-size: 14px;
+  line-height: 1.4;
 }
 .pm-wizard__reference-warning {
   background: #fff8dc !important;
@@ -16023,7 +17168,7 @@ body.pm-a11y-reduce-motion .pm-week-calendar * {
 }
 .pm-wizard__details-panel,
 .pm-wizard__time-editor {
-  background: linear-gradient(180deg, #ffffff 0, #f8fbff 100%);
+  background: #ffffff;
   border: 1px solid #c7d9f0;
 }
 .pm-wizard__details-panel > h2,
@@ -16034,6 +17179,65 @@ body.pm-a11y-reduce-motion .pm-week-calendar * {
   color: #60718a;
   font-size: 14px;
   margin: 0 0 13px;
+}
+.pm-wizard__manual-date-range {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0 0 14px;
+}
+.pm-wizard__manual-date-range label {
+  color: #263a58;
+  display: grid;
+  font-size: 13px;
+  font-weight: 800;
+  gap: 6px;
+}
+.pm-wizard__manual-date-range input,
+.pm-wizard__manual-date-range select {
+  background: #f9fbff;
+  border: 1px solid #a9c8f3;
+  border-radius: 9px;
+  color: #172542;
+  font: inherit;
+  min-height: 42px;
+  padding: 8px 10px;
+  width: 100%;
+}
+.pm-wizard__manual-date-summary {
+  align-items: center;
+  background: #edf5ff;
+  border: 1px solid #c7dcf6;
+  border-radius: 12px;
+  color: #102b57;
+  display: flex;
+  gap: 10px;
+  margin: 0 0 13px;
+  padding: 10px 12px;
+}
+.pm-wizard__manual-date-summary > svg {
+  color: #578EF5;
+  flex: 0 0 auto;
+}
+.pm-wizard__manual-date-summary div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.pm-wizard__manual-date-summary span {
+  color: #60718a;
+  font-size: 13px;
+}
+.pm-wizard__manual-date-summary button {
+  background: transparent;
+  border: 0;
+  color: #2168c7;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  margin-left: auto;
+  padding: 5px;
+  white-space: nowrap;
 }
 .pm-wizard__time-list {
   background: #fff;
@@ -16046,7 +17250,7 @@ body.pm-a11y-reduce-motion .pm-week-calendar * {
 }
 .pm-wizard__time-list .pm-wizard__time-row input:focus {
   background: #fff;
-  border-color: #1769f5;
+  border-color: #578EF5;
   box-shadow: 0 0 0 3px rgba(23, 105, 245, 0.12);
   outline: 0;
 }
@@ -16094,8 +17298,8 @@ body.pm-a11y-reduce-motion .pm-week-calendar * {
   font-size: 14px;
 }
 .pm-wizard__day-editor label.selected {
-  background: #1769f5;
-  border-color: #1769f5;
+  background: #578EF5;
+  border-color: #578EF5;
   box-shadow: 0 4px 10px rgba(23, 105, 245, 0.22);
 }
 .pm-wizard__day-editor label.selected small,
@@ -16111,16 +17315,16 @@ body.pm-a11y-reduce-motion .pm-week-calendar * {
   gap: 14px;
 }
 .pm-ask-home-card {
-  background: linear-gradient(145deg, #fff, #f8fbff);
+  background: #fff;
   border: 1px solid #cbdcf1;
   border-radius: 16px;
   box-shadow: 0 7px 20px rgba(32, 74, 125, 0.07);
 }
 .pm-ask-home-options > .pm-ask-home-card:first-child {
-  border-top: 4px solid #1769f5;
+  border-top: 4px solid #578EF5;
 }
 .pm-ask-home-options > .pm-ask-home-card:first-child .pm-ask-home-icon {
-  background: #1769f5;
+  background: #578EF5;
   color: #fff;
 }
 .pm-ask-history-card {
@@ -16139,11 +17343,11 @@ body.pm-a11y-reduce-motion .pm-week-calendar * {
   padding: 0 11px;
 }
 .pm-conversation-search:focus-within {
-  border-color: #1769f5;
+  border-color: #578EF5;
   box-shadow: 0 0 0 3px rgba(23, 105, 245, 0.12);
 }
 .pm-conversation-search > svg {
-  color: #1769f5;
+  color: #578EF5;
   height: 20px;
   width: 20px;
 }
@@ -16160,7 +17364,7 @@ body.pm-a11y-reduce-motion .pm-week-calendar * {
   background: #edf4ff;
   border: 0;
   border-radius: 50%;
-  color: #1769f5;
+  color: #578EF5;
   display: flex;
   height: 32px;
   justify-content: center;
@@ -16202,7 +17406,7 @@ body.pm-a11y-reduce-motion .pm-week-calendar * {
   align-items: center;
   background: #e9f2ff;
   border-radius: 9px;
-  color: #1769f5;
+  color: #578EF5;
   display: flex;
   height: 34px;
   justify-content: center;
@@ -16220,6 +17424,536 @@ body.pm-a11y-reduce-motion .pm-week-calendar * {
 .pm-conversation-search-results button strong {
   font-size: 13px;
 }
+
+/* Ask a Pharmacist — calm, messages-first patient experience. */
+.pm-ask-page > header {
+  padding: 0.2rem 0 0.35rem;
+}
+.pm-ask-home-card--pharmacist {
+  align-items: center;
+  background: #f8fbff;
+  border: 1px solid #bcd4f6;
+  border-top: 4px solid #578EF5 !important;
+  display: grid;
+  gap: 0.8rem;
+  grid-template-columns: 4.75rem minmax(0, 1fr);
+  padding: 1rem;
+}
+.pm-ask-home-card--pharmacist .pm-ask-home-card__art {
+  align-self: start;
+  background: #eaf2ff;
+  border: 1px solid #c5daf8;
+  border-radius: 1.15rem;
+  grid-column: auto;
+  grid-row: 1;
+  height: 4.75rem;
+  justify-self: stretch;
+  margin: 0;
+  object-fit: contain;
+  padding: 0.25rem;
+  width: 4.75rem;
+}
+.pm-ask-home-card--pharmacist > div {
+  grid-column: auto;
+  grid-row: 1;
+  text-align: left;
+}
+.pm-ask-home-card--pharmacist h2 {
+  color: #172542;
+  font-size: 1.1rem;
+  line-height: 1.2;
+  margin: 0.14rem 0 0;
+}
+.pm-ask-home-card--pharmacist p {
+  font-size: 0.8rem;
+  line-height: 1.45;
+  margin-top: 0.28rem;
+}
+.pm-ask-home-card__eyebrow {
+  color: #578EF5;
+  font-size: 0.62rem;
+  font-weight: 850;
+  letter-spacing: 0.08em;
+}
+.pm-ask-home-card--pharmacist > .pm-ask-primary {
+  grid-column: 1 / -1;
+  margin-top: 0.1rem;
+}
+.pm-ask-history-card {
+  background: #fff;
+  border-top-color: #578ef5;
+}
+.pm-chat-shell {
+  border-color: #c6d9f3;
+  border-radius: 1.1rem;
+  box-shadow: 0 4px 14px rgba(30, 46, 74, 0.07);
+}
+.pm-chat-header {
+  background: #578EF5;
+  border-bottom: 0;
+  color: #fff;
+  padding: 0.85rem;
+}
+.pm-chat-header > button,
+.pm-chat-header strong,
+.pm-chat-header small {
+  color: #fff;
+}
+.pm-chat-header > b {
+  background: #fff;
+  color: #578EF5;
+}
+.pm-chat-header > button.pm-chat-search-button {
+  background: rgba(255, 255, 255, 0.18);
+  color: #fff;
+}
+.pm-chat-messages {
+  background: #f7faff;
+}
+.pm-chat-messages .mine span,
+.pm-chat-messages.premium .mine span {
+  background: #578EF5;
+  color: #fff;
+  box-shadow: none;
+}
+.pm-chat-messages .theirs span {
+  background: #fff;
+  border: 1px solid #e0e9f5;
+}
+
+/* Active pharmacist conversation — focused mobile messaging screen. */
+.pm-ask-page:has(.pm-chat-shell) {
+  background: #eef3f8;
+  margin: -1rem;
+  padding: 0;
+}
+.pm-ask-page:has(.pm-chat-shell) > header { display: none; }
+.pm-ask-page:has(.pm-chat-shell) .pm-chat-shell {
+  background: #eef3f8;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  display: flex;
+  flex-direction: column;
+  min-height: calc(100dvh - 4.5rem);
+}
+.pm-ask-page:has(.pm-chat-shell) .pm-chat-header {
+  background: #578ef5;
+  padding: 1rem;
+}
+.pm-ask-page:has(.pm-chat-shell) .pm-chat-header > b {
+  align-items: center;
+  display: flex;
+  height: 2.8rem;
+  justify-content: center;
+  width: 2.8rem;
+}
+.pm-ask-page:has(.pm-chat-shell) .pm-chat-header > b svg { height: 1.4rem; width: 1.4rem; }
+.pm-ask-page:has(.pm-chat-shell) .pm-chat-secure { display: none; }
+.pm-ask-page:has(.pm-chat-shell) .pm-chat-messages {
+  background: #eef3f8;
+  border-radius: 1.55rem 1.55rem 0 0;
+  gap: 0.9rem;
+  margin-top: -0.35rem;
+  flex: 1 1 auto;
+  max-height: none;
+  min-height: 0;
+  padding: 1.25rem 0.9rem;
+}
+.pm-ask-page:has(.pm-chat-shell) .pm-chat-messages span {
+  border: 0;
+  border-radius: 0.85rem;
+  font-size: 0.86rem;
+  line-height: 1.45;
+  max-width: 78%;
+  padding: 0.8rem 0.9rem;
+}
+.pm-ask-page:has(.pm-chat-shell) .pm-chat-messages .mine span,
+.pm-ask-page:has(.pm-chat-shell) .pm-chat-messages.premium .mine span {
+  background: #578ef5;
+  color: #fff;
+}
+.pm-ask-page:has(.pm-chat-shell) .pm-chat-messages .theirs span { background: #fff; }
+.pm-ask-page:has(.pm-chat-shell) .pm-chat-compose {
+  background: #eef3f8;
+  padding: 0.75rem 0.9rem 1rem;
+}
+.pm-ask-page:has(.pm-chat-shell) .pm-chat-compose input {
+  background: #fff;
+  border: 0;
+  border-radius: 999px;
+  min-height: 3rem;
+  padding: 0 1rem;
+}
+.pm-shop-cart-bar button strong { display: block; font-size: 0.75rem; line-height: 1.1; }
+.pm-ask-page:has(.pm-chat-shell) .pm-chat-compose button {
+  background: #578EF5;
+  border-radius: 50%;
+  min-width: 3rem;
+}
+
+/* Pharmacist message inbox on the Ask landing page. */
+.pm-ask-inbox {
+  background: #fff;
+  border: 0;
+  border-radius: 0;
+  margin-left: -1rem;
+  margin-right: -1rem;
+  margin-top: -1rem;
+  overflow: hidden;
+}
+.pm-ask-inbox__hero {
+  background: #578ef5;
+  border-radius: 0 0 1.55rem 1.55rem;
+  color: #fff;
+  display: grid;
+  gap: 0.8rem;
+  grid-template-columns: 1fr;
+  min-height: 0;
+  padding: 1.15rem 1.25rem;
+  position: relative;
+  overflow: hidden;
+}
+.pm-ask-inbox__hero::before,
+.pm-ask-inbox__hero::after {
+  background: #fff;
+  border-radius: 50%;
+  content: '';
+  height: 7.5rem;
+  opacity: 0.28;
+  position: absolute;
+  top: 0.8rem;
+  width: 7.5rem;
+}
+.pm-ask-inbox__hero::before {
+  box-shadow: 3.25rem 6.1rem 0 -2.35rem #fff, 8.5rem -1.15rem 0 -3.05rem #fff;
+  left: -5.2rem;
+}
+.pm-ask-inbox__hero::after {
+  box-shadow: -3.25rem 6.1rem 0 -2.35rem #fff, -8.5rem -1.15rem 0 -3.05rem #fff;
+  right: -5.2rem;
+}
+.pm-ask-inbox__hero > * { position: relative; z-index: 1; }
+.pm-ask-inbox__illustration {
+  align-self: center;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  grid-column: 1;
+  grid-row: 1;
+  height: min(20rem, 48vw);
+  justify-self: center;
+  object-fit: contain;
+  box-shadow: none;
+  padding: 0;
+  width: min(20rem, 48vw);
+}
+.pm-ask-inbox__side-art {
+  align-items: center;
+  background: #578EF5;
+  border-radius: 0.85rem 0.85rem 0.85rem 0.35rem;
+  color: #fff;
+  display: flex;
+  height: 2.7rem;
+  justify-content: center;
+  position: absolute !important;
+  top: 3.4rem;
+  width: 2.7rem;
+}
+.pm-ask-inbox__illustration ~ .pm-ask-inbox__side-art { display: none; }
+.pm-ask-inbox__side-art svg { height: 1.35rem; width: 1.35rem; }
+.pm-ask-inbox__side-art--left { left: calc(50% - 6.55rem); transform: rotate(-8deg); }
+.pm-ask-inbox__side-art--right { right: calc(50% - 6.55rem); transform: rotate(8deg); }
+.pm-ask-inbox__hero > div {
+  align-self: center;
+  display: grid;
+  gap: 0.16rem;
+  grid-column: 1;
+  grid-row: 3;
+  justify-self: center;
+  max-width: 22rem;
+  text-align: center;
+}
+.pm-ask-inbox__hero > div > strong {
+  color: #fff;
+  font-size: 1.28rem;
+  letter-spacing: -0.025em;
+}
+.pm-ask-inbox__hero p {
+  color: #fff;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  margin: 0;
+}
+.pm-ask-inbox__ask-button {
+  background: #fff;
+  border: 1px solid #fff;
+  border-radius: 0.72rem;
+  color: #578EF5;
+  font-weight: 850;
+  grid-column: 1 / -1;
+  grid-row: 2;
+  margin-top: 0;
+  font-size: 0.92rem;
+  min-height: 3.15rem;
+  position: relative;
+  transition: box-shadow 180ms ease, transform 180ms ease;
+  z-index: 3;
+}
+.pm-ask-inbox__ask-button:hover { box-shadow: 0 0.45rem 1rem rgba(18, 61, 140, 0.2); transform: translateY(-1px); }
+.pm-ask-inbox__ask-button.is-launching {
+  box-shadow: 0 0 0 0.25rem rgba(255, 255, 255, 0.32);
+  color: transparent;
+  pointer-events: none;
+  transform: scale(1.04);
+}
+.pm-ask-launch-transition {
+  background: #fff;
+  bottom: 0;
+  left: 0;
+  margin: 0;
+  pointer-events: none;
+  position: fixed;
+  right: 0;
+  top: 0;
+  transform-origin: 50% 22%;
+  will-change: opacity, transform;
+  z-index: 1000;
+  animation: pm-ask-launch-page 280ms cubic-bezier(0.2, 0.8, 0.25, 1) forwards;
+}
+@keyframes pm-ask-launch-page {
+  0% { border-radius: 1rem; opacity: 0.92; transform: scale(0.06, 0.045); }
+  65% { border-radius: 1.5rem; opacity: 1; transform: scale(1.04); }
+  100% { border-radius: 0; opacity: 1; transform: scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pm-ask-launch-transition { animation-duration: 1ms; }
+}
+.pm-ask-inbox__privacy-note {
+  align-items: flex-start;
+  color: #e7efff !important;
+  display: flex;
+  font-size: 0.72rem !important;
+  gap: 0.4rem;
+  grid-column: 1 / -1;
+  grid-row: 4;
+  line-height: 1.4 !important;
+  margin: 0 !important;
+}
+.pm-ask-inbox__privacy-note svg { flex: 0 0 auto; height: 1rem; margin-top: 0.02rem; width: 1rem; }
+.pm-ask-inbox__panel {
+  border: 0 !important;
+  border-radius: 0;
+  margin-top: 0;
+  padding: 0.95rem 1rem 0;
+  position: relative;
+}
+.pm-ask-inbox__panel {
+  background: #fff;
+  border: 0 !important;
+  border-radius: 0;
+  box-shadow: none;
+  padding: 0.95rem 1rem 0;
+  min-height: 19rem;
+}
+.pm-ask-inbox__tabs {
+  display: flex;
+  gap: 0.55rem;
+  margin-bottom: 0.8rem;
+}
+.pm-ask-inbox__tabs span {
+  background: #edf2f8;
+  border-radius: 999px;
+  color: #5c6b80;
+  font-size: 0.7rem;
+  font-weight: 750;
+  padding: 0.45rem 0.72rem;
+}
+.pm-ask-inbox__tabs .active {
+  background: #dfeaff;
+  color: #578EF5;
+}
+.pm-ask-inbox .pm-ask-home-options { gap: 0.75rem; }
+.pm-ask-inbox .pm-ask-home-card {
+  border-color: #d5e3f1;
+  border-radius: 0.9rem;
+  box-shadow: none;
+}
+.pm-ask-inbox .pm-ask-home-card--pharmacist {
+  background: #fff;
+  border-top-width: 1px !important;
+}
+.pm-ask-inbox .pm-ask-history-card {
+  background: transparent;
+  border: 0;
+  border-top: 0 !important;
+  border-radius: 0;
+  box-shadow: none;
+  padding: 0.35rem 0 0;
+}
+.pm-inbox-history-tabs {
+  align-items: center;
+  display: flex;
+  gap: 0.5rem;
+  grid-column: 1 / -1;
+  grid-row: 2;
+}
+.pm-inbox-history-tabs button {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-bottom: 3px solid transparent;
+  border-radius: 999px;
+  color: #627086;
+  display: inline-flex;
+  font-size: 0.86rem;
+  font-weight: 850;
+  gap: 0.38rem;
+  min-height: 2.5rem;
+  padding: 0 0.85rem;
+}
+.pm-inbox-history-tabs button.active {
+  background: transparent;
+  border-bottom-color: #578EF5;
+  color: #578EF5;
+}
+.pm-inbox-history-tabs svg { height: 1.05rem; width: 1.05rem; }
+.pm-ask-inbox .pm-ask-history-card {
+  grid-template-columns: 3rem minmax(0, 1fr);
+}
+.pm-ask-inbox .pm-conversation-search {
+  align-items: center;
+  background: #fff;
+  border: 1px solid #b8d2ee;
+  border-radius: 0.7rem;
+  display: grid;
+  grid-column: 1 / -1;
+  grid-row: 1;
+  height: auto;
+  justify-content: stretch;
+  min-height: 3.25rem;
+  position: relative;
+  width: 100%;
+}
+.pm-ask-inbox .pm-conversation-search > svg {
+  color: #172542;
+  height: 1.55rem;
+  width: 1.55rem;
+}
+.pm-ask-inbox .pm-conversation-search input {
+  height: 3rem;
+  opacity: 1;
+  padding: 0 0.45rem;
+  position: static;
+  width: 100%;
+}
+.pm-ask-inbox .pm-conversation-search button { display: flex; }
+.pm-ask-inbox .pm-conversation-search:focus-within {
+  border-color: #578EF5;
+}
+.pm-ask-inbox .pm-conversation-search:focus-within input {
+  height: 3rem;
+}
+.pm-ask-inbox .pm-inbox-history-list {
+  grid-column: 1 / -1;
+  grid-row: 3;
+}
+.pm-ask-inbox .pm-conversation-search {
+  background: #f4f8ff;
+  border: 1px solid #d8e5f5;
+  border-radius: 0.9rem;
+  box-shadow: 0 0.4rem 1rem rgba(35, 115, 244, 0.06);
+  min-height: 3.5rem;
+  padding: 0 0.7rem;
+}
+.pm-ask-inbox .pm-conversation-search input {
+  font-size: 0.9rem;
+  padding-left: 0.65rem;
+}
+.pm-ask-inbox .pm-conversation-search > svg {
+  background: #fff;
+  border-radius: 0.7rem;
+  box-shadow: 0 0.15rem 0.45rem rgba(35, 115, 244, 0.1);
+  color: #578EF5;
+  height: 2.1rem;
+  padding: 0.5rem;
+  width: 2.1rem;
+}
+.pm-ask-inbox .pm-conversation-search:focus-within {
+  background: #fff;
+  border-color: #578ef5;
+  box-shadow: 0 0 0 0.22rem rgba(87, 142, 245, 0.14);
+}
+.pm-inbox-history-list {
+  border-top: 0;
+  display: grid;
+  gap: 0.15rem;
+  grid-column: 1 / -1;
+  margin-top: 0.35rem;
+  padding-top: 0.5rem;
+}
+.pm-inbox-history-list__label {
+  color: #1e2e4a;
+  font-size: 0.9rem;
+  font-weight: 850;
+  margin: 0 0 0.25rem;
+}
+.pm-inbox-history-row {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 0.65rem;
+  color: #1e2e4a;
+  display: grid;
+  gap: 0.62rem;
+  grid-template-columns: 3rem minmax(0, 1fr) auto;
+  min-height: 4.1rem;
+  padding: 0.45rem;
+  text-align: left;
+  width: 100%;
+}
+.pm-inbox-history-row:hover { background: #f3f7ff; }
+.pm-inbox-history-row__icon {
+  align-items: center;
+  background: #eaf2ff;
+  border-radius: 50%;
+  color: #578EF5;
+  display: flex;
+  height: 2.75rem;
+  justify-content: center;
+  width: 2.75rem;
+}
+.pm-inbox-history-row__icon svg { height: 1.3rem; width: 1.3rem; }
+.pm-inbox-history-row > span:nth-child(2) { display: grid; gap: 0.12rem; min-width: 0; }
+.pm-inbox-history-row strong { font-size: 0.9rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pm-inbox-history-row small { color: #65758b; font-size: 0.78rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pm-inbox-history-row time { color: #75849a; font-size: 0.7rem; }
+.pm-inbox-history-list__empty { color: #65758b; font-size: 0.75rem; line-height: 1.45; margin: 0.3rem 0; text-align: center; }
+.pm-inbox-history-empty {
+  align-items: center;
+  border: 1px solid #d7e3f1;
+  border-radius: 1rem;
+  color: #52627a;
+  display: grid;
+  gap: 0.35rem;
+  justify-items: center;
+  margin: 0.35rem 0;
+  padding: 1.5rem 1rem;
+  text-align: center;
+}
+.pm-inbox-history-empty > span {
+  align-items: center;
+  background: #edf4ff;
+  border-radius: 50%;
+  color: #578EF5;
+  display: flex;
+  height: 2.4rem;
+  justify-content: center;
+  width: 2.4rem;
+}
+.pm-inbox-history-empty svg { height: 1.25rem; width: 1.25rem; }
+.pm-inbox-history-empty strong { color: #344866; font-size: 0.92rem; }
+.pm-inbox-history-empty p { font-size: 0.76rem; line-height: 1.45; margin: 0; max-width: 17rem; }
 .pm-conversation-search-results button small {
   color: #60718a;
   font-size: 12px;
@@ -16229,7 +17963,7 @@ body.pm-a11y-reduce-motion .pm-week-calendar * {
 }
 
 .pm-chat-header {
-  background: linear-gradient(135deg, #f7faff, #fff);
+  background: #f7faff;
   grid-template-columns: auto auto minmax(0, 1fr) auto;
 }
 .pm-chat-header > button.pm-chat-search-button,
@@ -16238,7 +17972,7 @@ body.pm-a11y-reduce-motion .pm-week-calendar * {
   background: #edf4ff;
   border: 1px solid #c4d8f2;
   border-radius: 10px;
-  color: #1769f5;
+  color: #578EF5;
   display: flex;
   height: 42px;
   justify-content: center;
@@ -16263,11 +17997,11 @@ body.pm-a11y-reduce-motion .pm-week-calendar * {
   padding: 0 10px;
 }
 .pm-chat-inline-search:focus-within {
-  border-color: #1769f5;
+  border-color: #578EF5;
   box-shadow: 0 0 0 3px rgba(23, 105, 245, 0.11);
 }
 .pm-chat-inline-search > svg {
-  color: #1769f5;
+  color: #578EF5;
   height: 19px;
   width: 19px;
 }
@@ -16282,7 +18016,7 @@ body.pm-a11y-reduce-motion .pm-week-calendar * {
   align-items: center;
   background: transparent;
   border: 0;
-  color: #1769f5;
+  color: #578EF5;
   display: flex;
   height: 34px;
   justify-content: center;
@@ -16381,7 +18115,7 @@ body.pm-a11y-reduce-motion .pm-week-calendar * {
   align-items: center;
   background: #eaf3ff;
   border-radius: 10px;
-  color: #1769f5;
+  color: #578EF5;
   display: flex;
   height: 42px;
   justify-content: center;
@@ -16405,11 +18139,11 @@ body.pm-a11y-reduce-motion .pm-week-calendar * {
 }
 .pm-chat-type-choice > button.selected {
   background: #edf5ff;
-  border-color: #1769f5;
+  border-color: #578EF5;
   box-shadow: 0 0 0 3px rgba(23, 105, 245, 0.1);
 }
 .pm-chat-type-choice > button.selected > span {
-  background: #1769f5;
+  background: #578EF5;
   color: #fff;
 }
 .pm-chat-type-choice > button.priority > span {
@@ -16432,9 +18166,9 @@ body.pm-a11y-reduce-motion .pm-week-calendar * {
 }
 
 .pm-edit-medicine-summary {
-  background: linear-gradient(135deg, #edf5ff, #fff);
+  background: #edf5ff;
   border: 1px solid #bcd2ef;
-  border-left: 5px solid #1769f5;
+  border-left: 5px solid #578EF5;
   border-radius: 16px;
   box-shadow: 0 7px 20px rgba(32, 74, 125, 0.07);
   margin-bottom: 13px;
@@ -16449,7 +18183,7 @@ body.pm-a11y-reduce-motion .pm-week-calendar * {
 }
 .pm-edit-medicine-summary header > span {
   align-items: center;
-  background: #1769f5;
+  background: #578EF5;
   border-radius: 12px;
   color: #fff;
   display: flex;
@@ -16462,7 +18196,7 @@ body.pm-a11y-reduce-motion .pm-week-calendar * {
   width: 23px;
 }
 .pm-edit-medicine-summary header small {
-  color: #1769f5;
+  color: #578EF5;
   font-size: 11px;
   font-weight: 850;
   letter-spacing: 0.05em;
@@ -16532,7 +18266,7 @@ body.pm-a11y-reduce-motion .pm-week-calendar * {
 }
 .pm-wizard__date-picker > header {
   align-items: center;
-  background: linear-gradient(135deg, #edf5ff, #f9fbff);
+  background: #edf5ff;
   border-bottom: 1px solid #dce7f4;
   display: flex;
   justify-content: space-between;
@@ -16548,8 +18282,40 @@ body.pm-a11y-reduce-motion .pm-week-calendar * {
   margin: 0;
 }
 .pm-wizard__date-picker header strong {
-  color: #1769f5;
+  color: #578EF5;
   font-size: 13px;
+}
+.pm-date-picker__month-control {
+  align-items: center;
+  display: grid;
+  gap: 0.2rem;
+  grid-template-columns: 1.7rem minmax(0, 1fr) 1.7rem;
+}
+.pm-date-picker__month-control button {
+  align-items: center;
+  background: #fff;
+  border: 1px solid #bad2f4;
+  border-radius: 0.45rem;
+  color: #578EF5;
+  cursor: pointer;
+  display: flex;
+  font-size: 1.35rem;
+  height: 1.7rem;
+  justify-content: center;
+  line-height: 1;
+  padding: 0;
+}
+.pm-date-picker__month-control button:disabled { color: #b8c4d2; cursor: not-allowed; }
+.pm-date-picker__month-control select {
+  appearance: auto;
+  background: transparent;
+  border: 0;
+  color: #578EF5;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 800;
+  min-width: 0;
+  padding: 0.1rem;
 }
 .pm-wizard__date-picker header > small {
   background: #fff;
@@ -16581,6 +18347,7 @@ body.pm-a11y-reduce-motion .pm-week-calendar * {
   padding-bottom: 11px;
 }
 .pm-date-picker__days label,
+.pm-date-picker__days button,
 .pm-date-picker__days i {
   align-items: center;
   aspect-ratio: 1;
@@ -16597,18 +18364,79 @@ body.pm-a11y-reduce-motion .pm-week-calendar * {
   pointer-events: none;
   position: absolute;
 }
-.pm-date-picker__days label strong {
+.pm-date-picker__days label strong,
+.pm-date-picker__days button strong {
   color: #31435f;
   font-size: 13px;
 }
-.pm-date-picker__days label.selected {
-  background: #1769f5;
+.pm-date-picker__days label.selected,
+.pm-date-picker__days button.selected {
+  background: #578EF5;
   box-shadow: 0 4px 10px rgba(23, 105, 245, 0.25);
 }
-.pm-date-picker__days label.selected strong {
+.pm-date-picker__days label.selected strong,
+.pm-date-picker__days button.selected strong {
   color: #fff;
 }
+.pm-date-picker__days label.unavailable,
+.pm-date-picker__days button.unavailable { cursor: not-allowed; opacity: 0.28; }
 .pm-date-picker__days label:focus-within {
+  outline: 3px solid #bcd5fb;
+  outline-offset: 1px;
+}
+.pm-date-picker__days button:focus-visible {
+  outline: 3px solid #bcd5fb;
+  outline-offset: 1px;
+}
+.pm-treatment-calendar__nav {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  padding: 8px 12px 2px;
+}
+.pm-treatment-calendar__nav button {
+  align-items: center;
+  background: #fff;
+  border: 1px solid #c8daf1;
+  border-radius: 50%;
+  color: #578EF5;
+  display: inline-flex;
+  height: 32px;
+  justify-content: center;
+  padding: 0;
+  width: 32px;
+}
+.pm-treatment-calendar__nav button:disabled {
+  color: #aeb9c9;
+}
+.pm-treatment-calendar__nav span {
+  color: #526a89;
+  font-size: 13px;
+  font-weight: 700;
+}
+.pm-treatment-calendar .pm-date-picker__days button {
+  align-items: center;
+  aspect-ratio: 1;
+  background: transparent;
+  border: 0;
+  border-radius: 50%;
+  color: #31435f;
+  display: flex;
+  font-size: 14px;
+  font-weight: 800;
+  justify-content: center;
+  min-height: 35px;
+  padding: 0;
+}
+.pm-treatment-calendar .pm-date-picker__days button:disabled {
+  color: #c5cfda;
+}
+.pm-treatment-calendar .pm-date-picker__days button.selected {
+  background: #578EF5;
+  box-shadow: 0 4px 10px rgba(23, 105, 245, 0.25);
+  color: #fff;
+}
+.pm-treatment-calendar .pm-date-picker__days button:focus-visible {
   outline: 3px solid #bcd5fb;
   outline-offset: 1px;
 }
@@ -16652,7 +18480,7 @@ body.pm-a11y-reduce-motion .pm-week-calendar * {
 }
 .pm-chat-token-balance strong {
   align-items: center;
-  background: #1769f5;
+  background: #578EF5;
   border-radius: 999px;
   color: #fff;
   display: flex;
@@ -16814,12 +18642,12 @@ body.pm-a11y-reduce-motion .pm-week-calendar * {
 }
 .pm-friendly-time-picker:focus-within {
   background: #fff;
-  border-color: #1769f5;
+  border-color: #578EF5;
   box-shadow: 0 0 0 3px rgba(23, 105, 245, 0.12);
 }
 .pm-friendly-time-picker > span {
   align-items: center;
-  color: #1769f5;
+  color: #578EF5;
   display: flex;
   justify-content: center;
 }
@@ -16827,7 +18655,8 @@ body.pm-a11y-reduce-motion .pm-week-calendar * {
   height: 18px;
   width: 18px;
 }
-.pm-friendly-time-picker select {
+.pm-friendly-time-picker select,
+.pm-friendly-time-picker input {
   appearance: none;
   background: #fff;
   border: 1px solid #d0def0;
@@ -16840,8 +18669,8 @@ body.pm-a11y-reduce-motion .pm-week-calendar * {
   text-align: center;
 }
 .pm-friendly-time-picker select.period {
-  background: #1769f5;
-  border-color: #1769f5;
+  background: #578EF5;
+  border-color: #578EF5;
   color: #fff;
 }
 .pm-friendly-time-picker b {
@@ -16902,7 +18731,7 @@ body.pm-a11y-reduce-motion .pm-week-calendar * {
 }
 .pm-home .pm-simple-dose-calendar .pm-week-calendar__dose-list article::after {
   background: #fff;
-  border: 2px solid #1769f5;
+  border: 2px solid #578EF5;
   border-radius: 50%;
   content: '';
   height: 9px;
@@ -16924,9 +18753,9 @@ body.pm-a11y-reduce-motion .pm-week-calendar * {
   padding-top: 20px;
 }
 .pm-home .pm-simple-dose-calendar .pm-week-calendar__event {
-  background: linear-gradient(135deg, #f5f9ff, #fff);
+  background: #f5f9ff;
   border: 1px solid #cbdcf1;
-  border-left: 4px solid #1769f5;
+  border-left: 4px solid #578EF5;
   border-radius: 12px;
   box-shadow: 0 4px 12px rgba(30, 76, 137, 0.06);
   gap: 8px;
@@ -16936,7 +18765,7 @@ body.pm-a11y-reduce-motion .pm-week-calendar * {
 .pm-home .pm-simple-dose-calendar .pm-week-calendar__medicine-icon {
   background: #e7f1ff;
   border-radius: 9px;
-  color: #1769f5;
+  color: #578EF5;
   height: 32px;
   width: 32px;
 }
@@ -16960,8 +18789,8 @@ body.pm-a11y-reduce-motion .pm-week-calendar * {
 }
 .pm-home .pm-simple-dose-calendar .pm-week-calendar__event > button {
   align-items: center;
-  background: #1769f5;
-  border: 1px solid #1769f5;
+  background: #578EF5;
+  border: 1px solid #578EF5;
   border-radius: 8px;
   color: #fff;
   display: inline-flex;
@@ -16977,7 +18806,7 @@ body.pm-a11y-reduce-motion .pm-week-calendar * {
 }
 .pm-home .pm-simple-dose-calendar__show {
   background: #f1f6ff !important;
-  border-color: #1769f5 !important;
+  border-color: #578EF5 !important;
   color: #1558c9 !important;
   margin: 7px 0 0 75px;
   min-height: 40px;
@@ -17014,6 +18843,41 @@ body.pm-a11y-reduce-motion .pm-week-calendar * {
 .pm-home .pm-voice-card__actions .pm-action-button {
   font-size: 12px;
   min-height: 40px;
+}
+.pm-home .pm-overdue-reminder {
+  background: #fff6f6 !important;
+  border-color: #ef8f8f !important;
+  box-shadow: 0 8px 22px rgba(220, 38, 38, 0.14) !important;
+}
+.pm-home .pm-overdue-reminder .pm-section-heading h2,
+.pm-home .pm-overdue-reminder .pm-section-heading h2 span,
+.pm-home .pm-overdue-reminder .pm-reminder h3 {
+  color: #9f1717 !important;
+}
+.pm-home .pm-overdue-reminder .pm-active-pill {
+  background: #fee2e2;
+  color: #b91c1c !important;
+}
+.pm-home .pm-overdue-reminder .pm-mic {
+  background: #dc2626 !important;
+  border-color: #fecaca !important;
+  box-shadow: 0 0 0 3px #fff1f1 !important;
+}
+.pm-home .pm-overdue-reminder .pm-reminder small {
+  color: #b45353;
+}
+.pm-home .pm-overdue-reminder .pm-reminder p {
+  color: #8b3a3a;
+}
+.pm-home .pm-overdue-reminder .pm-action-button {
+  background: #dc2626 !important;
+  border-color: #dc2626 !important;
+  color: #fff !important;
+}
+.pm-home .pm-overdue-reminder .pm-action-button--outline {
+  background: #fff !important;
+  border-color: #dc2626 !important;
+  color: #b91c1c !important;
 }
 @media (max-width: 360px) {
   .pm-home .pm-simple-dose-calendar .pm-week-calendar__dose-list article {
@@ -17065,10 +18929,10 @@ body.pm-a11y-reduce-motion .pm-week-calendar * {
 }
 .pm-calendar-planner .pm-modal-title > button:hover {
   background: #edf4ff;
-  color: #1769f5;
+  color: #578EF5;
 }
 .pm-calendar-planner__month {
-  background: linear-gradient(180deg, #f8fbff, #fff);
+  background: #f8fbff;
   border: 1px solid #cfdef1;
   border-radius: 15px;
   margin-top: 14px;
@@ -17084,7 +18948,7 @@ body.pm-a11y-reduce-motion .pm-week-calendar * {
   text-align: center;
 }
 .pm-calendar-planner__month header small {
-  color: #1769f5;
+  color: #578EF5;
   font-size: 10px;
   font-weight: 850;
   letter-spacing: 0.05em;
@@ -17100,7 +18964,7 @@ body.pm-a11y-reduce-motion .pm-week-calendar * {
   background: #fff;
   border: 1px solid #d6e3f2;
   border-radius: 10px;
-  color: #1769f5;
+  color: #578EF5;
   display: flex;
   height: 38px;
   justify-content: center;
@@ -17108,7 +18972,7 @@ body.pm-a11y-reduce-motion .pm-week-calendar * {
 }
 .pm-calendar-planner__month header button:hover {
   background: #eaf3ff;
-  border-color: #1769f5;
+  border-color: #578EF5;
 }
 .pm-calendar-planner__weekdays,
 .pm-calendar-planner__days {
@@ -17149,7 +19013,7 @@ body.pm-a11y-reduce-motion .pm-week-calendar * {
   background: #eaf3ff;
 }
 .pm-calendar-planner__days > button.selected {
-  background: #1769f5;
+  background: #578EF5;
   box-shadow: 0 5px 12px rgba(23, 105, 245, 0.25);
   color: #fff;
 }
@@ -17180,7 +19044,7 @@ body.pm-a11y-reduce-motion .pm-week-calendar * {
   margin-bottom: 8px;
 }
 .pm-calendar-planner .pm-calendar-day-detail header small {
-  color: #1769f5;
+  color: #578EF5;
   font-size: 10px;
   font-weight: 850;
   letter-spacing: 0.04em;
@@ -17194,7 +19058,7 @@ body.pm-a11y-reduce-motion .pm-week-calendar * {
   align-items: center;
   background: #eaf3ff;
   border-radius: 99px;
-  color: #1769f5;
+  color: #578EF5;
   display: flex;
   font-size: 12px;
   font-weight: 850;
@@ -17262,7 +19126,7 @@ body.pm-a11y-reduce-motion .pm-week-calendar * {
   width: 100%;
 }
 .pm-home .pm-simple-dose-calendar__jump--header:focus-within {
-  border-color: #1769f5;
+  border-color: #578EF5;
   box-shadow: 0 0 0 3px rgba(23, 105, 245, 0.12);
 }
 @media (max-width: 360px) {
@@ -17292,18 +19156,32 @@ body.pm-a11y-reduce-motion .pm-week-calendar * {
   overflow: visible;
   width: 100%;
 }
+.pm-home--calendar-expanded .pm-calendar-page {
+  margin: -1.45rem;
+  min-height: auto;
+  padding: 0;
+  background: #f5f9ff;
+}
+.pm-home--calendar-expanded .pm-calendar-page .pm-calendar-planner {
+  min-height: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+.pm-phone__scroll:has(.pm-home--calendar-expanded) .pm-global-patient-actions {
+  display: none;
+}
 .pm-calendar-page .pm-modal-title {
   border-bottom: 1px solid #dce6f2;
   padding-bottom: 12px;
 }
 .pm-calendar-page .pm-modal-title > button {
   background: #edf4ff;
-  color: #1769f5;
+  color: #578EF5;
   order: -1;
 }
 .pm-calendar-page .pm-calendar-planner .pm-modal-title {
   align-items: center;
-  border-bottom: 2px solid #1769f5;
+  border-bottom: 2px solid #578EF5;
   gap: 10px;
   padding: 8px 2px 14px;
 }
@@ -17344,6 +19222,112 @@ body.pm-a11y-reduce-motion .pm-week-calendar * {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Expanded home-calendar view: the blue calendar panel opens into a
+   full-page planner while retaining every filter and dose record. */
+.pm-calendar-page {
+  background: #eef9ff;
+  animation: pm-calendar-page-enter 300ms ease-out both;
+}
+.pm-calendar-page .pm-calendar-planner {
+  padding: 0;
+  border-radius: 1.5rem;
+  background: #578EF5;
+  box-shadow: 0 14px 30px rgba(28, 119, 171, 0.18);
+  overflow: hidden;
+}
+.pm-calendar-page .pm-calendar-planner .pm-modal-title {
+  padding: 1.25rem 1.15rem 0.8rem;
+  border: 0;
+  background: #578EF5;
+}
+.pm-calendar-page .pm-calendar-planner .pm-modal-title h2,
+.pm-calendar-page .pm-calendar-planner .pm-modal-title p {
+  color: #fff;
+}
+.pm-calendar-page .pm-modal-title > button {
+  border-color: #fff;
+  background: #fff;
+  color: #1769f5;
+}
+.pm-calendar-page .pm-calendar-planner__month {
+  margin: 0;
+  padding: 0.85rem 1.15rem 1rem;
+  border: 0;
+  border-radius: 0;
+  background: #578EF5;
+  box-shadow: none;
+}
+.pm-calendar-page .pm-calendar-planner__month header small,
+.pm-calendar-page .pm-calendar-planner__month header h3,
+.pm-calendar-page .pm-calendar-planner__weekdays span,
+.pm-calendar-page .pm-calendar-planner__days > button {
+  color: #fff;
+}
+.pm-calendar-page .pm-calendar-planner__month header button {
+  border-color: #c9f5ff;
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
+}
+.pm-calendar-page .pm-calendar-planner__month header button:hover,
+.pm-calendar-page .pm-calendar-planner__days > button:hover {
+  background: rgba(255, 255, 255, 0.22);
+}
+.pm-calendar-page .pm-calendar-planner__days > button.selected {
+  background: #fff;
+  color: #578EF5;
+  box-shadow: 0 5px 12px rgba(10, 89, 147, 0.25);
+}
+.pm-calendar-page .pm-calendar-planner__days button.selected i {
+  background: #578EF5;
+}
+.pm-calendar-page .pm-calendar-planner .pm-calendar-filters {
+  margin: 0;
+  padding: 0 1.15rem 1rem;
+}
+.pm-calendar-page .pm-calendar-planner .pm-calendar-filters button {
+  border-color: #c9f5ff;
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
+}
+.pm-calendar-page .pm-calendar-planner .pm-calendar-filters button.active {
+  border-color: #fff;
+  background: #fff;
+  color: #1769f5;
+}
+.pm-calendar-page .pm-calendar-planner .pm-calendar-filters button.active:nth-child(2) {
+  border-color: #d8ffc5;
+  background: #d8ffc5;
+  color: #1b5e32;
+}
+.pm-calendar-page .pm-calendar-planner .pm-calendar-filters button.active:nth-child(3) {
+  border-color: #fff0f0;
+  background: #fff0f0;
+  color: #a12c2c;
+}
+.pm-calendar-page .pm-calendar-day-detail {
+  margin-top: 0;
+  padding: 1.15rem;
+  border: 0;
+  border-radius: 1.35rem 1.35rem 0 0;
+  background: #fff;
+}
+.pm-calendar-page .pm-calendar-planner .pm-calendar-day-detail header small {
+  color: #1769f5;
+}
+.pm-calendar-page .pm-calendar-planner .pm-calendar-day-detail header > span {
+  background: #e9f8ff;
+  color: #1769f5;
+}
+@keyframes pm-calendar-page-enter {
+  from { opacity: 0; transform: translateY(14px) scale(0.985); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pm-calendar-page,
+  .pm-med-modal-backdrop,
+  .pm-med-modal-backdrop .pm-calendar-planner { animation: none; }
 }
 .pm-calendar-page .pm-dose-rows article > em {
   position: absolute;
@@ -17395,11 +19379,11 @@ body.pm-a11y-reduce-motion .pm-week-calendar * {
   border: 0;
   border-radius: 50%;
   background: #edf5ff;
-  color: #1769f5;
+  color: #578EF5;
   font-size: 1.4rem;
 }
 .pm-prescription-capture__header small {
-  color: #1769f5;
+  color: #578EF5;
   font-size: 0.65rem;
   font-weight: 850;
   letter-spacing: 0.08em;
@@ -17419,10 +19403,10 @@ body.pm-a11y-reduce-motion .pm-week-calendar * {
 }
 .pm-prescription-workspace {
   padding: 0.9rem;
-  border: 1px solid #d2e0f2;
+  border: 1px solid #d7e4f6;
   border-radius: 1.25rem;
   background: #fff;
-  box-shadow: 0 7px 22px rgba(27, 73, 132, 0.07);
+  box-shadow: none;
 }
 .pm-prescription-source-choice {
   display: grid;
@@ -17435,7 +19419,7 @@ body.pm-a11y-reduce-motion .pm-week-calendar * {
   gap: 0.7rem;
   padding: 0.75rem;
   border-radius: 1rem;
-  background: #eef6ff;
+  background: #f1f6ff;
 }
 .pm-prescription-source-choice__guide > span {
   display: grid;
@@ -17444,7 +19428,7 @@ body.pm-a11y-reduce-motion .pm-week-calendar * {
   place-items: center;
   border-radius: 0.85rem;
   background: #fff;
-  color: #1769f5;
+  color: #578EF5;
 }
 .pm-prescription-source-choice h2 {
   margin: 0;
@@ -17472,10 +19456,10 @@ body.pm-a11y-reduce-motion .pm-week-calendar * {
   text-align: left;
 }
 .pm-prescription-source--camera {
-  border-color: #1769f5;
-  background: #1769f5;
+  border-color: #578EF5;
+  background: #578EF5;
   color: #fff;
-  box-shadow: 0 7px 16px rgba(23, 105, 245, 0.22);
+  box-shadow: none;
 }
 .pm-prescription-source > svg {
   width: 27px;
@@ -17530,7 +19514,7 @@ body.pm-a11y-reduce-motion .pm-week-calendar * {
   background: #eef6ff;
 }
 .pm-prescription-file-summary > svg {
-  color: #1769f5;
+  color: #578EF5;
 }
 .pm-prescription-file-summary strong,
 .pm-prescription-file-summary small {
@@ -17556,6 +19540,11 @@ body.pm-a11y-reduce-motion .pm-week-calendar * {
   background: #fff;
   color: #526783;
 }
+.pm-prescription-canvas-wrap { position: relative; }
+.pm-prescription-canvas-tools { display: flex; gap: .35rem; position: absolute; right: .55rem; top: .55rem; }
+.pm-prescription-canvas-tools button { align-items: center; background: rgba(255,255,255,.94); border: 1px solid #d8e5f4; border-radius: .55rem; box-shadow: 0 3px 10px rgba(15,55,100,.14); color: #1558c9; display: inline-flex; height: 2.2rem; justify-content: center; width: 2.2rem; }
+.pm-prescription-canvas-tools button:disabled { color: #aebdce; opacity: .78; }
+.pm-prescription-canvas-tools svg { height: 1.05rem; width: 1.05rem; }
 .pm-prescription-review-actions {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -17579,6 +19568,41 @@ body.pm-a11y-reduce-motion .pm-week-calendar * {
 .pm-prescription-review-actions svg {
   width: 17px;
 }
+.pm-prescription-review-actions button.is-active {
+  background: #578EF5;
+  border-color: #578EF5;
+  color: #fff;
+}
+.pm-prescription-review-actions button:last-child {
+  grid-column: 1 / -1;
+}
+.pm-prescription-redaction-guide {
+  align-items: flex-start;
+  background: #fff7e8;
+  border: 1px solid #f2c879;
+  border-radius: .75rem;
+  color: #704b08;
+  display: flex;
+  font-size: .7rem;
+  gap: .55rem;
+  line-height: 1.4;
+  margin: .7rem 0;
+  padding: .65rem .75rem;
+}
+.pm-prescription-redaction-guide svg { color: #bd7600; flex: 0 0 auto; margin-top: .05rem; }
+.pm-prescription-redaction-guide strong,
+.pm-prescription-redaction-guide span { display: block; }
+.pm-prescription-redaction-guide span { margin-top: .12rem; }
+.pm-prescription-full-preview { align-items: center; background: rgba(11, 26, 48, .8); display: flex; inset: 0; justify-content: center; padding: 1rem; position: fixed; z-index: 2200; }
+.pm-prescription-full-preview section { background: #fff; border-radius: 1rem; max-height: 94dvh; max-width: min(96vw, 760px); overflow: auto; padding: .75rem; position: relative; }
+.pm-prescription-full-preview canvas { cursor: crosshair; display: block; height: auto; max-width: 100%; touch-action: none; }
+.pm-prescription-full-preview section > button:not(.pm-prescription-full-preview__pen) { align-items: center; background: #fff; border: 0; border-radius: 50%; box-shadow: 0 2px 10px rgba(0,0,0,.2); color: #173b70; display: inline-flex; height: 2.4rem; justify-content: center; position: sticky; float: right; top: 0; width: 2.4rem; z-index: 1; }
+.pm-prescription-full-preview__tools { bottom: .9rem; display: flex; gap: .55rem; left: 50%; position: absolute; transform: translateX(-50%); z-index: 2; }
+.pm-prescription-full-preview__tools button { align-items: center; background: #578EF5; border: 1px solid #578EF5; border-radius: .65rem; box-shadow: 0 3px 12px rgba(0,0,0,.2); color: #fff; display: inline-flex; float: none; font-size: .86rem; font-weight: 800; gap: .4rem; height: 2.75rem; justify-content: center; line-height: 1; min-height: 0; padding: 0 1rem; white-space: nowrap; width: auto; }
+.pm-prescription-full-preview__tools button:hover { background: #0f55cf; border-color: #0f55cf; }
+.pm-prescription-full-preview__tools button:focus-visible { outline: 3px solid #ffd45c; outline-offset: 2px; }
+.pm-prescription-full-preview__tools button:not(.is-active) { background: #1558c9; border-color: #1558c9; }
+.pm-prescription-full-preview__tools svg { height: 1.05rem; width: 1.05rem; }
 .pm-prescription-camera {
   position: fixed;
   z-index: 2000;
@@ -17614,7 +19638,7 @@ body.pm-a11y-reduce-motion .pm-week-calendar * {
   align-items: center;
   gap: 0.5rem;
   padding: max(1rem, env(safe-area-inset-top)) 1rem 1rem;
-  background: linear-gradient(#07101ecc, transparent);
+  background: #07101ecc;
   text-align: center;
 }
 .pm-prescription-camera button {
@@ -17700,7 +19724,7 @@ body.pm-a11y-reduce-motion .pm-week-calendar * {
   height: 58px;
   place-items: center;
   border-radius: 50%;
-  background: #1769f5;
+  background: #578EF5;
 }
 .pm-prescription-camera__status > span.is-loading {
   animation: pm-camera-pulse 1.25s ease-in-out infinite;
@@ -17723,7 +19747,7 @@ body.pm-a11y-reduce-motion .pm-week-calendar * {
   width: 100%;
   min-height: 48px;
   border-radius: 0.75rem;
-  background: #1769f5;
+  background: #578EF5;
   font-weight: 800;
 }
 @keyframes pm-camera-pulse {
@@ -17742,7 +19766,7 @@ body.pm-a11y-reduce-motion .pm-week-calendar * {
   align-items: center;
   justify-items: center;
   padding: 1rem 1.5rem max(1.5rem, env(safe-area-inset-bottom));
-  background: linear-gradient(transparent, #07101ee8);
+  background: #07101ee8;
 }
 .pm-prescription-camera .pm-prescription-camera__shutter {
   width: 76px;
@@ -17761,9 +19785,326 @@ body.pm-a11y-reduce-motion .pm-week-calendar * {
 .pm-home > .pm-home-calendar {
   margin-top: 12px;
 }
+.pm-friendly-time-picker input { min-width: 0; }
+.pm-home-reminder-summary {
+  border: 1px solid #b9d4fb;
+  box-shadow: 0 8px 22px rgba(23, 105, 245, 0.08);
+}
+.pm-home-reminder-summary__link {
+  border: 0;
+  background: transparent;
+  color: #578EF5;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 5px 0;
+}
+.pm-home-reminder-summary__list { display: grid; gap: 8px; }
+.pm-home-reminder-summary__item {
+  align-items: center;
+  background: #f5f9ff;
+  border-radius: 12px;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 38px minmax(0, 1fr) auto;
+  padding: 10px;
+}
+.pm-home-reminder-summary__item.is-missed { background: #fff6f4; }
+.pm-home-reminder-summary__icon {
+  align-items: center;
+  background: #e5f0ff;
+  border-radius: 50%;
+  color: #578EF5;
+  display: flex;
+  height: 38px;
+  justify-content: center;
+  width: 38px;
+}
+.pm-home-reminder-summary__item.is-missed .pm-home-reminder-summary__icon { background: #ffe5e1; color: #c24532; }
+.pm-home-reminder-summary__item small,
+.pm-home-reminder-summary__item strong,
+.pm-home-reminder-summary__item p { display: block; margin: 0; }
+.pm-home-reminder-summary__item small { color: #63758b; font-size: 10px; font-weight: 800; text-transform: uppercase; }
+.pm-home-reminder-summary__item strong { color: #102b57; font-size: 13px; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pm-home-reminder-summary__item p { color: #63758b; font-size: 11px; font-weight: 650; margin-top: 1px; }
+.pm-home-reminder-summary__state { background: #e5f0ff; border-radius: 999px; color: #578EF5; font-size: 10px; font-weight: 850; padding: 5px 7px; white-space: nowrap; }
+.pm-home-reminder-summary__state.is-due { background: #fff0ce; color: #9b6500; }
+.pm-home-reminder-summary__state.is-missed { background: #ffe2de; color: #bf3c2b; }
+.pm-caregiver-voice-card__actions {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: 1fr 1fr;
+  margin-top: 10px;
+}
+.pm-caregiver-voice-card__actions .pm-action-button {
+  margin: 0;
+  min-height: 44px;
+}
+.pm-caregiver-voice-card__snooze {
+  align-items: center;
+  background: #f6f9fd;
+  border: 1px solid #d2deec;
+  border-radius: 10px;
+  color: #52657d;
+  display: inline-flex;
+  font-size: 12px;
+  font-weight: 750;
+  gap: 6px;
+  grid-column: 1 / -1;
+  justify-content: center;
+  min-height: 38px;
+}
+.pm-caregiver-voice-card__snooze:disabled,
+.pm-caregiver-voice-card__actions button:disabled { cursor: not-allowed; opacity: 0.52; }
 .pm-home-calendar .pm-medication-calendar-summary__result {
   padding: 10px;
 }
+.pm-home-calendar {
+  gap: 0;
+  padding: 0;
+  overflow: hidden;
+  border-color: #cfe0f5;
+  background: #fff;
+}
+.pm-home-calendar__planner {
+  display: grid;
+  gap: 0.65rem;
+  padding: 1rem;
+  background: #578ef5;
+  color: #fff;
+}
+.pm-home-calendar__planner > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+.pm-home-calendar__planner header small {
+  color: #e9f9ff;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.pm-home-calendar__planner h2 {
+  margin: 0.12rem 0 0;
+  color: #fff;
+  font-size: 1.16rem;
+}
+.pm-home-calendar__planner > header > button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 42px;
+  padding: 0 0.75rem;
+  border: 1px solid #fff;
+  border-radius: 0.8rem;
+  background: #fff;
+  color: #1769f5;
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+.pm-home-calendar__planner .pm-medication-calendar-summary__navigation strong,
+.pm-home-calendar__planner .pm-medication-calendar-summary__navigation button,
+.pm-home-calendar__planner .pm-medication-calendar-summary__week button,
+.pm-home-calendar__planner .pm-medication-calendar-summary__week small {
+  color: #fff;
+}
+.pm-home-calendar__weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  color: #dff8ff;
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-align: center;
+}
+.pm-home-calendar__planner .pm-medication-calendar-summary__week {
+  gap: 0.2rem;
+}
+.pm-home-calendar__planner .pm-medication-calendar-summary__week button,
+.pm-home-calendar__planner .pm-medication-calendar-summary__week > span {
+  min-height: 39px;
+  aspect-ratio: 1;
+}
+.pm-home-calendar__planner .pm-medication-calendar-summary__week small {
+  display: none;
+}
+.pm-home-calendar__planner .pm-medication-calendar-summary__week button.selected {
+  background: #fff;
+  color: #578ef5;
+  box-shadow: 0 5px 12px rgba(10, 89, 147, 0.25);
+}
+.pm-home-calendar__planner .pm-medication-calendar-summary__week button.selected small {
+  color: #578ef5;
+}
+.pm-home-calendar__planner .pm-medication-calendar-summary__filters button {
+  border-color: #c9f5ff;
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
+}
+.pm-home-calendar__planner .pm-medication-calendar-summary__filters button.active {
+  border-color: #fff;
+  background: #fff;
+  color: #1769f5;
+}
+.pm-home-calendar__planner .pm-medication-calendar-summary__filters button.active:nth-child(2) {
+  border-color: #d8ffc5;
+  background: #d8ffc5;
+  color: #1b5e32;
+}
+.pm-home-calendar__planner .pm-medication-calendar-summary__filters button.active:nth-child(3) {
+  border-color: #fff0f0;
+  background: #fff0f0;
+  color: #a12c2c;
+}
+.pm-home-calendar > .pm-medication-calendar-summary__date {
+  display: block;
+  padding: 0.95rem 1rem 0.2rem;
+  color: #1e2e4a;
+}
+
+/* The Medications-tab preview intentionally mirrors the Home calendar. */
+.pm-medications-calendar {
+  gap: 0;
+  padding: 0;
+  overflow: hidden;
+  border-color: #cfe0f5;
+  background: #fff;
+}
+.pm-medications-calendar__planner {
+  display: grid;
+  gap: 0.65rem;
+  padding: 1rem;
+  background: #578ef5;
+  color: #fff;
+}
+.pm-medications-calendar__planner > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  width: 100%;
+  min-height: 3.25rem;
+}
+.pm-medications-calendar__planner > header > div {
+  display: block;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.pm-medications-calendar__planner header small { display: block; color: #e9f9ff; }
+.pm-medications-calendar__planner h2 { display: block; color: #fff; white-space: nowrap; }
+.pm-medications-calendar__planner > header > button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  min-width: 0;
+  min-height: 2.35rem;
+  padding: 0 0.55rem;
+  border-radius: 0.8rem;
+  border-color: #fff;
+  background: #fff;
+  color: #1769f5;
+  font-size: 0.68rem;
+  white-space: nowrap;
+}
+.pm-medications-calendar__planner .pm-medication-calendar-summary__navigation strong,
+.pm-medications-calendar__planner .pm-medication-calendar-summary__navigation button,
+.pm-medications-calendar__planner .pm-medication-calendar-summary__week button,
+.pm-medications-calendar__planner .pm-medication-calendar-summary__week small { color: #fff; }
+.pm-medications-calendar__planner .pm-medication-calendar-summary__week button.selected {
+  background: #fff;
+  color: #578ef5;
+  box-shadow: 0 5px 12px rgba(10, 89, 147, 0.25);
+}
+.pm-medications-calendar__planner .pm-medication-calendar-summary__week button.selected small { color: #578ef5; }
+.pm-medications-calendar__planner .pm-medication-calendar-summary__filters button {
+  border-color: #c9f5ff;
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
+}
+.pm-medications-calendar__planner .pm-medication-calendar-summary__filters button.active {
+  border-color: #fff;
+  background: #fff;
+  color: #1769f5;
+}
+.pm-medications-calendar__planner .pm-medication-calendar-summary__filters button.active:nth-child(2) {
+  border-color: #d8ffc5;
+  background: #d8ffc5;
+  color: #1b5e32;
+}
+.pm-medications-calendar__planner .pm-medication-calendar-summary__filters button.active:nth-child(3) {
+  border-color: #fff0f0;
+  background: #fff0f0;
+  color: #a12c2c;
+}
+.pm-medications-calendar > .pm-medication-calendar-summary__date {
+  display: block;
+  padding: 0.95rem 1rem 0.2rem;
+  color: #1e2e4a;
+}
+
+/* Current Pharmate patient palette. */
+.pm-home-calendar__planner,
+.pm-medications-calendar__planner,
+.pm-calendar-page .pm-calendar-planner,
+.pm-calendar-page .pm-calendar-planner .pm-modal-title,
+.pm-calendar-page .pm-calendar-planner__month {
+  background: #578ef5;
+}
+.pm-phone .pm-bottomnav a.active,
+.pm-phone .pm-title,
+.pm-phone .pm-wizard__primary,
+.pm-phone .pm-wizard__method > button,
+.pm-phone .pm-confirm-dialog button.continue,
+.pm-phone .pm-action-button--primary,
+.pm-phone .pm-home__header h1 {
+  --pm-blue: #578EF5;
+}
+.pm-phone .pm-wizard__primary,
+.pm-phone .pm-action-button--primary,
+.pm-phone .pm-confirm-dialog button.continue,
+.pm-phone .pm-wizard__method.suggested > button {
+  border-color: #578EF5;
+  background: #578EF5;
+}
+.pm-phone .pm-bottomnav a.active,
+.pm-phone .pm-title,
+.pm-phone .pm-home__header h1 { color: #578EF5; }
+.pm-home-calendar__planner .pm-medication-calendar-summary__week button.selected,
+.pm-medications-calendar__planner .pm-medication-calendar-summary__week button.selected {
+  background: #fff;
+  color: #578ef5;
+}
+.pm-home-calendar__planner .pm-medication-calendar-summary__week button.selected small,
+.pm-medications-calendar__planner .pm-medication-calendar-summary__week button.selected small {
+  color: #578ef5;
+}
+.pm-calendar-page .pm-calendar-planner__days > button.selected,
+.pm-medication-calendar-summary__filters button.active {
+  background: #578ef5;
+}
+.pm-home-calendar__planner .pm-medication-calendar-summary__filters button.active,
+.pm-medications-calendar__planner .pm-medication-calendar-summary__filters button.active,
+.pm-calendar-page .pm-calendar-planner .pm-calendar-filters button.active {
+  color: #578ef5;
+}
+.pm-home-calendar__planner .pm-medication-calendar-summary__filters button.active:nth-child(2),
+.pm-medications-calendar__planner .pm-medication-calendar-summary__filters button.active:nth-child(2),
+.pm-calendar-page .pm-calendar-planner .pm-calendar-filters button.active:nth-child(2) {
+  border-color: #f2f7a0;
+  background: #f2f7a0;
+  color: #314619;
+}
+.pm-home-streak-card,
+.pm-home-streak-card__hero { background: #f2f7a0; }
+.pm-home-streak-card__hero > span { color: #578EF5; }
+.pm-home-streak-card__hero svg { fill: #578EF5; stroke: #578EF5; }
+.pm-home-calendar__planner > header > button,
+.pm-medications-calendar__planner > header > button { color: #578ef5; }
+.pm-home-calendar__planner .pm-medication-calendar-summary__filters button,
+.pm-medications-calendar__planner .pm-medication-calendar-summary__filters button,
+.pm-calendar-page .pm-calendar-planner__month header button { border-color: #C4F7CA; }
 .pm-home-calendar__doses {
   display: grid;
   gap: 9px;
@@ -17786,7 +20127,7 @@ body.pm-a11y-reduce-motion .pm-week-calendar * {
   place-items: center;
   border-radius: 50%;
   background: #eaf8ef;
-  color: #1769f5;
+  color: #578EF5;
 }
 .pm-home-calendar__doses article > div {
   min-width: 0;
@@ -17835,3 +20176,43 @@ body.pm-a11y-reduce-motion .pm-week-calendar * {
   background: #ffe9e9;
   color: #c92842;
 }
+@keyframes pm-streak-earned-in {
+  from { opacity: 0; transform: translateY(-8px) scale(.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes pm-streak-flame {
+  from { transform: scale(.92) translateY(1px); }
+  to { transform: scale(1.08) translateY(-1px); }
+}
+@keyframes pm-streak-spark {
+  0% { opacity: 0; transform: translateY(5px) scale(.5); }
+  35% { opacity: 1; }
+  100% { opacity: 0; transform: translateY(-14px) scale(1); }
+}
+
+/* Keep the dose reminder prominent while fitting comfortably above the fold. */
+.pm-compact-reminder {
+  gap: 0.55rem;
+  padding: 0.75rem;
+}
+.pm-compact-reminder__header h2 { font-size: 0.92rem; }
+.pm-compact-reminder__message {
+  gap: 0.85rem;
+  grid-template-columns: 5.4rem 1fr;
+  min-height: 5.7rem;
+}
+.pm-compact-reminder__voice {
+  border-width: 0.4rem;
+  box-shadow: 0 0 0 0.4rem #f1f6ff;
+  height: 4rem;
+  min-height: 4rem;
+  min-width: 4rem;
+  width: 4rem;
+}
+.pm-compact-reminder__voice svg { width: 1.8rem; height: 1.8rem; }
+.pm-compact-reminder__message strong { font-size: 0.94rem; line-height: 1.28; }
+.pm-compact-reminder__message strong span { font-size: 1.2rem; }
+.pm-compact-reminder__message small { font-size: 0.74rem; line-height: 1.35; margin-top: 0.25rem; }
+.pm-compact-reminder__wave { height: 1.25rem; }
+.pm-reminder-actions button { font-size: 0.88rem; gap: 0.4rem; min-height: 44px; }
+.pm-compact-reminder__hint { font-size: 0.68rem; }

@@ -15,5 +15,10 @@ tmp/
 /session_patch_*.patch
 /session_patch_call_*.txt
 
-# Runtime/test prescription uploads can contain sensitive patient data.
-/server/uploads/rx_*.png
+# Runtime/test prescription uploads can contain sensitive patient data. They
+# are application data, never source files, regardless of their extension.
+/server/uploads/**
+!/server/uploads/.gitkeep
+
+# Local process output. Deployment platforms collect logs independently.
+/server/runtime-server*.log

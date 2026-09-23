@@ -8,7 +8,11 @@ import {
   Flashlight,
   FlashlightOff,
   Image,
+  PencilLine,
   RotateCcw,
+  RotateCw,
+  Undo2,
+  Maximize2,
   SwitchCamera,
   X,
 } from 'lucide-react';
@@ -28,14 +32,27 @@ import { recordOcrEvaluation } from '../../lib/ocrTelemetry.js';
 // leaves the device.
 const MAX_W = 1000; // cap export width to keep uploads small while legible
 
+function friendlyUploadError(error) {
+  const message = String(error?.message || '');
+  if (/too large|size limit/i.test(message)) {
+    return 'This photo is too large. Please take a new photo from a little farther away, with all four corners visible.';
+  }
+  if (/dimensions|valid supported image|JPEG, PNG, or WebP/i.test(message)) {
+    return 'We could not safely read this photo. Please take a new clear photo of your prescription and try again.';
+  }
+  return 'We could not send your prescription. Your photo is still on this device. Please try again.';
+}
+
 export default function PrescriptionUpload() {
   const { language } = useLanguage();
   const tr = (english, filipino) => (language === 'fil' ? filipino : english);
   const { id } = useParams();
   const navigate = useNavigate();
   const canvasRef = useRef(null);
+  const fullCanvasRef = useRef(null);
   const imgRef = useRef(null);
   const boxesRef = useRef([]); // committed redaction boxes
+  const redoBoxesRef = useRef([]);
   const drawStart = useRef(null);
   const videoRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -50,21 +67,27 @@ export default function PrescriptionUpload() {
   const [ocrBusy, setOcrBusy] = useState(false);
   const [ocrError, setOcrError] = useState('');
   const [ocrScan, setOcrScan] = useState(null);
-  const [ocrReviewed, setOcrReviewed] = useState(false);
+  const [, setOcrReviewed] = useState(false);
   const ocrFirst = !id;
+  // This prescription upload is reviewed by a pharmacist; it never extracts
+  // or infers prescription details from the submitted photo.
+  const useOcr = false;
   const [medicineName, setMedicineName] = useState('');
   const [strength, setStrength] = useState('');
   const [medicineForm, setMedicineForm] = useState('Tablet');
-  const [frequency, setFrequency] = useState('once daily');
+  const [, setFrequency] = useState('once daily');
   const [prescribedQuantity, setPrescribedQuantity] = useState('');
-  const [drugMatches, setDrugMatches] = useState([]);
-  const [selectedDrug, setSelectedDrug] = useState(null);
+  const [, setDrugMatches] = useState([]);
+  const [selectedDrug] = useState(null);
   const [cameraOpen, setCameraOpen] = useState(false);
   const [cameraStarting, setCameraStarting] = useState(false);
   const [cameraFacing, setCameraFacing] = useState('environment');
   const [flashSupported, setFlashSupported] = useState(false);
   const [flashOn, setFlashOn] = useState(false);
   const [fileInfo, setFileInfo] = useState(null);
+  const [redactionMode, setRedactionMode] = useState(true);
+  const [fullPreview, setFullPreview] = useState(false);
+  const [, setRedactionVersion] = useState(0);
 
   function stopCamera() {
     cameraStreamRef.current?.getTracks().forEach((track) => track.stop());
@@ -161,8 +184,8 @@ export default function PrescriptionUpload() {
       size: Math.round((preview.length * 3) / 4),
       type: 'image/jpeg',
     });
-    loadPreview(preview);
-    await runOcr({ webPath: preview });
+    await loadPreview(preview);
+    if (useOcr) await runOcr({ webPath: preview });
   }
 
   async function chooseFile(event) {
@@ -170,17 +193,34 @@ export default function PrescriptionUpload() {
     event.target.value = '';
     if (!file) return;
     stopCamera();
-    if (!file.type.startsWith('image/')) {
+    const filename = file.name.toLowerCase();
+    const isSupportedImage =
+      file.type.startsWith('image/') || /\.(?:jpe?g|png|webp|heic|heif)$/i.test(filename);
+    if (!isSupportedImage) {
       setCameraError(
-        'PDF preview and OCR are not supported on this device. Upload a JPEG, PNG, or HEIC image.'
+        'Choose a prescription image (JPEG, PNG, WebP, HEIC, or HEIF). PDF files cannot be previewed or redacted here.'
       );
       return;
     }
+    if (file.size > 12 * 1024 * 1024) {
+      setCameraError('This image is too large to prepare on this device. Choose a photo smaller than 12 MB.');
+      return;
+    }
     const preview = URL.createObjectURL(file);
-    setFileInfo({ name: file.name, size: file.size, type: file.type });
-    setOcrReviewed(false);
-    loadPreview(preview);
-    await runOcr({ webPath: preview, file });
+    try {
+      await loadPreview(preview);
+      setFileInfo({ name: file.name, size: file.size, type: file.type || 'image' });
+      setOcrReviewed(false);
+      if (useOcr) await runOcr({ webPath: preview, file });
+    } catch (error) {
+      URL.revokeObjectURL(preview);
+      setHasImage(false);
+      setFileInfo(null);
+      setCameraError(
+        error?.message ||
+          'This image could not be opened. If it is a HEIC photo, convert it to JPEG or PNG and try again.'
+      );
+    }
   }
 
   function rotatePreview() {
@@ -198,6 +238,7 @@ export default function PrescriptionUpload() {
     canvas.getContext('2d').drawImage(copy, 0, 0);
     imgRef.current = canvas;
     boxesRef.current = [];
+    redoBoxesRef.current = [];
   }
 
   useEffect(() => {
@@ -273,19 +314,33 @@ export default function PrescriptionUpload() {
   }
 
   function loadPreview(source) {
-    const img = new Image();
-    img.onload = () => {
-      const scale = Math.min(1, MAX_W / img.naturalWidth);
-      const canvas = canvasRef.current;
-      canvas.width = Math.round(img.naturalWidth * scale);
-      canvas.height = Math.round(img.naturalHeight * scale);
-      imgRef.current = img;
-      boxesRef.current = [];
-      setHasImage(true);
-      setResult(null);
-      redraw();
-    };
-    img.src = source;
+    return new Promise((resolve, reject) => {
+      // `Image` is also imported above as a Lucide icon. Explicitly use the
+      // browser constructor so a selected prescription can be decoded safely.
+      const img = new window.Image();
+      img.onload = () => {
+        if (!img.naturalWidth || !img.naturalHeight) {
+          reject(new Error('The selected image is empty or unreadable.'));
+          return;
+        }
+        const scale = Math.min(1, MAX_W / img.naturalWidth);
+        const canvas = canvasRef.current;
+        canvas.width = Math.round(img.naturalWidth * scale);
+        canvas.height = Math.round(img.naturalHeight * scale);
+        imgRef.current = img;
+        boxesRef.current = [];
+        redoBoxesRef.current = [];
+        setHasImage(true);
+        setResult(null);
+        redraw();
+        resolve();
+      };
+      img.onerror = () =>
+        reject(
+          new Error('This image format cannot be opened in your browser. Try a JPEG or PNG image.')
+        );
+      img.src = source;
+    });
   }
 
   async function chooseImage(source) {
@@ -298,8 +353,8 @@ export default function PrescriptionUpload() {
       const preview =
         media.webPath || (media.thumbnail ? `data:image/jpeg;base64,${media.thumbnail}` : '');
       if (!preview) throw new Error('The selected image could not be opened.');
-      loadPreview(preview);
-      await runOcr(media);
+      await loadPreview(preview);
+      if (useOcr) await runOcr(media);
     } catch (error) {
       setCameraError(
         error?.message || 'Camera access was denied or unavailable. Check permission and try again.'
@@ -316,7 +371,7 @@ export default function PrescriptionUpload() {
   }
 
   function down(e) {
-    if (!hasImage) return;
+    if (!hasImage || !redactionMode) return;
     e.preventDefault();
     drawStart.current = pos(e);
   }
@@ -342,13 +397,74 @@ export default function PrescriptionUpload() {
       h: Math.abs(p.y - s.y),
     };
     drawStart.current = null;
-    if (box.w > 4 && box.h > 4) boxesRef.current.push(box);
+    if (box.w > 4 && box.h > 4) {
+      boxesRef.current.push(box);
+      redoBoxesRef.current = [];
+      setRedactionVersion((value) => value + 1);
+    }
     redraw();
   }
 
+  function redrawFull(preview) {
+    const canvas = fullCanvasRef.current;
+    const source = canvasRef.current;
+    if (!canvas || !source?.width) return;
+    canvas.width = source.width;
+    canvas.height = source.height;
+    const ctx = canvas.getContext('2d');
+    // Copy the visible editor canvas itself. This guarantees full view shows
+    // exactly the same image and blackout boxes the patient sees below.
+    ctx.drawImage(source, 0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#000';
+    if (preview) ctx.fillRect(preview.x, preview.y, preview.w, preview.h);
+  }
+
+  useEffect(() => {
+    if (!fullPreview) return undefined;
+    // The modal canvas only exists after this render, so draw on the next
+    // frame rather than risking a blank canvas during the mount.
+    const frame = requestAnimationFrame(() => redrawFull());
+    return () => cancelAnimationFrame(frame);
+  }, [fullPreview]);
+
   function undo() {
-    boxesRef.current.pop();
+    const box = boxesRef.current.pop();
+    if (box) redoBoxesRef.current.push(box);
+    setRedactionVersion((value) => value + 1);
     redraw();
+    if (fullPreview) redrawFull();
+  }
+
+  function redo() {
+    const box = redoBoxesRef.current.pop();
+    if (box) boxesRef.current.push(box);
+    setRedactionVersion((value) => value + 1);
+    redraw();
+    if (fullPreview) redrawFull();
+  }
+
+  function openFullPreview() {
+    setFullPreview(true);
+  }
+
+  function fullPos(event) {
+    const rect = fullCanvasRef.current.getBoundingClientRect();
+    const point = event.touches?.[0] ?? event;
+    return { x: (point.clientX - rect.left) * (fullCanvasRef.current.width / rect.width), y: (point.clientY - rect.top) * (fullCanvasRef.current.height / rect.height) };
+  }
+  function fullDown(event) { if (!redactionMode) return; event.preventDefault(); drawStart.current = fullPos(event); }
+  function fullMove(event) {
+    if (!drawStart.current) return;
+    const point = fullPos(event); const start = drawStart.current;
+    redrawFull({ x: Math.min(start.x, point.x), y: Math.min(start.y, point.y), w: Math.abs(point.x - start.x), h: Math.abs(point.y - start.y) });
+  }
+  function fullUp(event) {
+    if (!drawStart.current) return;
+    const point = fullPos(event); const start = drawStart.current;
+    const box = { x: Math.min(start.x, point.x), y: Math.min(start.y, point.y), w: Math.abs(point.x - start.x), h: Math.abs(point.y - start.y) };
+    drawStart.current = null;
+    if (box.w > 4 && box.h > 4) { boxesRef.current.push(box); redoBoxesRef.current = []; setRedactionVersion((value) => value + 1); }
+    redraw(); redrawFull();
   }
 
   async function submit() {
@@ -363,41 +479,10 @@ export default function PrescriptionUpload() {
       fd.append('prescribed_quantity', prescribedQuantity);
       let medicationId = id;
       if (ocrFirst) {
-        if (
-          !medicineName.trim() ||
-          !strength.trim() ||
-          !medicineForm ||
-          !frequency.trim() ||
-          !Number.isInteger(Number(prescribedQuantity)) ||
-          Number(prescribedQuantity) < 1
-        ) {
-          throw new Error(
-            'Review the medicine name, strength, form, frequency, and total prescribed quantity.'
-          );
-        }
-        if (!selectedDrug) {
-          throw new Error(
-            'Select the matching verified medicine from the suggestions before submitting.'
-          );
-        }
-        const created = await api('/api/patient/medications', {
-          method: 'POST',
-          body: {
-            drug_name: medicineName.trim(),
-            frequency: frequency.trim(),
-            source: 'RX_VALIDATED',
-            is_prn: false,
-            dosage_instruction: `${strength.trim()}, ${medicineForm}`,
-          },
-        });
-        if (created.data.status !== 'pending_validation') {
-          throw new Error(
-            'This OCR medicine name is not yet verified. Select or enter its full generic name before submitting.'
-          );
-        }
-        medicationId = created.data.id;
+        await apiUpload('/api/patient/prescriptions', fd);
+      } else {
+        await apiUpload(`/api/patient/medications/${medicationId}/prescription`, fd);
       }
-      await apiUpload(`/api/patient/medications/${medicationId}/prescription`, fd);
       if (ocrScan) {
         await recordOcrEvaluation(ocrScan, {
           name: medicineName,
@@ -407,11 +492,11 @@ export default function PrescriptionUpload() {
       }
       setResult({
         kind: 'success',
-        message: 'Prescription uploaded. This medicine is waiting for pharmacist approval.',
+        message: 'Prescription uploaded successfully. Your pharmacist will review it and notify you when it is ready.',
       });
-      setTimeout(() => navigate('/patient/medications'), 1500);
+      setTimeout(() => navigate(ocrFirst ? '/patient/shop?mode=rx' : '/patient/medications'), 1500);
     } catch (err) {
-      setResult({ kind: 'error', message: err.message });
+      setResult({ kind: 'error', message: friendlyUploadError(err) });
     } finally {
       setSubmitting(false);
     }
@@ -420,14 +505,12 @@ export default function PrescriptionUpload() {
   return (
     <main className="pm-prescription-capture">
       <header className="pm-prescription-capture__header">
-        <button onClick={() => navigate('/patient/medications')} aria-label="Back to medications">
+        <button onClick={() => navigate('/patient/shop')} aria-label="Back to pharmacy shop">
           ←
         </button>
         <div>
           <h1>
-            {ocrFirst
-              ? tr('Scan Prescription with OCR', 'I-scan ang Reseta gamit ang OCR')
-              : tr('Upload Prescription', 'Mag-upload ng Reseta')}
+            {tr('Upload Prescription', 'Mag-upload ng Reseta')}
           </h1>
         </div>
       </header>
@@ -446,15 +529,25 @@ export default function PrescriptionUpload() {
           }
         >
           {result.message}
+          {result.kind === 'error' && (
+            <button
+              type="button"
+              className="btn btn-outline-dark btn-lg ms-3"
+              onClick={() => fileInputRef.current?.click()}
+            >
+              {tr('Choose another photo', 'Pumili ng ibang larawan')}
+            </button>
+          )}
         </div>
       )}
 
       <section className="pm-prescription-workspace">
         <input
+          id="prescription-file"
           ref={fileInputRef}
           className="pm-prescription-file-input"
           type="file"
-          accept="image/jpeg,image/png,image/heic,image/heif,.jpg,.jpeg,.png,.heic,.heif"
+          accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.jpg,.jpeg,.png,.webp,.heic,.heif"
           onChange={chooseFile}
         />
         {!hasImage && (
@@ -467,8 +560,8 @@ export default function PrescriptionUpload() {
                 <h2>{tr('Add your prescription', 'Idagdag ang iyong reseta')}</h2>
                 <p>
                   {tr(
-                    'Use a bright, flat surface and include all four corners.',
-                    'Gumamit ng maliwanag at patag na lugar at isama ang apat na sulok.'
+                    'Use a bright, flat surface. Keep all four corners and the words easy to read.',
+                    'Gumamit ng maliwanag at patag na lugar. Isama ang apat na sulok at siguraduhing malinaw ang mga salita.'
                   )}
                 </p>
               </div>
@@ -491,11 +584,11 @@ export default function PrescriptionUpload() {
             >
               <FileUp />
               <span>
-                <strong>{tr('Upload Prescription', 'Mag-upload ng Reseta')}</strong>
+                <strong>{tr('Choose prescription image', 'Pumili ng larawan ng reseta')}</strong>
                 <small>
                   {tr(
-                    'Choose an image from files or gallery',
-                    'Pumili ng larawan sa files o gallery'
+                    'Choose an image, then review and submit it securely',
+                    'Pumili ng larawan, pagkatapos ay suriin at ipadala nang ligtas'
                   )}
                 </small>
               </span>
@@ -517,22 +610,23 @@ export default function PrescriptionUpload() {
 
         {cameraError && <div className="pm-banner pm-banner--warn mb-3">{cameraError}</div>}
 
-        <canvas
-          ref={canvasRef}
-          onMouseDown={down}
-          onMouseMove={move}
-          onMouseUp={up}
-          onTouchStart={down}
-          onTouchMove={move}
-          onTouchEnd={up}
-          style={{
-            width: '100%',
-            display: hasImage ? 'block' : 'none',
-            touchAction: 'none',
-            borderRadius: 8,
-            cursor: 'crosshair',
-          }}
-        />
+        <div className="pm-prescription-canvas-wrap" style={{ display: hasImage ? 'block' : 'none' }}>
+          <canvas
+            ref={canvasRef}
+            onMouseDown={down}
+            onMouseMove={move}
+            onMouseUp={up}
+            onTouchStart={down}
+            onTouchMove={move}
+            onTouchEnd={up}
+            style={{ width: '100%', display: 'block', touchAction: 'none', borderRadius: 8, cursor: 'crosshair' }}
+          />
+          <div className="pm-prescription-canvas-tools" aria-label="Prescription image controls">
+            <button aria-label="Undo redaction" disabled={!boxesRef.current.length} onClick={undo} type="button"><RotateCcw /></button>
+            <button aria-label="Redo redaction" disabled={!redoBoxesRef.current.length} onClick={redo} type="button"><RotateCw /></button>
+            <button aria-label="View prescription full screen" onClick={openFullPreview} type="button"><Maximize2 /></button>
+          </div>
+        </div>
 
         {hasImage && (
           <>
@@ -558,10 +652,24 @@ export default function PrescriptionUpload() {
                 </button>
               </div>
             )}
-            <p className="text-muted small mt-2 mb-2">Drag across the image to redact areas.</p>
+            <div className="pm-prescription-redaction-guide" role="status">
+              <PencilLine aria-hidden="true" size={18} />
+              <div>
+                <strong>{tr('Privacy pen: hide personal details', 'Privacy pen: itago ang personal na detalye')}</strong>
+                <span>{tr('Drag over names, addresses, phone numbers, or IDs. Blackout marks are permanent in the uploaded photo.', 'I-drag sa pangalan, address, numero, o ID. Permanenteng matatago ang mga marka sa ipinadalang larawan.')}</span>
+              </div>
+            </div>
             <div className="pm-prescription-review-actions">
-              <button className="btn btn-sm btn-outline-secondary" onClick={undo}>
-                Undo box
+              <button
+                aria-pressed={redactionMode}
+                className={redactionMode ? 'is-active' : ''}
+                onClick={() => setRedactionMode((active) => !active)}
+                type="button"
+              >
+                <PencilLine /> {redactionMode ? tr('Privacy pen on', 'Naka-on ang privacy pen') : tr('Use privacy pen', 'Gamitin ang privacy pen')}
+              </button>
+              <button className="btn btn-sm btn-outline-secondary" disabled={!boxesRef.current.length} onClick={undo} type="button">
+                <RotateCcw /> Undo box
               </button>
               <button type="button" onClick={rotatePreview}>
                 <RotateCcw /> Rotate
@@ -573,7 +681,28 @@ export default function PrescriptionUpload() {
                 <FileUp /> Upload another
               </button>
             </div>
-            <div className="pm-ocr-review mt-3">
+            {fullPreview && (
+              <div className="pm-prescription-full-preview" onClick={() => setFullPreview('')} role="presentation">
+                <section aria-label="Full prescription preview" aria-modal="true" onClick={(event) => event.stopPropagation()} role="dialog">
+                  <div className="pm-prescription-full-preview__tools" aria-label="Prescription privacy tools">
+                    <button
+                      aria-pressed={redactionMode}
+                      className={`pm-prescription-full-preview__pen${redactionMode ? ' is-active' : ''}`}
+                      onClick={() => setRedactionMode((active) => !active)}
+                      type="button"
+                    >
+                      <PencilLine /> {redactionMode ? 'Privacy pen on' : 'Use privacy pen'}
+                    </button>
+                    <button className="pm-prescription-full-preview__undo" onClick={undo} type="button">
+                      <Undo2 /> Undo
+                    </button>
+                  </div>
+                  <button aria-label="Close full prescription preview" onClick={() => setFullPreview('')} type="button"><X /></button>
+                  <canvas ref={fullCanvasRef} onMouseDown={fullDown} onMouseMove={fullMove} onMouseUp={fullUp} onTouchStart={fullDown} onTouchMove={fullMove} onTouchEnd={fullUp} />
+                </section>
+              </div>
+            )}
+            {useOcr && !ocrFirst && <div className="pm-ocr-review mt-3">
               <div className="d-flex justify-content-between align-items-center mb-1">
                 <strong>
                   {tr('Prescription text detected by OCR', 'Teksto ng reseta na nakita ng OCR')}
@@ -610,145 +739,18 @@ export default function PrescriptionUpload() {
                 This text helps create a provisional schedule. A pharmacist must review the
                 prescription and schedule before activation.
               </div>
-            </div>
+            </div>}
             {ocrFirst && (
-              <div className="border rounded p-3 mt-3 mb-3">
-                <strong className="d-block mb-2">
-                  {tr(
-                    'Confirm the OCR medicine details',
-                    'Kumpirmahin ang detalye ng gamot mula sa OCR'
-                  )}
-                </strong>
-                <label className="form-label">
-                  {tr('Verified medicine', 'Beripikadong gamot')}
-                </label>
-                <div className="position-relative mb-2">
-                  <input
-                    className="form-control"
-                    value={medicineName}
-                    onChange={(event) => {
-                      setMedicineName(event.target.value);
-                      setSelectedDrug(null);
-                      setOcrReviewed(false);
-                    }}
-                    placeholder="Search the verified medicine list"
-                    autoComplete="off"
-                  />
-                  {!selectedDrug && drugMatches.length > 0 && (
-                    <div
-                      className="pm-card position-absolute w-100 mt-1 p-1"
-                      style={{ zIndex: 10, maxHeight: 220, overflowY: 'auto' }}
-                    >
-                      {drugMatches.map((drug) => (
-                        <button
-                          type="button"
-                          key={drug.id}
-                          className="btn btn-sm w-100 text-start py-2"
-                          onClick={() => {
-                            setMedicineName(drug.generic_name);
-                            setSelectedDrug(drug);
-                            setDrugMatches([]);
-                          }}
-                        >
-                          <strong>{drug.generic_name}</strong>
-                          <span className="pm-pill pm-pill--pending ms-2">
-                            {drug.rx_class || 'Verified'}
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-                {selectedDrug ? (
-                  <div className="pm-banner pm-banner--success py-2 mb-2">
-                    ✓ Verified match selected: <strong>{selectedDrug.generic_name}</strong>
-                  </div>
-                ) : (
-                  <div className="form-text mb-2">
-                    Choose a result from the verified list. OCR text alone cannot activate a
-                    medicine.
-                  </div>
-                )}
-                <label className="form-label">{tr('Strength', 'Lakas')}</label>
-                <input
-                  className="form-control mb-2"
-                  value={strength}
-                  onChange={(event) => {
-                    setStrength(event.target.value);
-                    setOcrReviewed(false);
-                  }}
-                  placeholder="e.g., 500 mg"
-                />
-                <label className="form-label">{tr('Form', 'Uri')}</label>
-                <select
-                  className="form-select mb-2"
-                  value={medicineForm}
-                  onChange={(event) => {
-                    setMedicineForm(event.target.value);
-                    setOcrReviewed(false);
-                  }}
-                >
-                  <option>Tablet</option>
-                  <option>Capsule</option>
-                  <option>Syrup</option>
-                  <option>Oral Suspension</option>
-                  <option>Oral Solution</option>
-                  <option>Drops</option>
-                  <option>Cream</option>
-                  <option>Ointment</option>
-                  <option>Inhaler</option>
-                  <option>Injection</option>
-                </select>
-                <label className="form-label">
-                  {tr('Prescription frequency', 'Dalas ayon sa reseta')}
-                </label>
-                <input
-                  className="form-control"
-                  value={frequency}
-                  onChange={(event) => setFrequency(event.target.value)}
-                  placeholder="e.g., three times daily"
-                />
-                <label className="form-label mt-2">
-                  {tr('Total quantity prescribed', 'Kabuuang dami sa reseta')}
-                </label>
-                <input
-                  className="form-control"
-                  type="number"
-                  min="1"
-                  max="1000"
-                  inputMode="numeric"
-                  value={prescribedQuantity}
-                  onChange={(event) => {
-                    setPrescribedQuantity(event.target.value);
-                    setOcrReviewed(false);
-                  }}
-                  placeholder="e.g., 30 tablets"
-                />
-                <div className="form-text">
-                  OCR suggestions must be checked against the prescription. The pharmacist will
-                  validate them again.
-                </div>
-                <label className="form-check mt-3">
-                  <input
-                    className="form-check-input"
-                    type="checkbox"
-                    checked={ocrReviewed}
-                    disabled={ocrScan?.outcome === 'RECAPTURE_REQUIRED'}
-                    onChange={(event) => setOcrReviewed(event.target.checked)}
-                  />
-                  <span className="form-check-label">
-                    I checked the medicine name, strength, formulation, directions, and total
-                    quantity against the paper prescription.
-                  </span>
-                </label>
+              <div className="pm-banner pm-banner--info mt-3 mb-3">
+                Your pharmacist will review the medicine name, dose, directions, and safe reminder
+                schedule from this prescription.
               </div>
             )}
             <button
               className="pm-btn-primary"
               disabled={
                 submitting ||
-                (ocrFirst && !ocrReviewed) ||
-                ocrScan?.outcome === 'RECAPTURE_REQUIRED'
+                (useOcr && !ocrFirst && ocrScan?.outcome === 'RECAPTURE_REQUIRED')
               }
               onClick={submit}
             >
@@ -756,8 +758,8 @@ export default function PrescriptionUpload() {
                 ? tr('Submitting…', 'Ipinapadala…')
                 : ocrFirst
                   ? tr(
-                      'Submit Prescription & Suggested Schedule',
-                      'Ipadala ang Reseta at Iminungkahing Iskedyul'
+                      'Send Prescription to Pharmacist',
+                      'Ipadala ang Reseta sa Pharmacist'
                     )
                   : tr('Submit for verification', 'Ipadala para sa beripikasyon')}
             </button>

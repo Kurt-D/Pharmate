@@ -99,6 +99,16 @@ describe('POST /api/patient/schedule/confirm', () => {
   });
 
   test('deleting future reminders remains deleted when doses are fetched again', async () => {
+    // Keep this test independent of the wall clock: the earlier TID fixture
+    // can have no remaining dose later in the current day when the suite runs.
+    const medicines = await request(app).get('/api/patient/medications').set(auth());
+    const paracetamol = medicines.body.find((medicine) => /paracetamol/i.test(medicine.drug_name_raw));
+    await pool.execute(
+      `UPDATE medications
+       SET schedule_type='ONCE_DAILY', schedule_times=JSON_ARRAY('23:59')
+       WHERE id=?`,
+      [paracetamol.id]
+    );
     await request(app).post('/api/patient/schedule/confirm').set(auth());
     const before = await request(app).get('/api/patient/doses/today').set(auth());
     const scheduleIds = before.body
@@ -116,6 +126,12 @@ describe('POST /api/patient/schedule/confirm', () => {
 
     const after = await request(app).get('/api/patient/doses/today').set(auth());
     expect(after.body.filter((dose) => scheduleIds.includes(dose.schedule_id))).toEqual([]);
+    await pool.execute(
+      `UPDATE medications
+       SET schedule_type='THREE_TIMES_DAILY', schedule_times=JSON_ARRAY('08:00','16:00','00:00')
+       WHERE id=?`,
+      [paracetamol.id]
+    );
   });
 });
 
@@ -178,7 +194,7 @@ describe('POST /api/patient/schedule/confirm — adjusted layout re-validation',
     expect(res.body.violation.drug).toMatch(/paracetamol/i);
   });
 
-  test('a patient-created manual schedule is saved without generated-schedule rule validation', async () => {
+  test('a patient-created manual schedule saves the patient-selected times', async () => {
     const sched = await request(app).get('/api/patient/schedule').set(auth());
     const doses = toDoses(sched.body.slots);
     const end = new Date(`${sched.body.generation_date}T00:00:00Z`);

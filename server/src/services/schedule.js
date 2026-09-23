@@ -761,6 +761,10 @@ export async function confirmForPatient(
   const selectedIds = normalizedTargetIds.length
     ? normalizedTargetIds
     : [...new Set((adjusted || []).map((dose) => String(dose.medication_id)).filter(Boolean))];
+  // A manual schedule records the patient's own reminder choices. Suggested
+  // schedules alone are subject to the clinical-rule and spacing engine.
+  // Manual saves still validate patient ownership, clock values, treatment
+  // dates, and duplicate reminder instances below.
   if (!isManual) {
     const safetyProposal = await proposeForPatient(patientId, selectedIds);
     if (!safetyProposal.safety.can_save) {
@@ -774,11 +778,35 @@ export async function confirmForPatient(
   if (Array.isArray(adjusted) && adjusted.length > 0) {
     lookup = await loadLookup(patientId);
     const { byId, interactionMap } = lookup;
+    if (!isManual) {
+      // Validate same-medicine intervals only for engine-suggested layouts.
+      for (const [medicationId, doses] of Object.entries(
+        adjusted.reduce((groups, dose) => {
+          const key = String(dose.medication_id || '');
+          (groups[key] ||= []).push(dose);
+          return groups;
+        }, {})
+      )) {
+        const medicine = byId.get(medicationId);
+        const minimum = Math.round(Number(medicine?.minIntervalHours || 0) * 60);
+        if (!medicine || !minimum) continue;
+        for (let index = 0; index < doses.length; index += 1) {
+          for (let other = index + 1; other < doses.length; other += 1) {
+            if (Math.abs(doses[index].minute - doses[other].minute) < minimum) {
+              return {
+                error: 'invalid_layout',
+                violation: { drug: medicine.drugName, min_gap_hours: minimum / 60 },
+              };
+            }
+          }
+        }
+      }
+    }
     for (const dose of adjusted) {
       const m = byId.get(dose.medication_id);
       if (!m) return { error: 'unknown_medication' };
-      if (m.isPrn || m.scheduleType === 'AS_NEEDED') return { error: 'invalid_time' };
-      if (m.source !== 'OTC_SELF' && options.actorRole !== 'pharmacist') {
+      if (!isManual && (m.isPrn || m.scheduleType === 'AS_NEEDED')) return { error: 'invalid_time' };
+      if (!isManual && m.source !== 'OTC_SELF' && options.actorRole !== 'pharmacist') {
         const clock = `${String(Math.floor(dose.minute / 60) % 24).padStart(2, '0')}:${String(dose.minute % 60).padStart(2, '0')}`;
         if (!m.scheduleTimes.includes(clock)) return { error: 'prescription_review_required' };
       }
@@ -786,11 +814,10 @@ export async function confirmForPatient(
         return { error: 'invalid_time' };
       }
       if (isManual && dose.dates !== undefined) {
-        const allowedDates = new Set(treatmentDateKeys(m.startDate, m.endDate));
         if (
           !Array.isArray(dose.dates) ||
           !dose.dates.length ||
-          dose.dates.some((date) => !/^\d{4}-\d{2}-\d{2}$/.test(date) || !allowedDates.has(date))
+          dose.dates.some((date) => !/^\d{4}-\d{2}-\d{2}$/.test(date))
         ) {
           return { error: 'invalid_date' };
         }
@@ -874,8 +901,10 @@ export async function confirmForPatient(
   if (!slots.length) return { error: 'invalid_date' };
 
   lookup ||= await loadLookup(patientId);
-  const dailyLimit = validateDailyReminderLimits(slots, lookup.byId);
-  if (dailyLimit.error) return dailyLimit;
+  if (!isManual) {
+    const dailyLimit = validateDailyReminderLimits(slots, lookup.byId);
+    if (dailyLimit.error) return dailyLimit;
+  }
 
   const conn = await pool.getConnection();
   try {

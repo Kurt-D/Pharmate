@@ -28,7 +28,7 @@ async function audit(conn, photo, pharmacistId, eventType, reason = null) {
 
 async function lockedPhoto(conn, photoId) {
   const [[row]] = await conn.execute(
-    `SELECT pp.id, pp.status, pp.review_stage, pp.schedule_draft_json,
+    `SELECT pp.id, pp.status, pp.review_stage, pp.schedule_draft_json, pp.pharmacist_id,
             pp.medication_id, pp.redacted_path, pp.claimed_by,
             pp.claim_expires_at, m.patient_id, m.drug_name_raw
      FROM prescription_photos pp JOIN medications m ON m.id=pp.medication_id
@@ -82,6 +82,45 @@ export async function attachPhoto(patientId, medicationId, storedFilename, ocr =
   return { photoId, reviewStage: 'prescription', draft };
 }
 
+// A patient can submit a prescription photo without attempting to interpret its
+// medicine details. The pharmacist records the clinical details during review.
+export async function createPhotoOnlyPrescription(patientId, storedFilename) {
+  const medicationId = uuidv4();
+  const photoId = uuidv4();
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    await conn.execute(
+      `INSERT INTO medications
+         (id,patient_id,drug_name_raw,source,is_prn,dosage_instruction,status)
+       VALUES (?,?,?,'RX_VALIDATED',0,?,'pending_validation')`,
+      [
+        medicationId,
+        patientId,
+        'Prescription awaiting pharmacist review',
+        'Medicine details will be confirmed by the pharmacist.',
+      ]
+    );
+    await conn.execute(
+      `INSERT INTO prescription_photos
+         (id,medication_id,redacted_path,review_stage,status)
+       VALUES (?,?,?,'prescription','pending')`,
+      [photoId, medicationId, storedFilename]
+    );
+    await conn.execute('UPDATE medications SET prescription_photo_id=? WHERE id=?', [
+      photoId,
+      medicationId,
+    ]);
+    await conn.commit();
+    return { photoId, medicationId, reviewStage: 'prescription' };
+  } catch (error) {
+    await conn.rollback();
+    throw error;
+  } finally {
+    conn.release();
+  }
+}
+
 export async function pendingValidations(pharmacistId) {
   const [rows] = await pool.execute(
     `SELECT pp.id, pp.medication_id, pp.status, pp.created_at,
@@ -91,7 +130,8 @@ export async function pendingValidations(pharmacistId) {
               THEN pp.claim_expires_at ELSE NULL END AS claim_expires_at,
             pp.review_stage, pp.ocr_text, pp.ocr_confidence, pp.prescribed_quantity,
             pp.schedule_draft_json,
-            m.drug_name_raw, m.frequency, m.dosage_instruction, m.schedule_type,
+            m.drug_name_raw, m.strength_value, m.strength_unit, m.dosage_form_snapshot,
+            m.frequency, m.dosage_instruction, m.schedule_type,
             m.schedule_times, m.interval_hours, m.interval_start_time, m.schedule_days,
             m.schedule_status, m.start_date, m.end_date, p.patient_code
      FROM prescription_photos pp JOIN medications m ON m.id=pp.medication_id
@@ -102,6 +142,69 @@ export async function pendingValidations(pharmacistId) {
     [pharmacistId, pharmacistId, pharmacistId]
   );
   return rows;
+}
+
+/** Completed prescription reviews performed by the signed-in pharmacist.
+ * Patient names are deliberately excluded. The redacted upload remains available
+ * only to this reviewing pharmacist until its configured retention purge. */
+export async function completedValidations(pharmacistId) {
+  const [rows] = await pool.execute(
+    `SELECT pp.id, pp.status, pp.decision_reason, pp.decision_at, pp.review_stage,
+            m.drug_name_raw, m.strength_value, m.strength_unit, m.dosage_form_snapshot,
+            m.dosage_instruction,
+            p.patient_code
+       FROM prescription_photos pp
+       JOIN medications m ON m.id=pp.medication_id
+       JOIN patients p ON p.id=m.patient_id
+      WHERE pp.pharmacist_id=? AND pp.status IN ('approved','rejected','needs_clearer')
+      ORDER BY pp.decision_at DESC, pp.created_at DESC
+      LIMIT 50`,
+    [pharmacistId]
+  );
+  return rows;
+}
+
+export async function editCompletedValidation(pharmacistId, photoId, { status, reason, prescription = {} }) {
+  if (!['approved', 'rejected', 'needs_clearer'].includes(status)) return { error: 'bad_status' };
+  const cleanReason = String(reason || '').trim();
+  if (cleanReason.length > 500) return { error: 'reason_too_long' };
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const photo = await lockedPhoto(conn, photoId);
+    if (!photo || photo.pharmacist_id !== pharmacistId || photo.status === 'pending') {
+      await conn.rollback();
+      return { error: 'not_found' };
+    }
+    await conn.execute(
+      `UPDATE prescription_photos SET status=?, decision_reason=?, decision_at=NOW(3)
+        WHERE id=?`,
+      [status, cleanReason || null, photoId]
+    );
+    await conn.execute(
+      `UPDATE medications SET drug_name_raw=?, strength_value=?, strength_unit=?, dosage_form_snapshot=?, dosage_instruction=? WHERE id=?`,
+      [
+        String(prescription.medicine_name || photo.drug_name_raw).trim().slice(0, 150),
+        String(prescription.strength || '').trim() || null,
+        String(prescription.strength_unit || '').trim().slice(0, 24) || null,
+        String(prescription.dosage_form || '').trim().slice(0, 80) || null,
+        String(prescription.directions || '').trim().slice(0, 500) || null,
+        photo.medication_id,
+      ]
+    );
+    await conn.execute(
+      `UPDATE medications SET status=? WHERE id=?`,
+      [status === 'approved' ? 'active' : 'pending_validation', photo.medication_id]
+    );
+    await audit(conn, photo, pharmacistId, 'decision_edited', `Updated decision to ${status}${cleanReason ? ': ' + cleanReason : ''}`);
+    await conn.commit();
+    return { id: photoId, status, decision_reason: cleanReason || null };
+  } catch (error) {
+    await conn.rollback();
+    throw error;
+  } finally {
+    conn.release();
+  }
 }
 
 export async function approvePrescriptionForSchedule(pharmacistId, photoId) {
@@ -126,13 +229,13 @@ export async function approvePrescriptionForSchedule(pharmacistId, photoId) {
       return { error: 'wrong_stage' };
     }
     await conn.execute(
-      `UPDATE prescription_photos SET review_stage='schedule', claimed_by=?,
+      `UPDATE prescription_photos SET review_stage='order', claimed_by=?,
        claim_expires_at=DATE_ADD(NOW(3), INTERVAL ? MINUTE) WHERE id=?`,
       [pharmacistId, claimLeaseMinutes(), photoId]
     );
     await audit(conn, photo, pharmacistId, 'prescription_approved');
     await conn.commit();
-    return { status: 'pending', review_stage: 'schedule' };
+    return { status: 'pending', review_stage: 'order' };
   } catch (error) {
     await conn.rollback();
     throw error;
@@ -219,12 +322,30 @@ export async function releaseValidation(pharmacistId, photoId) {
 
 export async function photoFilePath(pharmacistId, photoId) {
   const [[row]] = await pool.execute(
-    'SELECT redacted_path, status, claimed_by, claim_expires_at FROM prescription_photos WHERE id=?',
+    'SELECT redacted_path, status, claimed_by, claim_expires_at, pharmacist_id FROM prescription_photos WHERE id=?',
     [photoId]
   );
   if (!row) return { error: 'not_found' };
-  if (row.status !== 'pending' || !row.redacted_path) return { error: 'not_available' };
-  if (!activeClaim(row) || row.claimed_by !== pharmacistId) return { error: 'not_owner' };
+  if (!row.redacted_path) return { error: 'not_available' };
+  const completedReview = ['approved', 'rejected', 'needs_clearer'].includes(row.status);
+  const hasPendingClaim = row.status === 'pending' && activeClaim(row) && row.claimed_by === pharmacistId;
+  const ownsCompletedReview = completedReview && row.pharmacist_id === pharmacistId;
+  if (!hasPendingClaim && !ownsCompletedReview) return { error: 'not_owner' };
+  const abs = path.resolve(UPLOADS_DIR, path.basename(row.redacted_path));
+  return abs.startsWith(UPLOADS_DIR) ? { path: abs } : { error: 'not_available' };
+}
+
+// Patients may review only their own redacted upload. The raw source image is
+// never stored on the server, and the file remains subject to the normal purge policy.
+export async function patientPhotoFilePath(patientId, photoId) {
+  const [[row]] = await pool.execute(
+    `SELECT pp.redacted_path
+     FROM prescription_photos pp
+     JOIN medications m ON m.id = pp.medication_id
+     WHERE pp.id = ? AND m.patient_id = ?`,
+    [photoId, patientId]
+  );
+  if (!row?.redacted_path) return { error: 'not_available' };
   const abs = path.resolve(UPLOADS_DIR, path.basename(row.redacted_path));
   return abs.startsWith(UPLOADS_DIR) ? { path: abs } : { error: 'not_available' };
 }
@@ -270,6 +391,28 @@ export async function decideValidation(pharmacistId, photoId, action, reason, op
     const status = { approve: 'approved', reject: 'rejected', needs_clearer: 'needs_clearer' }[
       action
     ];
+    if (action === 'approve' && options.prescription) {
+      const prescription = options.prescription;
+      await conn.execute(
+        `UPDATE medications
+         SET drug_name_raw=?, strength_value=?, strength_unit=?, dosage_form_snapshot=?,
+             dosage_instruction=?, label_direction=?
+         WHERE id=?`,
+        [
+          prescription.medicine_name,
+          prescription.strength || null,
+          prescription.strength_unit || null,
+          prescription.dosage_form || null,
+          prescription.directions || null,
+          prescription.directions || null,
+          photo.medication_id,
+        ]
+      );
+      await conn.execute('UPDATE prescription_photos SET prescribed_quantity=? WHERE id=?', [
+        prescription.quantity,
+        photoId,
+      ]);
+    }
     await conn.execute(
       `UPDATE prescription_photos SET status=?, decision_reason=?, pharmacist_id=?,
        reviewer_license_number=?,reviewer_license_jurisdiction=?,decision_at=NOW(3),

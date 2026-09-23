@@ -6,7 +6,7 @@
 }
 .pm-appointments__header {
   align-items: flex-start;
-  background: linear-gradient(145deg, #075985, #1677d2);
+  background: #075985;
   border-radius: 1.15rem;
   color: #fff;
   display: flex;

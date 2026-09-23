@@ -1,0 +1,36 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ListOnlyThePharmateBackupPrefix",
+      "Effect": "Allow",
+      "Action": "s3:ListBucket",
+      "Resource": "arn:aws:s3:::REPLACE_WITH_BUCKET_NAME",
+      "Condition": {
+        "StringLike": {
+          "s3:prefix": ["pharmate/*"]
+        }
+      }
+    },
+    {
+      "Sid": "WriteOnlyThePharmateBackupPrefix",
+      "Effect": "Allow",
+      "Action": [
+        "s3:PutObject",
+        "s3:AbortMultipartUpload",
+        "s3:ListMultipartUploadParts"
+      ],
+      "Resource": "arn:aws:s3:::REPLACE_WITH_BUCKET_NAME/pharmate/*"
+    },
+    {
+      "Sid": "EncryptBackupsWithOnlyTheDedicatedKey",
+      "Effect": "Allow",
+      "Action": [
+        "kms:DescribeKey",
+        "kms:Encrypt",
+        "kms:GenerateDataKey"
+      ],
+      "Resource": "REPLACE_WITH_KMS_KEY_ARN"
+    }
+  ]
+}

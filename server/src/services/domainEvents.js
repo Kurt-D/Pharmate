@@ -4,6 +4,7 @@ import {
   notifyLinkedCaregivers,
   notifyRole,
 } from './portalNotifications.js';
+import { createPatientNotification } from './patientNotifications.js';
 
 export async function medicationChanged(
   patientId,
@@ -41,8 +42,20 @@ export async function orderChanged({ patientId, kind, orderId, status, created =
   publishRole('pharmacist', 'ORDER_STATUS_CHANGED', { patient_id: patientId, ...payload });
   publishRole('admin', 'ORDER_STATUS_CHANGED', payload);
   if (created) {
+    await createPatientNotification({
+      patientId,
+      type: 'order_created',
+      title: 'Your pharmacy order was received',
+      message: 'Your order was received and is waiting for pharmacy processing.',
+      metadata: { action: 'view_order', order_id: orderId, order_kind: kind, status },
+      eventKey: `order-created:${kind}:${orderId}`,
+    });
     await notifyRole('pharmacist', {
       type: 'ORDER_STATUS_CHANGED',
+      category: 'prescriptionReviews',
+      priority: 'ATTENTION',
+      resourceType: 'order',
+      resourceId: orderId,
       title: `New ${kind} request`,
       body: 'A new request is ready for operational review.',
       actionPath: '/pharmacist/orders',
@@ -50,22 +63,30 @@ export async function orderChanged({ patientId, kind, orderId, status, created =
     });
     await notifyRole('admin', {
       type: 'ORDER_STATUS_CHANGED',
+      category: 'orders',
+      priority: 'ATTENTION',
+      resourceType: 'order',
+      resourceId: orderId,
       title: `New ${kind} request`,
       body: 'A new request was added to the order queue.',
       actionPath: '/admin/orders',
       eventKey: `order-created:${kind}:${orderId}`,
     });
   } else {
-    await createPortalNotification({
-      userId: patientId,
-      type: 'ORDER_STATUS_CHANGED',
-      title: `${kind} status updated`,
-      body: `Your ${kind} request is now ${String(status).replaceAll('_', ' ')}.`,
-      actionPath: '/patient/orders',
+    await createPatientNotification({
+      patientId,
+      type: 'order_update',
+      title: `Your ${kind} order was updated`,
+      message: `Your order is now ${String(status).replaceAll('_', ' ').toLowerCase()}. Open Orders for details.`,
+      metadata: { action: 'view_order', order_id: orderId, order_kind: kind, status },
       eventKey: `order-status:${kind}:${orderId}:${status}`,
     });
     await notifyLinkedCaregivers(patientId, {
       type: 'ORDER_STATUS_CHANGED',
+      category: 'orders',
+      priority: ['cancelled', 'failed'].includes(String(status).toLowerCase()) ? 'ATTENTION' : 'INFO',
+      resourceType: 'order',
+      resourceId: orderId,
       title: `Patient ${kind} updated`,
       body: `The request is now ${String(status).replaceAll('_', ' ')}.`,
       actionPath: '/caregiver/orders',

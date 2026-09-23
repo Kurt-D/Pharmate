@@ -27,11 +27,23 @@ import { inquiryChanged, orderChanged } from '../services/domainEvents.js';
 
 const router = Router();
 
-const inviteLimit = rateLimit({ windowMs: 15 * 60 * 1000, max: 10 });
+const inviteLimit = rateLimit({
+  scope: 'caregiver-invite',
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+});
 const failedInviteLimit = failedAttemptLimit({
+  scope: 'caregiver-invite-failed',
   windowMs: 15 * 60 * 1000,
   max: 5,
   keyGenerator: (req) => `${req.ip}:${req.user?.sub || 'anonymous'}`,
+});
+const inquiryPostLimit = rateLimit({
+  scope: 'caregiver-inquiry-post',
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  keyGenerator: (req) => `${req.user?.sub || 'anonymous'}:${req.ip || 'unknown'}`,
+  message: 'Please wait a few minutes before sending another inquiry.',
 });
 
 router.use(requireAuth, requireRole('caregiver'));
@@ -227,17 +239,25 @@ router.post('/patients/:code/notify', async (req, res) => {
   );
   if (!dose) return res.status(404).json({ error: 'Dose not found' });
   const doseStatus = computeDoseStatus(dose);
-  const reminderAllowed = doseStatus === 'DUE' && dose.schedule_status === 'APPROVED';
+  // A caregiver may encourage a linked patient before a dose, while it is due,
+  // or after it has been missed. Taken doses remain read-only.
+  const reminderAllowed =
+    ['UPCOMING', 'DUE', 'MISSED'].includes(doseStatus) && dose.schedule_status === 'APPROVED';
   if (!reminderAllowed) {
     return res.status(409).json({
       error:
-        'A take-medicine reminder can only be sent while an approved dose is due. Review missed doses with the pharmacist.',
-      code: 'dose_not_due',
+        'A reminder can only be sent for an upcoming, due, or missed approved dose.',
+      code: 'dose_not_remindable',
     });
   }
   const medicineName = dose.drug_name_raw;
   const reminderMessage =
-    String(req.body?.voice_message || '').trim() || 'It is time to take your scheduled medicine.';
+    String(req.body?.voice_message || '').trim() ||
+    (doseStatus === 'MISSED'
+      ? 'You missed a scheduled medicine dose. Please check in with your caregiver or pharmacist.'
+      : doseStatus === 'UPCOMING'
+        ? 'You have an upcoming scheduled medicine dose. Please be ready at the saved time.'
+        : 'It is time to take your scheduled medicine.');
   const eventId = uuidv4();
   const result = await createPatientNotification({
     patientId,
@@ -245,7 +265,7 @@ router.post('/patients/:code/notify', async (req, res) => {
     medicineName,
     eventKey: `caregiver:${req.user.sub}:${patientId}:${doseId}:${Math.floor(Date.now() / 300000)}`,
     metadata: { schedule_id: doseId },
-    title: 'Caregiver medicine reminder',
+    title: doseStatus === 'MISSED' ? 'Caregiver missed-dose check-in' : 'Caregiver medicine reminder',
     message: reminderMessage,
   });
   let pushSent = false;
@@ -256,6 +276,7 @@ router.post('/patients/:code/notify', async (req, res) => {
         id: eventId,
         message: reminderMessage,
         medicine: medicineName || 'scheduled medicine',
+        scheduleId: doseId,
         caregiverName: 'your caregiver',
         createdAt: new Date().toISOString(),
       },
@@ -343,7 +364,7 @@ router.post('/patients/:code/deliveries', async (req, res) => {
 // ── POST /api/caregiver/patients/:code/inquiries ──────────────────────────────
 // Open a Medication Inquiry on the patient's behalf (UC-09). The pharmacist sees
 // it by patient_code only; a restricted-substance subject is declined (TC-11).
-router.post('/patients/:code/inquiries', async (req, res) => {
+router.post('/patients/:code/inquiries', inquiryPostLimit, async (req, res) => {
   res.set('Cache-Control', 'no-store');
   const patientId = await linkedPatientId(req.user.sub, req.params.code);
   if (!patientId) return res.status(404).json({ error: 'Patient not linked' });

@@ -397,12 +397,36 @@ export default function AccessibilitySettings() {
             {[
               { v: 'slow', l: tr('Slow & Clear', 'Mabagal at malinaw'), s: '0.75x' },
               { v: 'normal', l: tr('Normal', 'Normal'), s: '1.0x' },
+              { v: 'fast', l: tr('Fast', 'Mabilis'), s: '1.2x' },
+              { v: 'veryFast', l: tr('Very Fast', 'Napakabilis'), s: '1.4x' },
             ].map((option) => (
               <button
                 aria-pressed={preferences.speechRate === option.v}
                 className={preferences.speechRate === option.v ? 'active' : ''}
                 key={option.v}
                 onClick={() => updatePreference('speechRate', option.v)}
+                type="button"
+              >
+                <strong>{option.l}</strong>
+                <small>{option.s}</small>
+              </button>
+            ))}
+          </div>
+          <legend className="pm-a11y-voice-choice-title">
+            {tr('Voice', 'Boses')}
+          </legend>
+          <div className="pm-a11y-segmented pm-a11y-voice-options">
+            {[
+              { v: 'female-1', l: tr('Female voice 1', 'Babaeng boses 1'), s: tr('Warm and clear', 'Malumanay at malinaw') },
+              { v: 'female-2', l: tr('Female voice 2', 'Babaeng boses 2'), s: tr('Bright and clear', 'Maliwanag at malinaw') },
+              { v: 'male-1', l: tr('Male voice 1', 'Lalaking boses 1'), s: tr('Calm and clear', 'Kalmado at malinaw') },
+              { v: 'male-2', l: tr('Male voice 2', 'Lalaking boses 2'), s: tr('Deep and clear', 'Malalim at malinaw') },
+            ].map((option) => (
+              <button
+                aria-pressed={preferences.speechVoice === option.v}
+                className={preferences.speechVoice === option.v ? 'active' : ''}
+                key={option.v}
+                onClick={() => updatePreference('speechVoice', option.v)}
                 type="button"
               >
                 <strong>{option.l}</strong>
@@ -420,6 +444,14 @@ export default function AccessibilitySettings() {
               <option value="fil">Taglish / Filipino</option>
             </select>
           </label>
+          {preferences.speechLanguage === 'fil' && (
+            <p className="pm-a11y-voice-help">
+              {tr(
+                'Filipino voice is selected. PharMate will use a Filipino or Tagalog voice installed on this device for clearer pronunciation.',
+                'Napili ang Filipino voice. Gagamit ang PharMate ng Filipino o Tagalog voice na naka-install sa device para sa mas malinaw na pagbigkas.'
+              )}
+            </p>
+          )}
           <button className="pm-a11y-listen-test" onClick={() => speak(sample)} type="button">
             <Icon name="volume" /> {tr('Play voice sample', 'Pakinggan ang sample')}
           </button>

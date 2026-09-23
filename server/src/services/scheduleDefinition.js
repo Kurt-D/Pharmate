@@ -72,14 +72,13 @@ export function validateMedicationSchedule({
   scheduleTimes = [],
   startDate,
   endDate,
-  scheduleMode,
 } = {}) {
   // SPECIFIC_TIMES describes timing, not dose count. Preserve the explicit code.
   const rule = frequencyRule(
     frequencyType === 'SPECIFIC_TIMES' ? frequencyCode : frequencyType || frequencyCode,
     intervalHours
   );
-  if (!rule && scheduleMode !== 'MANUAL')
+  if (!rule)
     return {
       valid: false,
       code: 'UNSUPPORTED_FREQUENCY',
@@ -108,16 +107,6 @@ export function validateMedicationSchedule({
       message:
         'Check your reminder times. Enter a valid time for each reminder and remove repeated times.',
     };
-  // Manual reminders are patient-selected times, not a generated dose count.
-  // Final save still enforces patient/prescription and dose-limit safeguards.
-  if (scheduleMode === 'MANUAL')
-    return times.length
-      ? { valid: true, code: null, message: null }
-      : {
-          valid: false,
-          code: 'INVALID_OR_DUPLICATE_TIME',
-          message: 'Choose at least one reminder time.',
-        };
   if (!Number.isInteger(rule.count))
     return {
       valid: false,

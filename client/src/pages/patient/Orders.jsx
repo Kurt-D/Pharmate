@@ -210,17 +210,12 @@ export default function Orders() {
             />
           </>
         )}
-        <label className="form-label fw-semibold">Payment method</label>
-        <select
-          className="form-select mb-2"
-          value={form.payment_method}
-          onChange={(e) => set('payment_method', e.target.value)}
-        >
-          {form.kind === 'refill' && <option value="CASH_ON_PICKUP">Cash on pickup</option>}
-          {form.kind === 'delivery' && <option value="COD">Cash on delivery</option>}
-          <option value="CARD">Card</option>
-          <option value="GCASH">GCash</option>
-        </select>
+        <div className="alert alert-info py-2 mb-2" role="note">
+          <strong>Cash payment only.</strong>{' '}
+          {form.kind === 'delivery'
+            ? 'Pay cash when your order is delivered.'
+            : 'Pay cash when you collect your order at the branch.'}
+        </div>
 
         <button className="pm-btn-primary mt-2" onClick={submit} disabled={!medsInTab.length}>
           Request {form.kind}

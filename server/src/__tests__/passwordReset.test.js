@@ -51,6 +51,34 @@ describe('PIN password recovery', () => {
     });
   });
 
+  test('email delivery failure does not reveal the account and invalidates the undelivered PIN', async () => {
+    const email = `forgot.delivery.${Date.now()}@test.pharmate`;
+    const user = await register(email);
+    setPasswordResetDeliveryForTests(async () => {
+      throw Object.assign(new Error('provider unavailable'), { code: 'EMAIL_PROVIDER_ERROR' });
+    });
+
+    try {
+      const existing = await request(app).post('/api/auth/forgot-password').send({ email });
+      const missing = await request(app)
+        .post('/api/auth/forgot-password')
+        .send({ email: `missing.delivery.${Date.now()}@test.pharmate` });
+
+      expect({ status: existing.status, body: existing.body }).toEqual({
+        status: missing.status,
+        body: missing.body,
+      });
+      const [[otp]] = await pool.execute(
+        `SELECT used_at FROM otp_codes
+         WHERE user_id=? AND purpose='PASSWORD_RESET' ORDER BY created_at DESC LIMIT 1`,
+        [user.id]
+      );
+      expect(otp.used_at).not.toBeNull();
+    } finally {
+      setPasswordResetDeliveryForTests(async (message) => deliveries.push(message));
+    }
+  });
+
   test('stores only a keyed OTP hash and never returns the OTP over HTTP', async () => {
     const email = `forgot.hash.${Date.now()}@test.pharmate`;
     const user = await register(email);
@@ -107,6 +135,18 @@ describe('PIN password recovery', () => {
       confirm_password: NEW_PASSWORD,
     });
     expect(reset.status).toBe(200);
+    const [[audit]] = await pool.execute(
+      `SELECT actor_user_id,metadata_json FROM audit_events
+       WHERE action='password_reset_completed' AND entity_id=? ORDER BY created_at DESC LIMIT 1`,
+      [user.id]
+    );
+    expect(audit.actor_user_id).toBe(user.id);
+    expect(
+      typeof audit.metadata_json === 'string' ? JSON.parse(audit.metadata_json) : audit.metadata_json
+    ).toEqual({ sessionsRevoked: true });
+    expect(
+      (await request(app).post('/api/auth/login').send({ email, password: OLD_PASSWORD })).status
+    ).toBe(401);
     expect(
       (await request(app).post('/api/auth/login').send({ email, password: NEW_PASSWORD })).status
     ).toBe(200);

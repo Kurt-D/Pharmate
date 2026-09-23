@@ -58,6 +58,17 @@ test('preserves the strength and form the patient confirmed from the medicine la
   });
 });
 
+test('allows a non-numeric supplement label when creating a reminder suggestion', () => {
+  const result = validateIntakeRecord(
+    validRecord({ medicine_name: 'Multivitamins with minerals', custom_strength: 'Adult formula' }),
+    { ...verifiedDrug, generic_name: 'Multivitamins with minerals', default_strength: 'Adult formula' },
+    { allowUnknownStrength: true }
+  );
+
+  expect(result.error).toBeUndefined();
+  expect(result.value).toMatchObject({ strength_value: null, strength_unit: null });
+});
+
 test('accepts an exact verified brand name but rejects an unrelated typed medicine', () => {
   expect(
     validateIntakeRecord(validRecord({ medicine_name: 'Biogesic' }), verifiedDrug).error

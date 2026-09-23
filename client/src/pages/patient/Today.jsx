@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../../api.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { useLanguage } from '../../context/LanguageContext.jsx';
 import { useAccessibility } from '../../context/AccessibilityContext.jsx';
 import { enqueue, flushOutbox, newLogId } from '../../lib/doseOutbox.js';
+import { readPatientOfflineCache, writePatientOfflineCache } from '../../lib/patientOfflineCache.js';
 import { scheduleDoseReminders, initReminderVoice, speak } from '../../lib/notifications.js';
 import {
   captureOcrImage,
@@ -12,7 +14,7 @@ import {
   recognizeMedicineImage,
 } from '../../lib/mlKitOcr.js';
 import { recordOcrEvaluation } from '../../lib/ocrTelemetry.js';
-import PatientVoiceAlert from './PatientVoiceAlert.jsx';
+import { MedicineCalendarModal } from './Medications.jsx';
 
 function HomeIcon({ name, size = 22 }) {
   const paths = {
@@ -43,6 +45,7 @@ function HomeIcon({ name, size = 22 }) {
         <path d="M12 7v5l3 2" />
       </>
     ),
+    flame: <path d="M12 22c4.1 0 7-2.7 7-6.4 0-2.8-1.8-5.1-4.2-7.8.1 2.2-1 3.8-2.4 4.6.3-3.7-1.5-6.4-4.2-8.4.3 3.7-2.1 5.6-3.4 7.8C3.6 14 4.2 17.1 6 19.2 7.5 20.9 9.5 22 12 22Z" />,
     close: <path d="m6 6 12 12M18 6 6 18" />,
     medicine: (
       <>
@@ -73,6 +76,12 @@ function HomeIcon({ name, size = 22 }) {
       <>
         <path d="M11 5 6 9H3v6h3l5 4Z" />
         <path d="M15 9a4 4 0 0 1 0 6M18 6a8 8 0 0 1 0 12" />
+      </>
+    ),
+    sun: (
+      <>
+        <circle cx="12" cy="12" r="4" />
+        <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" />
       </>
     ),
     star: <path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-2.9-5.6 2.9 1.1-6.2L3 9.6l6.2-.9Z" />,
@@ -123,6 +132,12 @@ function doseStatus(dose) {
   return String(dose?.status || '').toUpperCase();
 }
 
+function isDoseInVoiceReminder(dose, now = Date.now()) {
+  if (doseStatus(dose) === 'DUE') return true;
+  const scheduledAt = new Date(dose?.scheduled_at || dose?.scheduled_time).getTime();
+  return Number.isFinite(scheduledAt) && now >= scheduledAt && now - scheduledAt <= 30 * 60 * 1000;
+}
+
 function calendarDateLabel(date, language) {
   const today = new Date();
   const tomorrow = addCalendarDays(today, 1);
@@ -137,6 +152,27 @@ function calendarDateLabel(date, language) {
     return language === 'fil' ? `Kahapon, ${formatted}` : `Yesterday, ${formatted}`;
   return date.toLocaleDateString(locale, { weekday: 'long', month: 'long', day: 'numeric' });
 }
+
+function doseConfirmationDateTime(timestamp, language) {
+  const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) return '';
+  const locale = language === 'fil' ? 'fil-PH' : 'en-PH';
+  try {
+    return date.toLocaleString(locale, {
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+    });
+  } catch {
+    return date.toLocaleString();
+  }
+}
+
+const REMINDER_WAVE = [
+  5, 9, 4, 13, 7, 18, 10, 24, 8, 15, 5, 11, 20, 7, 13, 25, 9, 17, 6, 12, 21, 8, 14, 6, 18, 11, 7,
+  15, 5, 9,
+];
 
 function loadDailyStreak() {
   try {
@@ -166,9 +202,10 @@ export default function Today() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { language } = useLanguage();
-  const { preferences: accessibility } = useAccessibility();
+  const { preferences } = useAccessibility();
   const tr = (english, filipino) => (language === 'fil' ? filipino : english);
   const [doses, setDoses] = useState(null);
+  const [medicines, setMedicines] = useState([]);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [scanOpen, setScanOpen] = useState(() => {
@@ -177,6 +214,7 @@ export default function Today() {
     return shouldOpen;
   });
   const [scanPhoto, setScanPhoto] = useState(null);
+  const [scanPhotoFullView, setScanPhotoFullView] = useState(false);
   const [scanName, setScanName] = useState('');
   const [scanStrength, setScanStrength] = useState('');
   const [scanFormulation, setScanFormulation] = useState('');
@@ -190,14 +228,17 @@ export default function Today() {
   const [calendarRows, setCalendarRows] = useState([]);
   const [calendarLoading, setCalendarLoading] = useState(false);
   const [calendarError, setCalendarError] = useState('');
+  const [calendarExpanded, setCalendarExpanded] = useState(false);
   const [streak, setStreak] = useState(loadDailyStreak);
   const [streakStatus, setStreakStatus] = useState(null);
+  const [streakStarted, setStreakStarted] = useState(false);
   const [loggedDose, setLoggedDose] = useState(null);
+  const [doseConfirmation, setDoseConfirmation] = useState(null);
+  const [dismissedReminder, setDismissedReminder] = useState(null);
   const [summaryOpen, setSummaryOpen] = useState(false);
   const [summaryFilter, setSummaryFilter] = useState('taken');
   const [clockNow, setClockNow] = useState(() => Date.now());
   const [caregiverVoiceAlert, setCaregiverVoiceAlert] = useState(null);
-  const [voiceRemindersEnabled, setVoiceRemindersEnabled] = useState(true);
   const [tourReminderStep, setTourReminderStep] = useState(null);
   const seenVoiceAlerts = useRef(new Set());
   const announcedDoseKeys = useRef(new Set());
@@ -214,35 +255,47 @@ export default function Today() {
       setStreak(synchronized);
       localStorage.setItem('pm_priority_streak', JSON.stringify(synchronized));
       window.dispatchEvent(new CustomEvent('pm-streak-updated', { detail: response.data }));
+      return response.data;
     } catch {
       /* The last synchronized streak remains visible while offline. */
     }
   }, []);
 
   const load = useCallback(async () => {
+    const cachedDoses = readPatientOfflineCache(user?.id, 'today-doses', []);
     try {
-      await flushOutbox(api);
-      const [doseResponse, preferenceResponse] = await Promise.all([
+      await flushOutbox(user?.id, api);
+      const [doseResponse, preferenceResponse, medicationResponse] = await Promise.all([
         api('/api/patient/doses/today'),
         api('/api/patient/preferences'),
+        api('/api/patient/medications'),
       ]);
+      writePatientOfflineCache(user?.id, 'today-doses', doseResponse.data);
+      writePatientOfflineCache(user?.id, 'preferences', preferenceResponse.data);
       setDoses(doseResponse.data);
-      setVoiceRemindersEnabled(preferenceResponse.data.voice_enabled !== false);
+      setMedicines(Array.isArray(medicationResponse.data) ? medicationResponse.data : []);
       setError('');
       scheduleDoseReminders(doseResponse.data);
       await refreshStreak();
     } catch (requestError) {
-      setError(requestError.message);
+      if (cachedDoses.length) {
+        setDoses(cachedDoses);
+        setError('You are offline. Showing the last saved medication plan.');
+      } else {
+        setError(requestError.message);
+      }
     }
-  }, [refreshStreak]);
+  }, [refreshStreak, user?.id]);
 
   useEffect(() => {
     load();
     window.addEventListener('online', load);
     window.addEventListener('pm-realtime-dose', load);
+    window.addEventListener('pm-dose-status-changed', load);
     return () => {
       window.removeEventListener('online', load);
       window.removeEventListener('pm-realtime-dose', load);
+      window.removeEventListener('pm-dose-status-changed', load);
     };
   }, [load]);
 
@@ -331,6 +384,7 @@ export default function Today() {
           notificationId: notification.id,
           message: notification.metadata?.voice_message || notification.message,
           medicine: notification.metadata?.medicine_name || '',
+          scheduleId: notification.metadata?.schedule_id || null,
           caregiverName: notification.metadata?.caregiver_name || 'your caregiver',
           createdAt: notification.created_at,
         });
@@ -371,12 +425,14 @@ export default function Today() {
     };
   }, []);
 
-  async function log(dose, action) {
+  async function log(dose, action, method = 'manual') {
     const loggedAt = new Date();
+    const previousStatus = doseStatus(dose);
+    const startedNewStreak = action === 'take' && Number(streak.days || 0) === 0;
     const body = {
       log_id: newLogId(),
       logged_at: loggedAt.toISOString(),
-      method: 'manual',
+      method,
       action,
     };
     const optimistic = action === 'snooze' ? 'snoozed' : 'taken';
@@ -390,38 +446,97 @@ export default function Today() {
         method: 'POST',
         body,
       });
+      const savedStatus = response.data.status || optimistic.toUpperCase();
       setDoses((items) => {
         const updated = items.map((item) =>
-          item.schedule_id === dose.schedule_id ? { ...item, status: response.data.status } : item
+          item.schedule_id === dose.schedule_id
+            ? {
+                ...item,
+                status: savedStatus,
+                ...(response.data.scheduled_at
+                  ? { scheduled_at: response.data.scheduled_at, scheduled_time: response.data.scheduled_at }
+                  : {}),
+              }
+            : item
         );
         return updated;
       });
-      if (action === 'take') await refreshStreak();
+      setError('');
+      window.dispatchEvent(
+        new CustomEvent('pm-dose-status-changed', {
+          detail: { scheduleId: dose.schedule_id, status: savedStatus },
+        })
+      );
+      if (action === 'take') await dismissReminderForLoggedDose(dose);
+      if (action === 'take') {
+        const refreshedStreak = await refreshStreak();
+        if (startedNewStreak && Number(refreshedStreak?.current_days) === 1) {
+          setStreakStarted(true);
+        }
+      }
       setNotice(
         response.data.reflow
           ? 'Dose recorded. We suggested updated times for the rest of today.'
           : 'Dose marked as taken. Keep up the great work!'
       );
-    } catch {
-      enqueue({ ...body, schedule_id: dose.schedule_id, method: 'local' });
+    } catch (requestError) {
+      // A server response (409 safety check, duplicate log, etc.) is not an
+      // offline failure.  Do not show a successful dose card or hide the
+      // reminder unless the log was actually accepted.
+      if (requestError?.status) {
+        setDoses((items) =>
+          items.map((item) =>
+            item.schedule_id === dose.schedule_id ? { ...item, status: previousStatus } : item
+          )
+        );
+        setError(requestError.message || 'This dose could not be recorded. Please try again.');
+        return false;
+      }
+      enqueue(user?.id, { ...body, schedule_id: dose.schedule_id, method: 'local' });
       setNotice('Saved offline. It will sync when you are connected again.');
       setDoses((items) => {
-        const completedAll =
-          items.length > 0 &&
-          items.every((item) => ['TAKEN', 'TAKEN_LATE'].includes(doseStatus(item)));
-        if (action === 'take' && completedAll) {
-          setStreak((current) => recordStreakDay(current, loggedAt));
+        if (action === 'take') {
+          setStreak((current) => {
+            const updated = recordStreakDay(current, loggedAt);
+        return updated;
+      });
+      window.dispatchEvent(
+        new CustomEvent('pm-dose-status-changed', {
+          detail: { scheduleId: dose.schedule_id, status: optimistic.toUpperCase() },
+        })
+      );
         }
         return items;
       });
     }
     if (action === 'take') {
+      setDismissedReminder({
+        scheduleId: String(dose.schedule_id || dose.id || ''),
+        scheduledAt: String(dose.scheduled_at || dose.scheduled_time || ''),
+      });
       setLoggedDose({
         drugName: dose.drug_name,
         dosage: dose.dosage_instruction || '',
         loggedAt: loggedAt.toISOString(),
       });
+      const locale = language === 'fil' ? 'fil-PH' : 'en-PH';
+      const loggedDate = loggedAt.toLocaleDateString(locale, {
+        weekday: 'long',
+        month: 'long',
+        day: 'numeric',
+      });
+      const loggedTime = loggedAt.toLocaleTimeString(locale, {
+        hour: 'numeric',
+        minute: '2-digit',
+      });
+      speak(
+        tr(
+          `Dose log done. ${dose.drug_name || 'Your medicine'}${dose.dosage_instruction ? `, ${dose.dosage_instruction}` : ''}, was recorded as taken on ${loggedDate} at ${loggedTime}.`,
+          `Tapos na ang pagtatala ng dose. Ang ${dose.drug_name || 'iyong gamot'}${dose.dosage_instruction ? `, ${dose.dosage_instruction}` : ''} ay naitala bilang nainom noong ${loggedDate}, ${loggedTime}.`
+        )
+      );
     }
+    return true;
   }
 
   async function chooseScanPhoto(source) {
@@ -430,7 +545,10 @@ export default function Today() {
     setScanReviewed(false);
     try {
       const media = await captureOcrImage(source);
-      if (!media) return;
+      if (!media) {
+        if (source === 'camera') setScanOpen(false);
+        return;
+      }
       const url =
         media.webPath || (media.thumbnail ? `data:image/jpeg;base64,${media.thumbnail}` : '');
       if (!url) throw new Error('The selected image could not be opened.');
@@ -453,6 +571,14 @@ export default function Today() {
     }
   }
 
+  function openMedicineScanner() {
+    setScanOpen(true);
+    // A chosen label is already ready for OCR/review. Do not stack another
+    // camera-picker dialog over it when the user returns to the scanner.
+    if (scanPhoto || scanCapturing) return;
+    void chooseScanPhoto('camera');
+  }
+
   async function verifyScan() {
     if (!scanName.trim() || !scanReviewed) return;
     setScanBusy(true);
@@ -470,19 +596,57 @@ export default function Today() {
         body: { scanned_name: scanName.trim() },
       });
       if (response.data.match) {
-        const matchingDose = (doses || []).find(
+        // Fetch a fresh schedule before logging. The initial Home-tab dose list
+        // can be stale after a reminder or schedule update.
+        const latestDosesResponse = await api('/api/patient/doses/today');
+        const latestDoses = Array.isArray(latestDosesResponse.data) ? latestDosesResponse.data : [];
+        setDoses(latestDoses);
+        const matchingDose = latestDoses.find(
           (dose) =>
-            dose.medication_id === response.data.medication_id &&
-            ['UPCOMING', 'DUE', 'SCHEDULED', 'SNOOZED'].includes(doseStatus(dose))
+            String(dose.medication_id) === String(response.data.medication_id) &&
+            ['UPCOMING', 'DUE', 'SCHEDULED', 'SNOOZED', 'MISSED'].includes(doseStatus(dose))
         );
         if (matchingDose) {
-          await log(matchingDose, 'take');
-          setScanResult({ ...response.data, markedTaken: true });
+          // Keep the scan state accurate while the log is in progress. This
+          // also prevents an empty/white modal if a slow request re-renders.
+          setScanResult({ ...response.data, doseReadyToLog: true });
+          if (
+            caregiverVoiceAlert &&
+            String(caregiverAlertDose?.schedule_id) === String(matchingDose.schedule_id)
+          ) {
+            await closeCaregiverAlert();
+          }
+          const logged = await log(matchingDose, 'take', 'ocr');
+          if (logged) {
+            closeScan();
+          } else {
+            setScanResult({
+              ...response.data,
+              match: false,
+              doseReadyToLog: false,
+              message: tr(
+                'The dose was not recorded. Please try confirming the label again.',
+                'Hindi naitala ang dose. Pakisubukang kumpirmahin muli ang label.'
+              ),
+            });
+          }
         } else {
-          setScanResult({ ...response.data, markedTaken: false });
+          setScanResult({ ...response.data, doseReadyToLog: false });
+          speak(
+            tr(
+              `Medicine verified. ${response.data.drug_name || scanName.trim()} has no outstanding scheduled dose to log.`,
+              `Napatunayang tama ang gamot. Walang nakaabang na dose para sa ${response.data.drug_name || scanName.trim()}.`
+            )
+          );
         }
       } else {
         setScanResult(response.data);
+        speak(
+          tr(
+            `Medicine does not match your scheduled medicine. The scanned label says ${scanName.trim()}. Please check the label or choose the medicine on your schedule.`,
+            `Hindi tugma ang gamot sa iyong naka-iskedyul na gamot. Ang nabasang label ay ${scanName.trim()}. Suriin ang label o piliin ang gamot sa iyong iskedyul.`
+          )
+        );
       }
     } catch (scanError) {
       setScanResult({ match: false, message: scanError.message });
@@ -502,25 +666,39 @@ export default function Today() {
     setScanResult(null);
   }
 
+  async function confirmDoseLog() {
+    const confirmation = doseConfirmation;
+    if (!confirmation?.dose) return;
+    const logged = await log(confirmation.dose, 'take');
+    if (!logged) return;
+    setDoseConfirmation(null);
+    if (confirmation.closeScan) closeScan();
+    if (confirmation.closeCaregiver) await closeCaregiverAlert();
+  }
+
   const summary = useMemo(() => {
     const items = doses || [];
     return {
       taken: items.filter((dose) => ['TAKEN', 'TAKEN_LATE'].includes(doseStatus(dose))).length,
       upcoming: items.filter((dose) =>
-        ['UPCOMING', 'DUE', 'SCHEDULED', 'SNOOZED'].includes(doseStatus(dose))
+        ['UPCOMING', 'DUE', 'SCHEDULED', 'SNOOZED'].includes(doseStatus(dose)) &&
+        !isDoseInVoiceReminder(dose, clockNow)
       ).length,
       missed: items.filter((dose) => doseStatus(dose) === 'MISSED').length,
     };
-  }, [doses]);
+  }, [clockNow, doses]);
   const summaryDoses = useMemo(
     () =>
       (doses || []).filter((dose) => {
         if (summaryFilter === 'taken') return ['TAKEN', 'TAKEN_LATE'].includes(doseStatus(dose));
         if (summaryFilter === 'upcoming')
-          return ['UPCOMING', 'DUE', 'SCHEDULED', 'SNOOZED'].includes(doseStatus(dose));
+          return (
+            ['UPCOMING', 'DUE', 'SCHEDULED', 'SNOOZED'].includes(doseStatus(dose)) &&
+            !isDoseInVoiceReminder(dose, clockNow)
+          );
         return doseStatus(dose) === 'MISSED';
       }),
-    [doses, summaryFilter]
+    [clockNow, doses, summaryFilter]
   );
 
   const isCalendarToday = localDayKey(calendarDate) === localDayKey(new Date());
@@ -533,10 +711,12 @@ export default function Today() {
     if (calendarFilter === 'taken')
       return items.filter((dose) => ['TAKEN', 'TAKEN_LATE'].includes(doseStatus(dose)));
     if (calendarFilter === 'missed') return items.filter((dose) => doseStatus(dose) === 'MISSED');
-    return items.filter((dose) =>
-      ['UPCOMING', 'DUE', 'SCHEDULED', 'SNOOZED'].includes(doseStatus(dose))
+    return items.filter(
+      (dose) =>
+        ['UPCOMING', 'DUE', 'SCHEDULED', 'SNOOZED'].includes(doseStatus(dose)) &&
+        !(isCalendarToday && isDoseInVoiceReminder(dose, clockNow))
     );
-  }, [calendarFilter, calendarRows, doses, isCalendarToday]);
+  }, [calendarFilter, calendarRows, clockNow, doses, isCalendarToday]);
   const nextDose = useMemo(
     () =>
       (doses || [])
@@ -556,28 +736,99 @@ export default function Today() {
     nextDose && (doseStatus(nextDose) === 'DUE' || (dueDelay >= 0 && dueDelay <= 30 * 60 * 1000));
   const reminderText = nextDose
     ? tr(
-        `It's time to take your ${nextDose.drug_name}.`,
-        `Oras nang inumin ang ${nextDose.drug_name}.`
+        `It's time to take your ${String(
+          nextDose.drug_name || nextDose.medication_name || nextDose.medicine_name || 'scheduled medicine'
+        ).replace(/^your\s+/i, '')}.`,
+        `Oras nang inumin ang ${nextDose.drug_name || nextDose.medication_name || nextDose.medicine_name || 'naka-iskedyul na gamot'}.`
       )
     : tourReminderStep
       ? tr("It's time to take your scheduled medicine.", 'Oras nang inumin ang iyong gamot.')
       : tr('You have no medicine due right now.', 'Wala kang gamot na kailangang inumin ngayon.');
   useEffect(() => {
-    if (!dueNow || !nextDose || caregiverVoiceAlert) return;
+    if (!dueNow || !nextDose) return;
     const doseKey = `${nextDose.schedule_id || nextDose.medication_id}:${nextDose.scheduled_time}`;
     if (announcedDoseKeys.current.has(doseKey)) return;
     announcedDoseKeys.current.add(doseKey);
     speak(reminderText);
-  }, [caregiverVoiceAlert, dueNow, nextDose, reminderText]);
+  }, [dueNow, nextDose, reminderText]);
 
   const caregiverAlertDose = caregiverVoiceAlert
     ? (doses || []).find(
         (dose) =>
-          !['TAKEN', 'TAKEN_LATE', 'MISSED'].includes(doseStatus(dose)) &&
-          caregiverVoiceAlert.medicine &&
-          dose.drug_name?.toLowerCase().includes(caregiverVoiceAlert.medicine.toLowerCase())
+          !['TAKEN', 'TAKEN_LATE'].includes(doseStatus(dose)) &&
+          (String(dose.id) === String(caregiverVoiceAlert.scheduleId) ||
+            String(dose.schedule_id) === String(caregiverVoiceAlert.scheduleId) ||
+            (caregiverVoiceAlert.medicine &&
+              dose.drug_name?.toLowerCase().includes(caregiverVoiceAlert.medicine.toLowerCase())))
       ) || nextDose
     : null;
+  const activeReminderDose = caregiverAlertDose || nextDose;
+  const activeReminderText = caregiverVoiceAlert?.message || reminderText;
+  const scheduledMedicine = medicines.find(
+    (item) => String(item.id) === String(activeReminderDose?.medication_id)
+  );
+  const activeReminderMedicine = [
+    scheduledMedicine?.drug_name_raw,
+    scheduledMedicine?.medicine_name,
+    scheduledMedicine?.generic_name,
+    activeReminderDose?.medication_name,
+    activeReminderDose?.drug_name,
+    activeReminderDose?.medicine_name,
+    activeReminderDose?.drug_name_raw,
+    activeReminderDose?.generic_name,
+    activeReminderDose?.name,
+    caregiverVoiceAlert?.medicine,
+  ]
+    .map((name) => String(name || '').replace(/^your\s+/i, '').trim())
+    .find((name) => name && !/^(medicine|scheduled medicine)$/i.test(name)) || 'scheduled medicine';
+  const activeReminderDoseText =
+    String(
+      activeReminderDose?.dosage_instruction || activeReminderDose?.dose || activeReminderDose?.strength || ''
+    )
+      .replace(/^(take|drink|use|inom ng|inumin ang)\s+/i, '')
+      .replace(/^a\s+/i, '')
+      .trim();
+  const hasGenericCaregiverReminder =
+    !caregiverVoiceAlert?.message ||
+    /\byour\s+(?:scheduled\s+)?medicine\b/i.test(caregiverVoiceAlert.message);
+  const scheduledReminderHeadline = tr(
+        `It’s time to take your ${activeReminderMedicine}${
+          activeReminderDoseText ? ` ${activeReminderDoseText}` : ''
+        }.`,
+        `Oras nang inumin ang iyong ${activeReminderMedicine}${
+          activeReminderDoseText ? ` ${activeReminderDoseText}` : ''
+        }.`
+      );
+  const activeReminderHeadline =
+    caregiverVoiceAlert && !hasGenericCaregiverReminder
+      ? activeReminderText
+      : scheduledReminderHeadline;
+  const reminderWasLogged =
+    activeReminderDose &&
+    dismissedReminder?.scheduleId === String(activeReminderDose.schedule_id || activeReminderDose.id || '') &&
+    dismissedReminder?.scheduledAt ===
+      String(activeReminderDose.scheduled_at || activeReminderDose.scheduled_time || '');
+
+  useEffect(() => {
+    if (!caregiverVoiceAlert || !caregiverAlertDose) return;
+    const reminderKey = `caregiver:${caregiverVoiceAlert.id || caregiverVoiceAlert.notificationId || caregiverAlertDose.schedule_id}`;
+    if (announcedDoseKeys.current.has(reminderKey)) return;
+    announcedDoseKeys.current.add(reminderKey);
+    speak(activeReminderText);
+  }, [activeReminderText, caregiverAlertDose, caregiverVoiceAlert]);
+
+  async function dismissReminderForLoggedDose(dose) {
+    if (!caregiverVoiceAlert || !dose) return;
+    const sameSchedule =
+      String(dose.id || dose.schedule_id) === String(caregiverVoiceAlert.scheduleId) ||
+      String(dose.schedule_id) === String(caregiverVoiceAlert.scheduleId);
+    const sameMedicine =
+      caregiverVoiceAlert.medicine &&
+      String(dose.drug_name || '')
+        .toLowerCase()
+        .includes(String(caregiverVoiceAlert.medicine).toLowerCase());
+    if (sameSchedule || sameMedicine) await closeCaregiverAlert();
+  }
 
   async function closeCaregiverAlert() {
     const notificationId = caregiverVoiceAlert?.notificationId;
@@ -592,40 +843,57 @@ export default function Today() {
     }
   }
 
-  async function takeCaregiverAlertDose() {
-    if (!caregiverAlertDose) {
-      setNotice(
-        tr(
-          'No active dose is available to mark as taken.',
-          'Walang aktibong dose na maaaring markahang nainom.'
-        )
-      );
-      await closeCaregiverAlert();
-      return;
-    }
-    await log(caregiverAlertDose, 'take');
-    await closeCaregiverAlert();
+  function requestDoseConfirmation(dose, options = {}) {
+    if (!dose) return;
+    // Capture the time when the person starts the confirmation.  Keeping this
+    // value in state avoids evaluating locale/date APIs while the dialog is
+    // rendering, which could otherwise leave the overlay visible without its
+    // contents on older mobile browsers.
+    setDoseConfirmation({ dose, recordedAt: new Date().toISOString(), ...options });
   }
 
-  async function snoozeCaregiverAlertDose() {
-    if (caregiverAlertDose) await log(caregiverAlertDose, 'snooze');
-    setNotice(tr('Reminder snoozed for 15 minutes.', 'Na-snooze ang paalala nang 15 minuto.'));
-    await closeCaregiverAlert();
+  function markDueDoseTaken() {
+    if (!activeReminderDose) return;
+    requestDoseConfirmation(activeReminderDose, {
+      closeCaregiver: Boolean(caregiverVoiceAlert),
+    });
   }
 
-  async function markDueDoseTaken() {
-    if (!nextDose) return;
-    if (
-      accessibility.confirmActions &&
-      !window.confirm(
-        tr(
-          `Confirm that you are taking ${nextDose.drug_name || 'this medicine'} now.`,
-          `Kumpirmahin na iinumin mo ngayon ang ${nextDose.drug_name || 'gamot na ito'}.`
-        )
-      )
-    )
-      return;
-    await log(nextDose, 'take');
+  const streakWeekDays = useMemo(() => {
+    const today = new Date();
+    const weekStart = addCalendarDays(today, -((today.getDay() + 6) % 7));
+    const streakStart = addCalendarDays(today, -Math.max(0, Number(streak.days || 0) - 1));
+    return Array.from({ length: 7 }, (_, index) => {
+      const date = addCalendarDays(weekStart, index);
+      return {
+        key: localDayKey(date),
+        label: date.toLocaleDateString(language === 'fil' ? 'fil-PH' : 'en-PH', { weekday: 'narrow' }),
+        isToday: localDayKey(date) === localDayKey(today),
+        isComplete: Number(streak.days || 0) > 0 && date >= streakStart && date <= today,
+      };
+    });
+  }, [language, streak.days]);
+
+  async function snoozeDueDose() {
+    if (!activeReminderDose) return;
+    await log(activeReminderDose, 'snooze');
+    if (caregiverVoiceAlert) await closeCaregiverAlert();
+    setNotice(tr('Reminder snoozed for 5 minutes.', 'Na-snooze ang paalala nang 5 minuto.'));
+  }
+
+  if (calendarExpanded) {
+    return (
+      <main className="pm-home pm-home--calendar-expanded">
+        <MedicineCalendarModal
+          page
+          onAdd={() => navigate('/patient/medications/add')}
+          onClose={() => setCalendarExpanded(false)}
+          selected={calendarDate}
+          setSelected={setCalendarDate}
+          tr={tr}
+        />
+      </main>
+    );
   }
 
   return (
@@ -641,74 +909,92 @@ export default function Today() {
         </div>
       </header>
 
-      <PatientVoiceAlert
-        alert={caregiverVoiceAlert}
-        dose={caregiverAlertDose}
-        voiceEnabled={voiceRemindersEnabled}
-        onDismiss={closeCaregiverAlert}
-        onScan={() => setScanOpen(true)}
-        onTake={takeCaregiverAlertDose}
-        onSnooze={snoozeCaregiverAlertDose}
-      />
-
-      {(dueNow || tourReminderStep) && !caregiverVoiceAlert && (
+      {(dueNow || caregiverAlertDose) && !reminderWasLogged && (
         <section
-          className="pm-dashboard-card pm-voice-card pm-voice-card--calendar"
+          className="pm-compact-reminder pm-home-reminder"
           id="patient-dose-reminder"
         >
-          <div className="pm-section-heading">
+          <header className="pm-compact-reminder__header">
             <h2>
-              <span>
-                <HomeIcon name="sound" size={18} />
-              </span>{' '}
-              {tr('Medicine due now', 'Gamot na iinumin ngayon')}
+              {preferences.ttsEnabled
+                ? tr('Voice Reminder', 'Paalala sa Boses')
+                : tr('Reminder', 'Paalala')}
             </h2>
             <span className="pm-active-pill">
-              <span className="pm-active-bars" aria-hidden="true">
-                <i />
-                <i />
-                <i />
-              </span>
-              {tr('Live', 'Live')}
+              <HomeIcon name={new Date(activeReminderDose?.scheduled_time || Date.now()).getHours() < 18 ? 'sun' : 'clock'} size={14} />
+              {new Date(activeReminderDose?.scheduled_time || Date.now()).getHours() < 12
+                ? tr('Morning', 'Umaga')
+                : new Date(activeReminderDose?.scheduled_time || Date.now()).getHours() < 18
+                  ? tr('Afternoon', 'Hapon')
+                  : tr('Night', 'Gabi')}
             </span>
-          </div>
-          <div className="pm-reminder">
+          </header>
+          <div className="pm-compact-reminder__message">
             <button
               type="button"
-              className="pm-mic"
-              onClick={() => speak(reminderText)}
+              className="pm-compact-reminder__voice"
+              onClick={() => speak(activeReminderHeadline)}
               aria-label={tr('Repeat voice reminder', 'Ulitin ang paalala sa boses')}
               title={tr('Repeat voice reminder', 'Ulitin ang paalala sa boses')}
             >
-              <HomeIcon name="mic" size={28} />
+              <HomeIcon name="sound" size={28} />
             </button>
-            <div className="pm-reminder__copy">
-              <h3>{reminderText}</h3>
-              <p>
+            <div>
+              <strong>
+                <span aria-hidden="true">“</span>
+                {activeReminderHeadline}
+                <span aria-hidden="true">”</span>
+              </strong>
+              <small>
                 {tr(
-                  'This is the only reminder that needs your attention now.',
-                  'Ito lamang ang paalala na kailangan mong tingnan ngayon.'
+                  'You can scan your medicine to verify it, or mark it as taken after you take it.',
+                  'Maaari mong i-scan ang gamot para ma-verify ito, o markahan itong nainom pagkatapos inumin.'
                 )}
-              </p>
+              </small>
             </div>
           </div>
-          <div className="pm-voice-card__actions">
+          {preferences.ttsEnabled && (
+            <div
+              aria-label={tr('Voice reminder is speaking', 'Binabasa ang paalala sa boses')}
+              className="pm-compact-reminder__wave is-speaking"
+              role="img"
+            >
+              {REMINDER_WAVE.map((height, index) => (
+                <i key={index} style={{ '--wave-index': index, '--wave-height': `${height}px`, height }} />
+              ))}
+            </div>
+          )}
+          <div className="pm-reminder-actions">
             <button
               type="button"
-              className="pm-action-button pm-action-button--outline pm-tour-mark-taken"
-              disabled={!nextDose}
+              className="pm-reminder-mark pm-tour-mark-taken"
+              disabled={!activeReminderDose}
               onClick={markDueDoseTaken}
             >
               <HomeIcon name="check" size={18} /> {tr('Mark as Taken', 'Markahan bilang Nainom')}
             </button>
             <button
               type="button"
-              className="pm-action-button pm-tour-scan-medicine"
-              onClick={() => setScanOpen(true)}
+              className="pm-reminder-scan pm-tour-scan-medicine"
+              onClick={openMedicineScanner}
             >
               <HomeIcon name="scan" size={18} /> {tr('Scan Medicine', 'I-scan ang Gamot')}
             </button>
+            <button
+              type="button"
+              className="pm-reminder-snooze"
+              disabled={!activeReminderDose}
+              onClick={snoozeDueDose}
+            >
+              <HomeIcon name="clock" size={19} /> {tr('Snooze for 5 Minutes', 'I-snooze nang 5 Minuto')}
+            </button>
           </div>
+          <small className="pm-compact-reminder__hint">
+            {tr(
+              'Scan the medicine label for automatic verification and dose logging.',
+              'I-scan ang label ng gamot para awtomatikong ma-verify at maitala ang dose.'
+            )}
+          </small>
         </section>
       )}
 
@@ -716,7 +1002,8 @@ export default function Today() {
         className="pm-medication-calendar-summary pm-home-calendar"
         aria-labelledby="home-calendar-title"
       >
-        <header>
+        <div className="pm-home-calendar__planner">
+          <header>
           <div>
             <small>{tr('Medicine Calendar', 'Kalendaryo ng Gamot')}</small>
             <h2 id="home-calendar-title">
@@ -726,12 +1013,12 @@ export default function Today() {
               })}
             </h2>
           </div>
-          <button onClick={() => navigate('/patient/calendar')} type="button">
+          <button onClick={() => setCalendarExpanded(true)} type="button">
             <HomeIcon name="calendar" size={17} />
             <span>{tr('View Calendar', 'Kalendaryo')}</span>
           </button>
-        </header>
-        <div className="pm-medication-calendar-summary__navigation">
+          </header>
+          <div className="pm-medication-calendar-summary__navigation">
           <button
             aria-label={tr('Previous day', 'Nakaraang araw')}
             onClick={() => setCalendarDate((date) => addCalendarDays(date, -1))}
@@ -751,11 +1038,8 @@ export default function Today() {
           >
             <HomeIcon name="right" size={20} />
           </button>
-        </div>
-        <div
-          className="pm-medication-calendar-summary__week"
-          aria-label={tr('Choose a day', 'Pumili ng araw')}
-        >
+          </div>
+          <div className="pm-medication-calendar-summary__week" aria-label={tr('Choose a day', 'Pumili ng araw')}>
           {calendarWeek.map((date) => (
             <button
               aria-pressed={localDayKey(date) === localDayKey(calendarDate)}
@@ -772,8 +1056,8 @@ export default function Today() {
               <strong>{date.getDate()}</strong>
             </button>
           ))}
-        </div>
-        <div className="pm-medication-calendar-summary__filters">
+          </div>
+          <div className="pm-medication-calendar-summary__filters">
           {[
             ['upcoming', tr('Upcoming', 'Susunod')],
             ['taken', tr('Taken', 'Nainom')],
@@ -789,6 +1073,7 @@ export default function Today() {
               {label}
             </button>
           ))}
+          </div>
         </div>
         <strong className="pm-medication-calendar-summary__date">
           {calendarDateLabel(calendarDate, language)}
@@ -801,8 +1086,9 @@ export default function Today() {
           ) : visibleCalendarDoses.length ? (
             <div className="pm-home-calendar__doses">
               {visibleCalendarDoses.map((dose, index) => {
-                const isTaken = ['taken', 'taken_late'].includes(dose.status);
-                const isMissed = dose.status === 'missed';
+                const status = doseStatus(dose);
+                const isTaken = ['TAKEN', 'TAKEN_LATE'].includes(status);
+                const isMissed = status === 'MISSED';
                 return (
                   <article key={dose.schedule_id || `${dose.medication_id}-${index}`}>
                     <span>
@@ -840,53 +1126,6 @@ export default function Today() {
         </div>
       </section>
 
-      {streakStatus?.state === 'at_risk' && (
-        <section className="pm-streak-alert pm-streak-alert--risk" role="alert">
-          <span>
-            <HomeIcon name="alert" size={24} />
-          </span>
-          <div>
-            <strong>
-              {tr(
-                `Don't lose your ${streakStatus.current_days}-day streak!`,
-                `Huwag mawala ang iyong ${streakStatus.current_days}-araw na streak!`
-              )}
-            </strong>
-            <p>
-              {tr(
-                `You have ${streakStatus.today.pending} dose(s) left today.`,
-                `May ${streakStatus.today.pending} dose ka pang kailangang inumin ngayon.`
-              )}
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={() =>
-              document
-                .getElementById('patient-dose-reminder')
-                ?.scrollIntoView({ behavior: 'smooth' })
-            }
-          >
-            {tr('Log Dose Now', 'Itala ang Dose')}
-          </button>
-        </section>
-      )}
-      {streakStatus?.state === 'broken' && (
-        <section className="pm-streak-alert pm-streak-alert--reset" role="status">
-          <span>
-            <HomeIcon name="clock" size={22} />
-          </span>
-          <div>
-            <strong>{tr('Streak reset', 'Na-reset ang streak')}</strong>
-            <p>
-              {tr(
-                "Take all of today's doses to start Day 1 and resume your reward progress.",
-                'Inumin ang lahat ng dose ngayon upang magsimulang muli sa Day 1.'
-              )}
-            </p>
-          </div>
-        </section>
-      )}
       {streakStatus?.state === 'reward_ready' && (
         <Link className="pm-streak-alert pm-streak-alert--reward" to="/patient/streak">
           <span>
@@ -955,6 +1194,28 @@ export default function Today() {
             <small>{tr('Missed', 'Hindi nainom')}</small>
           </button>
         </div>
+      </section>
+
+      <section className="pm-dashboard-card pm-home-streak-card" aria-labelledby="streak-title">
+        <div className="pm-home-streak-card__hero">
+          <div>
+            <strong>{streak.days}</strong>
+            <h2 id="streak-title">{tr('Days Streak!', 'Araw na Streak!')}</h2>
+            <p>{tr('Every dose counts. Keep your routine going!', 'Mahalaga ang bawat dose. Ipagpatuloy ang iyong routine!')}</p>
+          </div>
+          <span aria-hidden="true"><HomeIcon name="flame" size={52} /></span>
+        </div>
+        <div className="pm-home-streak-card__week" aria-label={tr('This week’s streak', 'Streak ngayong linggo')}>
+          {streakWeekDays.map((day) => (
+            <div className={day.isToday ? 'is-today' : ''} key={day.key}>
+              <small>{day.label}</small>
+              <span className={day.isComplete ? 'is-complete' : ''}>{day.isComplete ? <HomeIcon name="flame" size={16} /> : ''}</span>
+            </div>
+          ))}
+        </div>
+        <Link className="pm-home-streak-card__link" to="/patient/streak">
+          {tr('View adherence progress', 'Tingnan ang adherence progress')} <span aria-hidden="true">›</span>
+        </Link>
       </section>
 
       {summaryOpen && (
@@ -1083,7 +1344,7 @@ export default function Today() {
         </div>
       )}
 
-      {scanOpen && (
+      {scanOpen && scanPhoto && (
         <div
           className="pm-scan-backdrop"
           role="presentation"
@@ -1092,45 +1353,35 @@ export default function Today() {
           }}
         >
           <section
-            className="pm-scan-sheet"
+            className="pm-scan-sheet pm-med-scanner"
             role="dialog"
             aria-modal="true"
             aria-labelledby="scan-title"
           >
             <div className="pm-scan-sheet__header">
               <div>
-                <h2 id="scan-title">Scan Medicine</h2>
-                <p>Take a clear photo of the medicine label.</p>
+                <h2 id="scan-title">Scan Medicine Label</h2>
+                <p>Scan the text printed on your medicine label.</p>
               </div>
               <button type="button" onClick={closeScan} aria-label="Close medicine scanner">
                 ×
               </button>
             </div>
 
-            {!scanPhoto ? (
-              <div className="pm-scan-choices">
+            <div className="pm-scan-review pm-med-scan-review">
                 <button
                   type="button"
-                  disabled={scanCapturing}
-                  onClick={() => chooseScanPhoto('camera')}
+                  className="pm-med-scan-preview pm-med-scan-preview--button"
+                  onClick={() => setScanPhotoFullView(true)}
+                  aria-label="View medicine label full screen"
                 >
-                  <span aria-hidden="true">📷</span>
-                  <strong>Take a Photo</strong>
-                  <small>{scanCapturing ? 'Opening…' : 'Use on-device Google ML Kit'}</small>
+                  <img src={scanPhoto.url} alt="Selected medicine label" />
+                  <i />
+                  <i />
+                  <i />
+                  <i />
+                  {scanBusy && <span className="pm-med-scan-reading">Reading medicine label…</span>}
                 </button>
-                <button
-                  type="button"
-                  disabled={scanCapturing}
-                  onClick={() => chooseScanPhoto('gallery')}
-                >
-                  <span aria-hidden="true">▣</span>
-                  <strong>Choose a Photo</strong>
-                  <small>Read a saved label on this device</small>
-                </button>
-              </div>
-            ) : (
-              <div className="pm-scan-review">
-                <img src={scanPhoto.url} alt="Selected medicine label" />
                 <button
                   type="button"
                   className="pm-scan-retake"
@@ -1146,26 +1397,6 @@ export default function Today() {
                 >
                   Choose a different photo
                 </button>
-                {scanOcr && (
-                  <div
-                    className={`pm-scan-result ${scanOcr.outcome === 'ACCEPTED' ? 'pm-scan-result--success' : 'pm-scan-result--warn'}`}
-                  >
-                    <strong>
-                      {scanOcr.available === false
-                        ? 'Native scanner unavailable'
-                        : scanOcr.outcome === 'RECAPTURE_REQUIRED'
-                          ? 'Retake required'
-                          : 'Review the detected details'}
-                    </strong>
-                    <span>{scanOcr.message}</span>
-                    {Number.isFinite(scanOcr.field_confidence) && (
-                      <small>
-                        {Math.round(scanOcr.field_confidence * 100)}% field confidence ·{' '}
-                        {Math.round(OCR_CONFIDENCE_THRESHOLD * 100)}% threshold
-                      </small>
-                    )}
-                  </div>
-                )}
                 <label htmlFor="scan-medicine-name">Medicine name shown on the label</label>
                 <input
                   id="scan-medicine-name"
@@ -1209,133 +1440,98 @@ export default function Today() {
                     I checked the medicine name, strength, and formulation against the package.
                   </span>
                 </label>
-                <p className="pm-scan-privacy">
-                  The photo and Google ML Kit recognition stay on this device. Confirmed fields and
-                  field-level quality measurements sync when internet is available.
+                <p className="pm-med-scan-privacy">
+                  Review the photo carefully before confirming. Only the medicine details you
+                  confirm are used to log your dose.
                 </p>
-                <button
-                  type="button"
-                  className="pm-action-button"
-                  disabled={
-                    !scanName.trim() ||
-                    !scanReviewed ||
-                    scanBusy ||
-                    scanOcr?.outcome === 'RECAPTURE_REQUIRED'
-                  }
-                  onClick={verifyScan}
-                >
-                  {scanBusy ? 'Checking…' : 'Check Medicine'}
-                </button>
+                {!scanResult?.match && (
+                  <button
+                    type="button"
+                    className="pm-action-button"
+                    disabled={
+                      !scanName.trim() ||
+                      !scanReviewed ||
+                      scanBusy ||
+                      scanOcr?.outcome === 'RECAPTURE_REQUIRED'
+                    }
+                    onClick={verifyScan}
+                  >
+                    {scanBusy ? 'Checking…' : '✓ I-confirm at I-log'}
+                  </button>
+                )}
                 {scanResult?.match && (
                   <div className="pm-scan-result pm-scan-result--success">
-                    <strong>
-                      {scanResult.markedTaken ? 'Dose marked as taken' : 'Medicine verified'}
-                    </strong>
+                    <strong>Medicine verified</strong>
                     <span>
-                      {scanResult.markedTaken
-                        ? `${scanResult.drug_name} was matched to your schedule and recorded as taken.`
+                      {scanResult.doseReadyToLog
+                        ? `${scanResult.drug_name} matches your schedule. Logging your dose now.`
                         : `${scanResult.drug_name} is active, but it has no outstanding scheduled dose to record.`}
                     </span>
-                    <button type="button" onClick={closeScan}>
-                      Done
-                    </button>
                   </div>
                 )}
                 {scanResult && !scanResult.match && (
                   <div className="pm-scan-result pm-scan-result--warn">
-                    <strong>Medicine not matched</strong>
+                    <strong>Medicine does not match your schedule</strong>
                     <span>
-                      {scanResult.message || 'Check the label name or add this medicine first.'}
+                      {scanResult.message ||
+                        'Check the label, then scan the medicine currently scheduled for you.'}
                     </span>
                   </div>
                 )}
-              </div>
-            )}
+            </div>
           </section>
+          {scanPhotoFullView && (
+            <div className="pm-label-full-view" role="presentation" onClick={() => setScanPhotoFullView(false)}>
+              <section className="pm-label-full-view__content" role="dialog" aria-modal="true" aria-label="Full screen medicine label" onClick={(event) => event.stopPropagation()}>
+                <button type="button" className="pm-label-full-view__close" onClick={() => setScanPhotoFullView(false)} aria-label="Close full screen photo">×</button>
+                <img src={scanPhoto.url} alt="Full-size medicine label" />
+              </section>
+            </div>
+          )}
         </div>
       )}
 
-      {streak.days > 0 && (
-        <section
-          className="pm-dashboard-card pm-priority-streak-card"
-          aria-labelledby="streak-title"
-        >
-          <div className="pm-priority-streak__top">
-            <div>
-              <span className="pm-priority-token-icon" aria-hidden="true">
-                ★
-              </span>
-              <span>
-                <small>{tr('Your Priority Tokens', 'Iyong Priority Tokens')}</small>
-                <strong>{streak.tokens}</strong>
-              </span>
-            </div>
-            <Link className="pm-streak-details" to="/patient/streak">
-              {tr('View Details', 'Tingnan ang Detalye')} <span aria-hidden="true">›</span>
-            </Link>
-          </div>
-
-          <div className="pm-priority-streak__hero">
-            <div
-              className="pm-streak-ring"
-              style={{ '--streak-progress': `${(streak.days / 7) * 360}deg` }}
-            >
+      {doseConfirmation && createPortal(
+        <div className="pm-log-success-backdrop" role="presentation">
+          <section
+            aria-labelledby="dose-confirm-title"
+            aria-modal="true"
+            className="pm-log-success-modal pm-dose-confirm-modal"
+            role="dialog"
+          >
+            <div className="pm-log-success-check" aria-hidden="true">?</div>
+            <h2 id="dose-confirm-title">{tr('Is this medicine correct?', 'Tama ba ang gamot na ito?')}</h2>
+            <p>
+              {tr(
+                'Please check the medicine and dose before marking it as taken.',
+                'Suriin ang gamot at dose bago markahan bilang nainom.'
+              )}
+            </p>
+            <dl className="pm-log-success-details">
               <div>
-                <strong>{streak.days}</strong>
-                <span>{tr('Day Streak', 'Araw na Streak')}</span>
+                <dt>{tr('Medicine', 'Gamot')}</dt>
+                <dd>{doseConfirmation.dose.drug_name || tr('Scheduled medicine', 'Naka-iskedyul na gamot')}</dd>
               </div>
+              <div>
+                <dt>{tr('Dose', 'Dose')}</dt>
+                <dd>{doseConfirmation.dose.dosage_instruction || tr('As scheduled', 'Ayon sa iskedyul')}</dd>
+              </div>
+              <div>
+                <dt>{tr('Date and time', 'Petsa at oras')}</dt>
+                <dd>{doseConfirmationDateTime(doseConfirmation.recordedAt, language)}</dd>
+              </div>
+            </dl>
+            <div className="pm-dose-confirm-modal__actions">
+              <button onClick={() => setDoseConfirmation(null)} type="button">
+                {tr('Cancel', 'Kanselahin')}
+              </button>
+              <button onClick={confirmDoseLog} type="button">
+                {tr('Yes, log as taken', 'Oo, itala bilang nainom')}
+              </button>
             </div>
-            <div>
-              <h2 id="streak-title">
-                {streak.days === 7
-                  ? tr('You earned 2 Priority Tokens!', 'Nakakuha ka ng 2 Priority Tokens!')
-                  : tr('Keep your streak going!', 'Ipagpatuloy ang iyong streak!')}
-              </h2>
-              <p>
-                {streak.days === 7
-                  ? tr(
-                      'Your seven-day streak is complete. You earned the 2-token final reward.',
-                      'Kumpleto na ang pitong araw. Nakuha mo ang 2-token final reward.'
-                    )
-                  : tr(
-                      'Earn 1 token on Day 3 and Day 6, then 2 tokens on Day 7.',
-                      'Makakuha ng 1 token sa Day 3 at Day 6, at 2 token sa Day 7.'
-                    )}
-              </p>
-            </div>
-          </div>
-
-          <div className="pm-streak-week" aria-label={`${streak.days} of 7 streak days completed`}>
-            {Array.from({ length: 7 }, (_, index) => (
-              <span className={index < streak.days ? 'complete' : ''} key={index}>
-                <b>{index < streak.days ? '✓' : index + 1}</b>
-                <small>{tr(`Day ${index + 1}`, `Araw ${index + 1}`)}</small>
-              </span>
-            ))}
-          </div>
-
-          <div className="pm-streak-reward">
-            <span aria-hidden="true">★</span>
-            <div>
-              <strong>
-                {tr(
-                  'Day 3: 1 token · Day 6: 1 token · Day 7: 2 tokens',
-                  'Day 3: 1 token · Day 6: 1 token · Day 7: 2 token'
-                )}
-              </strong>
-              <small>
-                {tr(
-                  'Use your token when you need faster pharmacist support.',
-                  'Gamitin ang token para sa mas mabilis na tulong ng parmasyutiko.'
-                )}
-              </small>
-            </div>
-          </div>
-
-          <Link className="pm-ask-pharmacist-button" to="/patient/ask">
-            {tr('Ask a Pharmacist About Your Concern', 'Magtanong sa Parmasyutiko')}
-          </Link>
-        </section>
+          </section>
+        </div>,
+        document.body
       )}
 
       {loggedDose && (
@@ -1400,10 +1596,53 @@ export default function Today() {
 
             <button
               className="pm-log-success-done"
-              onClick={() => setLoggedDose(null)}
+              onClick={() => {
+                setLoggedDose(null);
+                if (streakStarted) {
+                  speak(
+                    tr(
+                      'You have started a medication streak. Keep taking your scheduled medicine each day.',
+                      'Nagsimula ka na ng streak sa pag-inom ng gamot. Ipagpatuloy ang pag-inom ng naka-iskedyul na gamot araw-araw.'
+                    )
+                  );
+                }
+              }}
               type="button"
             >
               {tr('Done', 'Tapos')}
+            </button>
+          </section>
+        </div>
+      )}
+
+      {streakStarted && !loggedDose && (
+        <div className="pm-log-success-backdrop" role="presentation">
+          <section
+            aria-labelledby="streak-start-title"
+            aria-modal="true"
+            className="pm-log-success-modal pm-streak-start-modal"
+            role="dialog"
+          >
+            <div className="pm-streak-start-modal__flame" aria-hidden="true">
+              <HomeIcon name="flame" size={76} />
+            </div>
+            <div className="pm-streak-start-modal__week" aria-label={tr('Your first streak week', 'Unang linggo ng iyong streak')}>
+              {streakWeekDays.map((day) => (
+                <div className={day.isToday ? 'is-complete' : ''} key={day.key}>
+                  <span>{day.isToday ? <HomeIcon name="check" size={20} /> : ''}</span>
+                  <small>{day.label}</small>
+                </div>
+              ))}
+            </div>
+            <h2 id="streak-start-title">{tr("You've started a streak!", 'Nagsimula ka na ng streak!')}</h2>
+            <p>
+              {tr(
+                'Take your scheduled medicine each day to build a healthier habit.',
+                'Inumin ang naka-iskedyul mong gamot araw-araw para makabuo ng mas malusog na gawi.'
+              )}
+            </p>
+            <button className="pm-log-success-done" onClick={() => setStreakStarted(false)} type="button">
+              {tr('Continue', 'Magpatuloy')}
             </button>
           </section>
         </div>

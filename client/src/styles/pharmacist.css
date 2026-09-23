@@ -48,14 +48,14 @@
   color: #1f2937;
 }
 .pw-navlink.active {
-  background: #2563eb;
+  background: #578EF5;
   color: #fff;
   font-weight: 600;
 }
 
 .pw-logout {
   margin-top: auto;
-  background: #2563eb;
+  background: #578EF5;
   color: #fff;
   border: none;
   border-radius: 0.6rem;
@@ -63,7 +63,7 @@
   font-weight: 600;
 }
 .pw-logout:hover {
-  background: #1d4ed8;
+  background: #578EF5;
 }
 
 .pw-main {
@@ -106,7 +106,7 @@
 .pw-code {
   font-family: 'Poppins', system-ui, sans-serif;
   font-weight: 600;
-  color: #2563eb;
+  color: #578EF5;
 }
 
 .pw-stat {
@@ -194,7 +194,7 @@
 }
 .pm-rx-review-layout > aside > button.active {
   background: #eef5ff;
-  border-color: #1769f5;
+  border-color: #578EF5;
 }
 .pm-rx-review-layout > aside span {
   display: flex;

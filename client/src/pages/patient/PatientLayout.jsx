@@ -7,6 +7,7 @@ import { api } from '../../api.js';
 import { registerPush } from '../../lib/notifications.js';
 import { useLanguage } from '../../context/LanguageContext.jsx';
 import { useAccessibility } from '../../context/AccessibilityContext.jsx';
+import { useAuth } from '../../context/AuthContext.jsx';
 import { speak } from '../../lib/notifications.js';
 import { useRealtime } from '../../hooks/useRealtime.js';
 import PointerSpotlight from '../../components/PointerSpotlight.js';
@@ -98,8 +99,8 @@ function PatientIcon({ name, size = 23 }) {
 
 const NAV = [
   { to: '/patient/today', icon: 'home', label: 'nav.home' },
-  { to: '/patient/medications', icon: 'medication', label: 'nav.medications' },
   { to: '/patient/ask', icon: 'message', label: 'nav.ask' },
+  { to: '/patient/medications', icon: 'medication', label: 'nav.medications', center: true },
   { to: '/patient/shop', icon: 'delivery', label: 'nav.orders' },
   { to: '/patient/profile', icon: 'profile', label: 'nav.profile' },
 ];
@@ -107,6 +108,7 @@ const NAV = [
 export default function PatientLayout() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { user } = useAuth();
   const { t, language } = useLanguage();
   const { preferences: accessibility, updatePreference } = useAccessibility();
   const tr = (en, fil) => (language === 'fil' ? fil : en);
@@ -114,16 +116,77 @@ export default function PatientLayout() {
   const [unread, setUnread] = useState(0);
   const [notifications, setNotifications] = useState([]);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [streakMenuOpen, setStreakMenuOpen] = useState(false);
   const [streakStatus, setStreakStatus] = useState({
     state: 'active',
     current_days: 0,
     priority_tokens: 0,
   });
   const [listenMenuOpen, setListenMenuOpen] = useState(false);
-  const [tourOpen, setTourOpen] = useState(
-    () => localStorage.getItem('has_seen_onboarding_tour') !== 'true'
-  );
+  const [listenPosition, setListenPosition] = useState(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('pm_listening_control_position') || 'null');
+      return Number.isFinite(saved?.left) && Number.isFinite(saved?.top) ? saved : null;
+    } catch {
+      return null;
+    }
+  });
+  const listenDragRef = useRef(null);
+  const listenPositionRef = useRef(listenPosition);
+  const listenMovedRef = useRef(false);
+  const [tourOpen, setTourOpen] = useState(false);
   const [tourSteps, setTourSteps] = useState(PATIENT_ELDERLY_TOUR_STEPS);
+  const tourStorageKey = user?.id ? `pm_patient_elderly_tour:${user.id}` : null;
+
+  function beginListeningDrag(event) {
+    if (event.button !== undefined && event.button !== 0) return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    listenMovedRef.current = false;
+    listenDragRef.current = {
+      pointerId: event.pointerId,
+      offsetX: event.clientX - rect.left,
+      offsetY: event.clientY - rect.top,
+      width: rect.width,
+      height: rect.height,
+      startX: event.clientX,
+      startY: event.clientY,
+    };
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+  }
+
+  function moveListeningControl(event) {
+    const drag = listenDragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    if (Math.abs(event.clientX - drag.startX) > 4 || Math.abs(event.clientY - drag.startY) > 4) {
+      listenMovedRef.current = true;
+    }
+    if (!listenMovedRef.current) return;
+    const position = {
+      left: Math.round(Math.min(Math.max(12, event.clientX - drag.offsetX), window.innerWidth - drag.width - 12)),
+      top: Math.round(Math.min(Math.max(12, event.clientY - drag.offsetY), window.innerHeight - drag.height - 12)),
+    };
+    listenPositionRef.current = position;
+    setListenPosition(position);
+  }
+
+  function finishListeningDrag(event) {
+    const drag = listenDragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    listenDragRef.current = null;
+    event.currentTarget.releasePointerCapture?.(event.pointerId);
+    if (listenMovedRef.current) {
+      localStorage.setItem('pm_listening_control_position', JSON.stringify(listenPositionRef.current));
+    }
+  }
+
+  // Tour completion belongs to the signed-in patient, not the browser. A new
+  // account on a shared phone must still receive the first-time guide.
+  useEffect(() => {
+    if (!tourStorageKey) return;
+    if (localStorage.getItem(tourStorageKey) === 'complete') return;
+    const timer = window.setTimeout(() => setTourOpen(true), 250);
+    return () => window.clearTimeout(timer);
+  }, [tourStorageKey]);
 
   async function loadNotifications() {
     try {
@@ -290,10 +353,10 @@ export default function PatientLayout() {
   }
 
   function closeTour() {
-    localStorage.setItem('has_seen_onboarding_tour', 'true');
-    localStorage.setItem('pm_patient_elderly_tour', 'complete');
+    if (tourStorageKey) localStorage.setItem(tourStorageKey, 'complete');
     setTourOpen(false);
     sessionStorage.removeItem('pm_tour_add_mode');
+    sessionStorage.removeItem('pm_tour_ask_mode');
     window.dispatchEvent(new CustomEvent('pm-tour-step', { detail: null }));
   }
 
@@ -312,6 +375,8 @@ export default function PatientLayout() {
     (step) => {
       if (step.id === 'create-schedule') sessionStorage.setItem('pm_tour_add_mode', '1');
       else sessionStorage.removeItem('pm_tour_add_mode');
+      if (step.id === 'priority-chat') sessionStorage.setItem('pm_tour_ask_mode', 'chat-options');
+      else sessionStorage.removeItem('pm_tour_ask_mode');
       if (location.pathname !== step.path) navigate(step.path);
       window.setTimeout(
         () => window.dispatchEvent(new CustomEvent('pm-tour-step', { detail: step })),
@@ -332,14 +397,17 @@ export default function PatientLayout() {
           '/patient/medications/add',
           '/patient/shop',
           '/patient/orders',
+          '/patient/ask',
           '/patient/accessibility',
         ].includes(location.pathname) &&
           !/^\/patient\/medications(?:\/[^/]+)?\/prescription$/.test(location.pathname) && (
             <div className="pm-global-patient-actions">
-              <Link
+              <button
                 className={`pm-header-streak-button streak-state-${streakStatus.state}`}
-                to="/patient/streak"
-                aria-label={tr('Open adherence streak', 'Buksan ang adherence streak')}
+                aria-expanded={streakMenuOpen}
+                aria-label={tr('Open streak options', 'Buksan ang mga pagpipilian sa streak')}
+                onClick={() => setStreakMenuOpen((open) => !open)}
+                type="button"
               >
                 <PatientIcon name="flame" />
                 <span className="pm-streak-status-badge" aria-hidden="true">
@@ -356,8 +424,34 @@ export default function PatientLayout() {
                     size={12}
                   />
                 </span>
-              </Link>
+              </button>
+              {streakMenuOpen && (
+                <div className="pm-streak-shortcut-menu" role="menu">
+                  <button
+                    onClick={() => {
+                      localStorage.removeItem('pm_hide_streak_card');
+                      window.dispatchEvent(new Event('pm-show-streak-card'));
+                      setStreakMenuOpen(false);
+                    }}
+                    role="menuitem"
+                    type="button"
+                  >
+                    {tr('Show streak', 'Ipakita ang streak')}
+                  </button>
+                  <button
+                    onClick={() => {
+                      setStreakMenuOpen(false);
+                      navigate('/patient/streak');
+                    }}
+                    role="menuitem"
+                    type="button"
+                  >
+                    {tr('Show more', 'Tingnan pa')}
+                  </button>
+                </div>
+              )}
               <button
+                className="pm-notification-button"
                 onClick={() => {
                   setNotificationsOpen(true);
                   loadNotifications();
@@ -370,7 +464,9 @@ export default function PatientLayout() {
               </button>
             </div>
           )}
-        <Outlet />
+        <div className="pm-patient-route-transition" key={location.key}>
+          <Outlet />
+        </div>
       </div>
       <PointerSpotlight
         onClose={closeTour}
@@ -384,7 +480,22 @@ export default function PatientLayout() {
             aria-controls="patient-listening-panel"
             aria-expanded={listenMenuOpen}
             className="pm-global-page-listen"
-            onClick={() => setListenMenuOpen((open) => !open)}
+            onClick={() => {
+              if (listenMovedRef.current) {
+                listenMovedRef.current = false;
+                return;
+              }
+              setListenMenuOpen((open) => !open);
+            }}
+            onPointerDown={beginListeningDrag}
+            onPointerMove={moveListeningControl}
+            onPointerUp={finishListeningDrag}
+            onPointerCancel={finishListeningDrag}
+            style={
+              listenPosition
+                ? { left: `${listenPosition.left}px`, right: 'auto', top: `${listenPosition.top}px`, bottom: 'auto' }
+                : undefined
+            }
             type="button"
           >
             <PatientIcon name="sound" size={20} />
@@ -512,11 +623,11 @@ export default function PatientLayout() {
           <NavLink
             key={item.to}
             to={item.to}
-            className={({ isActive }) =>
-              isActive || (item.to === '/patient/shop' && location.pathname === '/patient/orders')
-                ? 'active'
-                : ''
-            }
+            className={({ isActive }) => {
+              const active =
+                isActive || (item.to === '/patient/shop' && location.pathname === '/patient/orders');
+              return `${active ? 'active' : ''}${item.center ? ' pm-bottomnav__medications' : ''}`.trim();
+            }}
           >
             <span className="pm-navicon">
               <PatientIcon name={item.icon} />

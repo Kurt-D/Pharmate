@@ -1,0 +1,39 @@
+name: Approved production release
+
+on:
+  workflow_run:
+    workflows: [PharMate CI]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    # Configure GitHub Environment "production" with required reviewers.
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    environment: production
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Download approved artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: pharmate-${{ github.event.workflow_run.head_sha }}
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Deploy immutable artifact
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: |
+          test -n "$DEPLOY_HOST" && test -n "$DEPLOY_USER" && test -n "$DEPLOY_SSH_KEY"
+          install -m 700 -d ~/.ssh
+          printf '%s' "$DEPLOY_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          artifact="pharmate-${{ github.event.workflow_run.head_sha }}.tgz"
+          release_id="${{ github.run_id }}-${{ github.run_attempt }}"
+          scp -o StrictHostKeyChecking=accept-new "$artifact" "$DEPLOY_USER@$DEPLOY_HOST:/tmp/pharmate-$release_id.tgz"
+          ssh -o StrictHostKeyChecking=accept-new "$DEPLOY_USER@$DEPLOY_HOST" \
+            "bash /var/www/pharmate/infra/deploy-artifact.sh /tmp/pharmate-$release_id.tgz $release_id"

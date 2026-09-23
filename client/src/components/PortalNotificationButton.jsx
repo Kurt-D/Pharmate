@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Bell, CheckCheck, X } from 'lucide-react';
+import { Bell, CheckCheck, CircleAlert, Info, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api.js';
 import { useRealtime } from '../hooks/useRealtime.js';
@@ -10,6 +10,7 @@ export default function PortalNotificationButton() {
   const [items, setItems] = useState([]);
   const [unread, setUnread] = useState(0);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -17,6 +18,9 @@ export default function PortalNotificationButton() {
       const response = await api('/api/notifications?limit=30');
       setItems(response.data.notifications);
       setUnread(response.data.unread_count);
+      setError('');
+    } catch {
+      setError('Notifications could not be loaded. Try again.');
     } finally {
       setLoading(false);
     }
@@ -78,7 +82,7 @@ export default function PortalNotificationButton() {
           <header>
             <div>
               <strong>Notifications</strong>
-              <small>{unread} unread</small>
+              <small>{unread ? `${unread} unread` : 'All caught up'}</small>
             </div>
             <button aria-label="Close notifications" onClick={() => setOpen(false)}>
               <X />
@@ -91,6 +95,7 @@ export default function PortalNotificationButton() {
           )}
           <div className="portal-notification-list">
             {loading && !items.length && <p>Loading notifications…</p>}
+            {error && <p role="alert">{error}</p>}
             {!loading && !items.length && <p>No notifications yet.</p>}
             {items.map((item) => (
               <button
@@ -98,8 +103,9 @@ export default function PortalNotificationButton() {
                 key={item.id}
                 onClick={() => read(item)}
               >
-                <strong>{item.title}</strong>
+                <strong><span aria-hidden="true">{item.priority === 'URGENT' || item.priority === 'ATTENTION' ? <CircleAlert /> : <Info />}</span>{item.title}</strong>
                 <span>{item.body}</span>
+                {item.priority && item.priority !== 'INFO' && <span>{item.priority === 'URGENT' ? 'Urgent' : 'Needs attention'}</span>}
                 <time>{new Date(item.created_at).toLocaleString()}</time>
               </button>
             ))}

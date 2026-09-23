@@ -19,10 +19,18 @@ export async function verifyLabel(patientId, scannedName) {
   if (!scanned) return { match: false, reason: 'empty_scan' };
 
   const [rows] = await pool.execute(
-    `SELECT m.id, m.drug_name_raw, dr.generic_name
+    `SELECT m.id, m.drug_name_raw, dr.generic_name,
+            EXISTS(
+              SELECT 1 FROM medication_schedules ms
+               WHERE ms.medication_id = m.id
+                 AND ms.patient_id = m.patient_id
+                 AND ms.is_confirmed = 1
+                 AND ms.status IN ('scheduled','snoozed','missed')
+            ) AS has_confirmed_schedule
      FROM medications m
      LEFT JOIN drug_reference dr ON dr.id = m.drug_id
-     WHERE m.patient_id = ? AND m.status = 'active'`,
+     WHERE m.patient_id = ? AND m.status = 'active'
+     ORDER BY has_confirmed_schedule DESC, m.updated_at DESC`,
     [patientId]
   );
 

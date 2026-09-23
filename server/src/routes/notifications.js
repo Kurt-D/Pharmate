@@ -19,7 +19,7 @@ router.get('/', async (req, res) => {
   }
   if (unreadOnly) clauses.push('read_at IS NULL');
   const [rows] = await pool.execute(
-    `SELECT id,type,title,body,action_path,read_at,created_at
+    `SELECT id,type,category,title,body,priority,resource_type,resource_id,action_path,read_at,resolved_at,created_at
      FROM portal_notifications WHERE ${clauses.join(' AND ')}
      ORDER BY created_at DESC LIMIT ${limit + 1}`,
     params
@@ -43,6 +43,19 @@ router.get('/unread-count', async (req, res) => {
   res.json({ unread_count: Number(row.unread_count) });
 });
 
+// Navigation badges are intentionally separate from unread count: an item may
+// have been read while its operational work still needs attention.
+router.get('/attention-counts', async (req, res) => {
+  const [rows] = await pool.execute(
+    `SELECT COALESCE(category, type) AS category, COUNT(DISTINCT COALESCE(resource_id, id)) AS count
+     FROM portal_notifications
+     WHERE user_id=? AND resolved_at IS NULL AND priority IN ('ATTENTION','URGENT')
+     GROUP BY COALESCE(category, type)`,
+    [req.user.sub]
+  );
+  res.json({ attention: Object.fromEntries(rows.map((row) => [row.category, Number(row.count)])) });
+});
+
 router.patch('/:id/read', async (req, res) => {
   const [result] = await pool.execute(
     'UPDATE portal_notifications SET read_at=COALESCE(read_at,NOW(3)) WHERE id=? AND user_id=?',
@@ -58,6 +71,15 @@ router.post('/read-all', async (req, res) => {
     [req.user.sub]
   );
   res.json({ marked_read: result.affectedRows });
+});
+
+router.patch('/:id/resolve', async (req, res) => {
+  const [result] = await pool.execute(
+    'UPDATE portal_notifications SET resolved_at=COALESCE(resolved_at,NOW(3)) WHERE id=? AND user_id=?',
+    [req.params.id, req.user.sub]
+  );
+  if (!result.affectedRows) return res.status(404).json({ error: 'Notification not found' });
+  res.json({ id: req.params.id, resolved: true });
 });
 
 export default router;

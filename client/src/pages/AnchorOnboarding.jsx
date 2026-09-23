@@ -2,16 +2,30 @@ import { useEffect, useState } from 'react';
 import {
   ArrowLeft,
   ArrowRight,
+  CalendarDays,
   Check,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Clock,
   Minus,
+  Pencil,
   Plus,
   ShieldCheck,
 } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../api.js';
+import privacyConsentIllustration from '../assets/privacy-consent-illustration.png';
+import safetyDateIllustration from '../assets/safety-date-illustration.png';
+import safetyWeightIllustration from '../assets/safety-weight-illustration.png';
+import safetyAllergyIllustration from '../assets/safety-allergy-illustration.png';
+import safetyConditionsIllustration from '../assets/safety-conditions-illustration.png';
+import safetyPregnancyIllustration from '../assets/safety-pregnancy-illustration.png';
+import safetySupplementsIllustration from '../assets/safety-supplements-illustration.png';
+import safetyRoutineIllustration from '../assets/safety-routine-illustration.png';
+import safetyKidneyIllustration from '../assets/safety-kidney-illustration.png';
+import safetyLiverIllustration from '../assets/safety-liver-illustration.png';
+import safetyCaregiverIllustration from '../assets/safety-caregiver-illustration.png';
 import '../styles/safety-onboarding.css';
 
 const DEFAULTS = {
@@ -21,6 +35,25 @@ const DEFAULTS = {
   lunch_anchor: '12:00',
   dinner_anchor: '18:30',
 };
+function minutesForTime(value) {
+  const [hours, minutes] = String(value || '').split(':').map(Number);
+  return Number.isInteger(hours) && Number.isInteger(minutes) ? hours * 60 + minutes : null;
+}
+function timeAfter(value, minutesToAdd = 30) {
+  const minutes = minutesForTime(value);
+  if (minutes === null) return DEFAULTS.breakfast_anchor;
+  const next = (minutes + minutesToAdd) % (24 * 60);
+  return `${String(Math.floor(next / 60)).padStart(2, '0')}:${String(next % 60).padStart(2, '0')}`;
+}
+function normalizeRoutineAnchors(values) {
+  const next = { ...DEFAULTS, ...values };
+  const wake = minutesForTime(next.wake_anchor);
+  const breakfast = minutesForTime(next.breakfast_anchor);
+  if (wake !== null && (breakfast === null || breakfast <= wake)) {
+    next.breakfast_anchor = timeAfter(next.wake_anchor);
+  }
+  return next;
+}
 const EMPTY = {
   date_of_birth: '',
   weight_kg: '',
@@ -152,6 +185,44 @@ const MONTHS = [
   'December',
 ];
 
+function SafetyDropdown({ label, value, options, onChange }) {
+  const [open, setOpen] = useState(false);
+  const selected = options.find((option) => String(option.value) === String(value));
+  return (
+    <div className="pm-safety-select">
+      <button
+        aria-expanded={open}
+        aria-haspopup="listbox"
+        aria-label={label}
+        onClick={() => setOpen((current) => !current)}
+        type="button"
+      >
+        <span>{selected?.label}</span>
+        <ChevronDown />
+      </button>
+      {open && (
+        <div className="pm-safety-select__menu" role="listbox" aria-label={label}>
+          {options.map((option) => (
+            <button
+              aria-selected={String(option.value) === String(value)}
+              className={String(option.value) === String(value) ? 'selected' : ''}
+              key={option.value}
+              onClick={() => {
+                onChange(option.value);
+                setOpen(false);
+              }}
+              role="option"
+              type="button"
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function SafetyDatePicker({ value, onChange }) {
   const initial = /^\d{4}-\d{2}-\d{2}$/.test(value) ? new Date(`${value}T12:00:00`) : new Date();
   const [view, setView] = useState(new Date(initial.getFullYear(), initial.getMonth(), 1));
@@ -172,28 +243,18 @@ function SafetyDatePicker({ value, onChange }) {
           <ChevronLeft />
         </button>
         <div>
-          <select
-            aria-label="Birth month"
+          <SafetyDropdown
+            label="Birth month"
             value={view.getMonth()}
-            onChange={(event) =>
-              setView(new Date(view.getFullYear(), Number(event.target.value), 1))
-            }
-          >
-            {MONTHS.map((month, index) => (
-              <option key={month} value={index}>
-                {month}
-              </option>
-            ))}
-          </select>
-          <select
-            aria-label="Birth year"
+            options={MONTHS.map((month, index) => ({ label: month, value: index }))}
+            onChange={(month) => setView(new Date(view.getFullYear(), Number(month), 1))}
+          />
+          <SafetyDropdown
+            label="Birth year"
             value={view.getFullYear()}
-            onChange={(event) => setView(new Date(Number(event.target.value), view.getMonth(), 1))}
-          >
-            {years.map((year) => (
-              <option key={year}>{year}</option>
-            ))}
-          </select>
+            options={years.map((year) => ({ label: String(year), value: year }))}
+            onChange={(year) => setView(new Date(Number(year), view.getMonth(), 1))}
+          />
         </div>
         <button
           type="button"
@@ -318,6 +379,9 @@ export default function AnchorOnboarding() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [privacyAccepted, setPrivacyAccepted] = useState(editingFromProfile);
+  const [consentChecked, setConsentChecked] = useState(false);
+  const [leaveConfirmOpen, setLeaveConfirmOpen] = useState(false);
   const question = QUESTIONS[step];
   useEffect(() => {
     Promise.allSettled([api('/api/patient/safety-profile'), api('/api/patient/anchors')]).then(
@@ -326,11 +390,13 @@ export default function AnchorOnboarding() {
           setProfile((current) => ({ ...current, ...safety.value.data }));
         if (routine.status === 'fulfilled')
           setAnchors(
-            Object.fromEntries(
+            normalizeRoutineAnchors(
+              Object.fromEntries(
               Object.keys(DEFAULTS).map((key) => [
                 key,
                 String(routine.value.data[key] || DEFAULTS[key]).slice(0, 5),
               ])
+              )
             )
           );
         setLoading(false);
@@ -365,7 +431,11 @@ export default function AnchorOnboarding() {
     else setStep((value) => value + 1);
   }
   function previousQuestion() {
-    if (step > 0) setStep((value) => value - 1);
+    if (step > 0) {
+      setStep((value) => value - 1);
+      return;
+    }
+    if (!editingFromProfile) setPrivacyAccepted(false);
   }
   function toggleChoice(key, value) {
     const exclusive = ['None', 'None known', 'Not sure'];
@@ -399,28 +469,175 @@ export default function AnchorOnboarding() {
   if (loading) return <main className="pm-safety-loading">Loading your safety profile…</main>;
   return (
     <main className="pm-safety-page">
-      <section className="pm-safety-card">
+      <section className={`pm-safety-card ${!privacyAccepted ? 'pm-safety-card--consent' : ''}`}>
         <header>
           <span>
             <ShieldCheck /> PharMate Safety Profile
           </span>
           <div className="pm-safety-progress">
-            <i style={{ width: `${((step + 1) / QUESTIONS.length) * 100}%` }} />
+            <i style={{ width: `${privacyAccepted ? ((step + 1) / QUESTIONS.length) * 100 : 10}%` }} />
           </div>
-          <small>
-            Question {step + 1} of {QUESTIONS.length}
-          </small>
+          <small>{privacyAccepted ? `Question ${step + 1} of ${QUESTIONS.length}` : 'Before we begin'}</small>
         </header>
         <button
           className="pm-safety-back"
           disabled={saving}
-          onClick={() => navigate('/patient/medications')}
+          onClick={() => setLeaveConfirmOpen(true)}
         >
-          <ArrowLeft /> Return to Medications
+          <ArrowLeft /> Return to Sign in
         </button>
-        <div className="pm-safety-question">
-          <h1>{question.title}</h1>
-          <p>{question.help}</p>
+        {leaveConfirmOpen && (
+          <div
+            aria-labelledby="leave-confirm-title"
+            aria-modal="true"
+            className="pm-safety-leave-dialog"
+            role="dialog"
+          >
+            <div className="pm-safety-leave-dialog__panel">
+              <h2 id="leave-confirm-title">Return to sign in?</h2>
+              <p>Your progress on this safety profile will not be saved.</p>
+              <div>
+                <button onClick={() => setLeaveConfirmOpen(false)} type="button">
+                  Stay here
+                </button>
+                <button onClick={() => navigate('/login?view=signin')} type="button">
+                  Yes, return
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+        {!privacyAccepted ? (
+          <section className="pm-safety-consent" aria-labelledby="safety-consent-title">
+            <div className="pm-safety-consent__visual" aria-hidden="true">
+              <img src={privacyConsentIllustration} alt="" />
+            </div>
+            <div className="pm-safety-consent__content">
+              <h1 id="safety-consent-title">Your privacy matters</h1>
+              <p>Your answers help personalize your care.</p>
+              <ul>
+                <li>
+                  <span className="pm-safety-consent__benefit-icon"><CalendarDays /></span>
+                  <span>Personalized reminders and safety checks.</span>
+                </li>
+                <li>
+                  <span className="pm-safety-consent__benefit-icon"><ShieldCheck /></span>
+                  <span>Used only to support your care.</span>
+                </li>
+                <li>
+                  <span className="pm-safety-consent__benefit-icon"><Pencil /></span>
+                  <span>Update your details anytime.</span>
+                </li>
+              </ul>
+              <label className="pm-safety-consent__check">
+                <input
+                  checked={consentChecked}
+                  onChange={(event) => setConsentChecked(event.target.checked)}
+                  type="checkbox"
+                />
+                <span>
+                  I agree to the <a href="/privacy">Privacy Terms</a>.
+                </span>
+              </label>
+            </div>
+          </section>
+        ) : (
+        <div
+          className={`pm-safety-question pm-safety-question--${question.type} pm-safety-question--${question.key}`}
+        >
+          <div className="pm-safety-question__intro">
+            <div className="pm-safety-question__copy">
+              <h1>
+                {question.key === 'caregiver_alerts' ? (
+                  <>
+                    Would you like caregiver<br />
+                    safety alerts?
+                  </>
+                ) : question.title}
+              </h1>
+              <p>{question.help}</p>
+            </div>
+            {question.type === 'date' && (
+              <img
+                className="pm-safety-question__art"
+                src={safetyDateIllustration}
+                alt=""
+                aria-hidden="true"
+              />
+            )}
+            {question.type === 'number' && (
+              <img
+                className="pm-safety-question__art pm-safety-question__art--weight"
+                src={safetyWeightIllustration}
+                alt=""
+                aria-hidden="true"
+              />
+            )}
+            {question.key === 'allergies' && (
+              <img
+                className="pm-safety-question__art pm-safety-question__art--allergy"
+                src={safetyAllergyIllustration}
+                alt=""
+                aria-hidden="true"
+              />
+            )}
+            {question.key === 'conditions' && (
+              <img
+                className="pm-safety-question__art pm-safety-question__art--conditions"
+                src={safetyConditionsIllustration}
+                alt=""
+                aria-hidden="true"
+              />
+            )}
+            {question.key === 'pregnancy_status' && (
+              <img
+                className="pm-safety-question__art pm-safety-question__art--pregnancy"
+                src={safetyPregnancyIllustration}
+                alt=""
+                aria-hidden="true"
+              />
+            )}
+            {question.key === 'current_medicines' && (
+              <img
+                className="pm-safety-question__art pm-safety-question__art--supplements"
+                src={safetySupplementsIllustration}
+                alt=""
+                aria-hidden="true"
+              />
+            )}
+            {question.key === 'routine' && (
+              <img
+                className="pm-safety-question__art pm-safety-question__art--routine"
+                src={safetyRoutineIllustration}
+                alt=""
+                aria-hidden="true"
+              />
+            )}
+            {question.key === 'kidney_status' && (
+              <img
+                className="pm-safety-question__art pm-safety-question__art--kidney"
+                src={safetyKidneyIllustration}
+                alt=""
+                aria-hidden="true"
+              />
+            )}
+            {question.key === 'liver_status' && (
+              <img
+                className="pm-safety-question__art pm-safety-question__art--liver"
+                src={safetyLiverIllustration}
+                alt=""
+                aria-hidden="true"
+              />
+            )}
+            {question.key === 'caregiver_alerts' && (
+              <img
+                className="pm-safety-question__art pm-safety-question__art--caregiver"
+                src={safetyCaregiverIllustration}
+                alt=""
+                aria-hidden="true"
+              />
+            )}
+          </div>
           {question.type === 'date' && (
             <SafetyDatePicker
               value={profile[question.key]}
@@ -564,22 +781,50 @@ export default function AnchorOnboarding() {
                   <SafetyTimePicker
                     label={label}
                     value={anchors[key]}
-                    onChange={(value) => setAnchors({ ...anchors, [key]: value })}
+                    onChange={(value) => {
+                      const next = { ...anchors, [key]: value };
+                      if (
+                        key === 'wake_anchor' &&
+                        minutesForTime(next.breakfast_anchor) <= minutesForTime(value)
+                      ) {
+                        next.breakfast_anchor = timeAfter(value);
+                      }
+                      if (
+                        key === 'breakfast_anchor' &&
+                        minutesForTime(value) <= minutesForTime(next.wake_anchor)
+                      ) {
+                        next.breakfast_anchor = timeAfter(next.wake_anchor);
+                      }
+                      setAnchors(next);
+                    }}
                   />
                 </div>
               ))}
             </div>
           )}
         </div>
+        )}
         {error && (
           <div className="pm-safety-error" role="alert">
             {error}
           </div>
         )}
+        {!privacyAccepted ? (
+          <footer className="pm-safety-consent__footer">
+            <button
+              className="pm-safety-next"
+              disabled={!consentChecked}
+              onClick={() => setPrivacyAccepted(true)}
+              type="button"
+            >
+              Continue <ArrowRight />
+            </button>
+          </footer>
+        ) : (
         <footer>
           <button
             className="pm-safety-skip"
-            disabled={saving || step === 0}
+            disabled={saving || (step === 0 && editingFromProfile)}
             onClick={previousQuestion}
           >
             <ArrowLeft /> Previous question
@@ -589,10 +834,7 @@ export default function AnchorOnboarding() {
             {!saving && <ArrowRight />}
           </button>
         </footer>
-        <p className="pm-safety-note">
-          Your answers improve safety checks but do not replace your medicine label or a health
-          professional.
-        </p>
+        )}
       </section>
     </main>
   );

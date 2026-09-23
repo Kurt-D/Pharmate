@@ -23,7 +23,7 @@ export function hashOtp(userId, purpose, otp) {
 
 export async function issueOtp(executor, userId, purpose, now = new Date()) {
   const [[latest]] = await executor.execute(
-    `SELECT created_at FROM otp_codes
+    `SELECT otp_hash,created_at FROM otp_codes
      WHERE user_id=? AND purpose=? AND used_at IS NULL
      ORDER BY created_at DESC LIMIT 1 FOR UPDATE`,
     [userId, purpose]
@@ -36,7 +36,10 @@ export async function issueOtp(executor, userId, purpose, now = new Date()) {
     'UPDATE otp_codes SET used_at=? WHERE user_id=? AND purpose=? AND used_at IS NULL',
     [now, userId, purpose]
   );
-  const otp = generateOtp();
+  // A resend must never repeat the immediately preceding usable code. Random
+  // collisions are rare, but explicitly avoiding one prevents confusing users.
+  let otp = generateOtp();
+  while (latest?.otp_hash === hashOtp(userId, purpose, otp)) otp = generateOtp();
   const id = uuidv4();
   await executor.execute(
     `INSERT INTO otp_codes (id,user_id,purpose,otp_hash,expires_at,created_at)

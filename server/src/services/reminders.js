@@ -4,7 +4,6 @@ import { sendPush } from './notifications.js';
 import { createPatientNotification } from './patientNotifications.js';
 
 const DUE_WINDOW_MIN = 30;
-const REPEAT_MIN = 5;
 const GENERIC_PHRASE = 'It is time for your medicine.';
 
 export async function dueReminders(now = new Date(), { dueWindowMin = DUE_WINDOW_MIN } = {}) {
@@ -31,7 +30,9 @@ export async function dueReminders(now = new Date(), { dueWindowMin = DUE_WINDOW
        AND ms.schedule_version = (SELECT COALESCE(MAX(ms2.schedule_version), 0)
              FROM medication_schedules ms2
             WHERE ms2.patient_id = ms.patient_id AND ms2.medication_id = ms.medication_id)
-       AND (ms.reminder_sent_at IS NULL OR ms.reminder_sent_at <= ?)
+       -- One clear reminder per scheduled dose. Repeating every few minutes
+       -- fills the patient's inbox without adding useful clinical information.
+       AND ms.reminder_sent_at IS NULL
        AND ms.is_prn_slot = 0
        AND COALESCE(pp.reminders_enabled, 1) = 1
        AND ms.scheduled_time >= ?
@@ -39,7 +40,7 @@ export async function dueReminders(now = new Date(), { dueWindowMin = DUE_WINDOW
        AND NOT EXISTS (SELECT 1 FROM dose_logs dl
                         WHERE dl.schedule_id=ms.id AND dl.status IN ('taken','taken_late'))
      ORDER BY ms.scheduled_time ASC`,
-    [new Date(now.getTime() - REPEAT_MIN * 60000), from, to]
+    [from, to]
   );
   return rows;
 }
@@ -97,7 +98,7 @@ export async function dispatchReminders(now = new Date()) {
     await createPatientNotification({
       patientId: dose.patient_id,
       type: 'dose_reminder',
-      eventKey: `dose-reminder:${dose.schedule_id}:${Math.floor(now.getTime() / (REPEAT_MIN * 60000))}`,
+      eventKey: `dose-reminder:${dose.schedule_id}`,
       medicineName: dose.drug_name,
       metadata: { schedule_id: dose.schedule_id },
     });

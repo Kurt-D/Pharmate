@@ -59,6 +59,15 @@ describe('authentication rate limits', () => {
   });
 });
 
+describe('authentication response caching', () => {
+  test('prevents authentication responses from being cached', async () => {
+    const response = await request(app).post('/api/auth/refresh').send({});
+    expect(response.headers['cache-control']).toBe('no-store, max-age=0');
+    expect(response.headers.pragma).toBe('no-cache');
+    expect(response.headers.expires).toBe('0');
+  });
+});
+
 describe('request boundary controls', () => {
   test('allows configured local development origins', async () => {
     const response = await request(app).get('/api/health').set('Origin', 'http://localhost:5173');
@@ -118,6 +127,42 @@ describe('startup environment validation', () => {
     expect(() => validateEnvironment({ ...validEnvironment, AES_KEY: 'g'.repeat(64) })).toThrow(
       /AES_KEY must be exactly 64 hexadecimal characters/
     );
+  });
+
+  test('requires an explicit Turnstile hostname allowlist in production', () => {
+    expect(() =>
+      validateEnvironment({
+        ...validEnvironment,
+        NODE_ENV: 'production',
+        GOOGLE_CLIENT_ID: 'configured-google-client',
+        OTP_SECRET: 'c'.repeat(64),
+        CAPTCHA_PROVIDER: 'turnstile',
+        TURNSTILE_SECRET_KEY: 'configured-turnstile-secret',
+      })
+    ).toThrow(/TURNSTILE_ALLOWED_HOSTNAMES is required in production/);
+  });
+
+  test('requires a dedicated password-reset signing secret in production', () => {
+    const productionEnvironment = {
+      ...validEnvironment,
+      NODE_ENV: 'production',
+      GOOGLE_CLIENT_ID: 'configured-google-client',
+      OTP_SECRET: 'c'.repeat(64),
+      CAPTCHA_PROVIDER: 'self-hosted',
+      CAPTCHA_SIGNING_SECRET: 'd'.repeat(64),
+    };
+    expect(() => validateEnvironment(productionEnvironment)).toThrow(
+      /RESET_TOKEN_SECRET must be at least 64 characters in production/
+    );
+    expect(() =>
+      validateEnvironment({
+        ...productionEnvironment,
+        RESET_TOKEN_SECRET: productionEnvironment.JWT_REFRESH_SECRET,
+      })
+    ).toThrow(/RESET_TOKEN_SECRET must be different from JWT and OTP secrets/);
+    expect(() =>
+      validateEnvironment({ ...productionEnvironment, RESET_TOKEN_SECRET: 'e'.repeat(64) })
+    ).not.toThrow();
   });
 
   test('requires complete SMTP configuration only when reset email is enabled', () => {

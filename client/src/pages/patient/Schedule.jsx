@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../../api.js';
+import { useAuth } from '../../context/AuthContext.jsx';
 import { useLanguage } from '../../context/LanguageContext.jsx';
+import { readPatientOfflineCache, writePatientOfflineCache } from '../../lib/patientOfflineCache.js';
 
 function Icon({ name, size = 22 }) {
   const paths = {
@@ -78,6 +80,12 @@ function Icon({ name, size = 22 }) {
 const medicineName = (item) => item.drug_name || item.drug_name_raw || item.name || 'Medicine';
 const doseText = (item) =>
   item.dosage_instruction || item.strength || item.dosage || 'Follow prescribed dose';
+const scheduleStatusGroup = (status) => {
+  const value = String(status || '').toLowerCase();
+  if (['taken', 'taken_late'].includes(value)) return 'taken';
+  if (value === 'missed') return 'missed';
+  return 'upcoming';
+};
 
 function localDayKey(date) {
   const year = date.getFullYear();
@@ -149,6 +157,7 @@ function normalizeRows({ doses, proposal, medicines, manual, source }) {
 
 export default function Schedule() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const { language } = useLanguage();
   const tr = (en, fil) => (language === 'fil' ? fil : en);
   const [medicines, setMedicines] = useState([]);
@@ -164,6 +173,7 @@ export default function Schedule() {
   const [selectedDate, setSelectedDate] = useState(() => new Date());
   const [calendarRows, setCalendarRows] = useState(null);
   const [calendarLoading, setCalendarLoading] = useState(false);
+  const [statusFilter, setStatusFilter] = useState('upcoming');
   const source = localStorage.getItem('pm_medication_schedule_source') || 'suggested';
   const scheduleHidden = localStorage.getItem('pm_schedule_hidden') === '1';
   const hasSavedSchedule =
@@ -177,16 +187,28 @@ export default function Schedule() {
   }
 
   useEffect(() => {
+    const cachedMedicines = readPatientOfflineCache(user?.id, 'medicines', []);
+    const cachedDoses = readPatientOfflineCache(user?.id, 'today-doses', []);
+    const cachedProposal = readPatientOfflineCache(user?.id, 'schedule-proposal', null);
     Promise.all([
       api('/api/patient/medications')
-        .then((response) => response.data)
-        .catch(() => []),
+        .then((response) => {
+          writePatientOfflineCache(user?.id, 'medicines', response.data);
+          return response.data;
+        })
+        .catch(() => cachedMedicines),
       api('/api/patient/doses/today')
-        .then((response) => response.data)
-        .catch(() => []),
+        .then((response) => {
+          writePatientOfflineCache(user?.id, 'today-doses', response.data);
+          return response.data;
+        })
+        .catch(() => cachedDoses),
       api('/api/patient/schedule')
-        .then((response) => response.data)
-        .catch(() => null),
+        .then((response) => {
+          writePatientOfflineCache(user?.id, 'schedule-proposal', response.data);
+          return response.data;
+        })
+        .catch(() => cachedProposal),
     ]).then(([medicineData, doseData, proposalData]) => {
       let savedRows = [];
       let frontendMedicines = [];
@@ -223,7 +245,7 @@ export default function Schedule() {
       setProposal(proposalData);
       setLoading(false);
     });
-  }, [loadRevision]);
+  }, [loadRevision, user?.id]);
 
   useEffect(() => {
     setSelectedRows(new Set());
@@ -236,12 +258,22 @@ export default function Schedule() {
     setCalendarLoading(true);
     api(`/api/patient/doses/calendar?date=${localDayKey(selectedDate)}&status=all`)
       .then((response) => {
+        writePatientOfflineCache(user?.id, `calendar:${localDayKey(selectedDate)}`, response.data);
         if (active) setCalendarRows(Array.isArray(response.data) ? response.data : []);
       })
       .catch(() => {
         if (active) {
-          setCalendarRows([]);
-          setScheduleError('Could not load this date’s schedule. Please try again.');
+          const cachedRows = readPatientOfflineCache(
+            user?.id,
+            `calendar:${localDayKey(selectedDate)}`,
+            []
+          );
+          setCalendarRows(cachedRows);
+          setScheduleError(
+            cachedRows.length
+              ? 'You are offline. Showing the last saved schedule for this date.'
+              : 'Could not load this date’s schedule. Please try again.'
+          );
         }
       })
       .finally(() => {
@@ -250,7 +282,7 @@ export default function Schedule() {
     return () => {
       active = false;
     };
-  }, [selectedDate, loadRevision]);
+  }, [selectedDate, loadRevision, user?.id]);
 
   useEffect(() => {
     const refresh = () => setLoadRevision((value) => value + 1);
@@ -278,7 +310,9 @@ export default function Schedule() {
       }),
     [calendarRows, doses, proposal, medicines, manual, source]
   );
-  const visibleRows = rows;
+  const visibleRows = rows.filter(
+    (row) => statusFilter === 'all' || scheduleStatusGroup(row.status) === statusFilter
+  );
   const hasOngoingSchedule = visibleRows.length > 0;
   const selectedDeletableRows = visibleRows.filter(
     (row) => Boolean(row.schedule_id) && selectedRows.has(String(row.rowKey))
@@ -492,6 +526,7 @@ export default function Schedule() {
         </div>
       )}
 
+      <section className="pm-schedule-overview" id="pm-tour-medication-schedule-view">
       <section
         className="pm-schedule-week-calendar"
         aria-label={tr('Choose schedule date', 'Pumili ng petsa')}
@@ -562,6 +597,31 @@ export default function Schedule() {
           ))}
         </div>
       </section>
+
+      <div
+        aria-label={tr('Dose status filter', 'Filter ng status ng dose')}
+        className="pm-schedule-status-filters"
+        role="group"
+      >
+        {[
+          ['upcoming', tr('Upcoming', 'Paparating')],
+          ['taken', tr('Taken', 'Nainom')],
+          ['missed', tr('Missed', 'Hindi nainom')],
+        ].map(([value, label]) => (
+          <button
+            aria-pressed={statusFilter === value}
+            className={statusFilter === value ? 'active' : ''}
+            key={value}
+            onClick={() => {
+              setSelectedRows(new Set());
+              setStatusFilter(value);
+            }}
+            type="button"
+          >
+            {label}
+          </button>
+        ))}
+      </div>
 
       <div
         aria-label={tr('Schedule actions', 'Mga aksyon sa iskedyul')}
@@ -743,6 +803,7 @@ export default function Schedule() {
           </p>
         )}
       </div>
+      </section>
 
       <aside className="pm-schedule-safety">
         <Icon name="shield" />

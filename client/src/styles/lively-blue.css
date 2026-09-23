@@ -1,7 +1,7 @@
 /* Brighter PharMate blue treatment with senior-safe contrast. */
 .pm-accessibility-page > header h1,
 .pm-profile-page > header h1 {
-  color: #1769f5;
+  color: #578EF5;
 }
 .pm-a11y-overview {
   background: #fff;
@@ -13,12 +13,12 @@
   display: none;
 }
 .pm-a11y-overview__icon {
-  background: #1769f5;
+  background: #578EF5;
   border: 1px solid #1558c9;
   color: #fff;
 }
 .pm-a11y-overview__copy small {
-  color: #1769f5;
+  color: #578EF5;
 }
 .pm-a11y-overview__copy h2 {
   color: #1e2e4a;
@@ -36,32 +36,32 @@
 .pm-caregiver-intro > i {
   background: #e8f1ff;
   border-color: #bbd7f8;
-  color: #1769f5;
+  color: #578EF5;
 }
 .pm-a11y-segmented button.active {
-  border-color: #1769f5;
+  border-color: #578EF5;
   color: #1558c9;
 }
 .pm-a11y-listen-test {
-  background: #1769f5;
+  background: #578EF5;
   border: 2px solid #1558c9;
 }
 .pm-a11y-listen-test:hover {
   background: #1558c9;
 }
 .pm-profile-identity {
-  background: linear-gradient(135deg, #fff, #eaf4ff);
+  background: #fff;
   border-color: #b9d4f5;
-  box-shadow: 0 7px 20px #4c8ce419;
+  box-shadow: 0 7px 20px #578EF519;
 }
 .pm-profile-avatar {
-  background: linear-gradient(145deg, #1769f5, #4c8ce4);
+  background: #578EF5;
   border: 3px solid #fff;
-  box-shadow: 0 4px 14px #1769f538;
+  box-shadow: 0 4px 14px #578EF538;
   color: #fff;
 }
 .pm-profile-panel > button {
-  background: #1769f5;
+  background: #578EF5;
   border: 2px solid #1558c9;
 }
 .pm-profile-panel > button:hover {

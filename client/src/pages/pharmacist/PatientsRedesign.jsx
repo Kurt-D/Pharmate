@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Accessibility, ClipboardList, RefreshCw, Search, SlidersHorizontal, UserRound, UsersRound } from 'lucide-react';
 import { api } from '../../api.js';
 
 export default function PatientsRedesign() {
@@ -46,32 +47,32 @@ export default function PatientsRedesign() {
     <main className="px-patients">
       {error && <div className="alert alert-warning">{error}</div>}
       <div className="px-search">
-        <span>⌕</span>
+        <span><Search size={16} /></span>
         <input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search patients by ID…"
         />
-        <button>☷⌄</button>
-        <button onClick={load}>↻</button>
+        <button aria-label="Filter patients" type="button"><SlidersHorizontal size={16} /></button>
+        <button aria-label="Refresh patients" onClick={load} type="button"><RefreshCw size={16} /></button>
       </div>
       <div className="px-patient-stats">
         <div>
-          <i>♟</i>
+          <UsersRound aria-hidden="true" />
           <span>
             <small>Total Patients</small>
             <strong>{patients.length}</strong>
           </span>
         </div>
         <div>
-          <i>♟</i>
+          <UserRound aria-hidden="true" />
           <span>
             <small>Active Patients</small>
             <strong>{patients.filter((p) => p.active_meds > 0).length}</strong>
           </span>
         </div>
         <div>
-          <i>♿</i>
+          <Accessibility aria-hidden="true" />
           <span>
             <small>Priority Patients</small>
             <strong>{patients.filter((p) => p.priority).length}</strong>
@@ -103,7 +104,7 @@ export default function PatientsRedesign() {
                 <h2>ID: {selected.patient_code}</h2>
                 {selected.priority && <em>Priority</em>}
               </div>
-              <h3>♙ Patient Information</h3>
+              <h3><UserRound aria-hidden="true" size={15} /> Patient Information</h3>
               <dl>
                 <div>
                   <dt>Patient ID</dt>
@@ -125,7 +126,7 @@ export default function PatientsRedesign() {
                 </div>
               </dl>
               <div className="px-notes">
-                <strong>▣ Notes</strong>
+                <strong><ClipboardList aria-hidden="true" size={14} /> Notes</strong>
                 <p>Clinical PII is protected. Use the patient code for operational follow-up.</p>
               </div>
               <h3>Follow-ups Due</h3>

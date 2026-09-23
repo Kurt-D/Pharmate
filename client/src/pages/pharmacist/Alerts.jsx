@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { BellRing, CheckCircle2, ClipboardList, RefreshCw, Send, TriangleAlert } from 'lucide-react';
 import { api } from '../../api.js';
 export default function Alerts() {
   const [alerts, setAlerts] = useState([]);
@@ -31,32 +32,29 @@ export default function Alerts() {
   return (
     <main className="px-alerts">
       {error && <div className="alert alert-warning">{error}</div>}
+      <header className="px-alert-page-heading">
+        <div><span>CLINICAL FOLLOW-UPS</span><h2>Medication alerts</h2><p>Review missed-dose alerts and send a timely patient reminder.</p></div>
+        <button onClick={load} type="button"><RefreshCw size={16} /> Refresh alerts</button>
+      </header>
       <div className="px-alert-stats">
         <div>
-          <i>△</i>
+          <TriangleAlert aria-hidden="true" />
           <span>
             <small>Total Alerts</small>
             <strong>{alerts.length}</strong>
           </span>
         </div>
         <div>
-          <i>▣</i>
+          <BellRing aria-hidden="true" />
           <span>
             <small>Unresolved</small>
             <strong>{alerts.length}</strong>
           </span>
         </div>
         <div>
-          <i>✓</i>
+          <CheckCircle2 aria-hidden="true" />
           <span>
             <small>Resolved</small>
-            <strong>—</strong>
-          </span>
-        </div>
-        <div>
-          <i>◯</i>
-          <span>
-            <small>Total Chats</small>
             <strong>—</strong>
           </span>
         </div>
@@ -77,11 +75,7 @@ export default function Alerts() {
             </thead>
             <tbody>
               {alerts.map((a) => (
-                <tr
-                  key={a.id}
-                  className={selected?.id === a.id ? 'selected' : ''}
-                  onClick={() => setSelected(a)}
-                >
+                <tr key={a.id} className={selected?.id === a.id ? 'selected' : ''} onClick={() => setSelected(a)}>
                   <td>{a.id.slice(0, 8)}</td>
                   <td>{a.patient_code}</td>
                   <td>{new Date(a.created_at).toLocaleString()}</td>
@@ -90,7 +84,7 @@ export default function Alerts() {
                     <em>Unresolved</em>
                   </td>
                   <td>
-                    <button>View</button>
+                    <button onClick={() => setSelected(a)} type="button">Review</button>
                   </td>
                 </tr>
               ))}
@@ -105,7 +99,7 @@ export default function Alerts() {
                 <small>Alert ID: {selected.id.slice(0, 8)}</small>
               </div>
               <h2>ID: {selected.patient_code}</h2>
-              <h3>▣ Details</h3>
+              <h3><ClipboardList aria-hidden="true" size={14} /> Details</h3>
               <dl>
                 <dt>Reason</dt>
                 <dd>Missed dose</dd>
@@ -117,10 +111,10 @@ export default function Alerts() {
                 <dd>Unresolved</dd>
               </dl>
               <h3>Take Action</h3>
-              <button className="primary" onClick={() => action('remind')}>
-                Send Patient Reminder
+              <button className="primary" onClick={() => action('remind')} type="button">
+                <Send size={16} /> Send patient reminder
               </button>
-              <button className="success" onClick={() => action('resolve')}>
+              <button className="success" onClick={() => action('resolve')} type="button">
                 Mark as Resolved
               </button>
             </>

@@ -129,11 +129,21 @@ describe('Ask Your Pharmacist (D-I)', () => {
     expect(msgs.body.map((m) => m.sender_role)).toEqual(['patient', 'pharmacist']);
   });
 
-  test('closing keeps messages as read-only consultation history', async () => {
-    const close = await request(app)
+  test('a consultation moves to read-only history after both participants complete it', async () => {
+    const patientClose = await request(app)
       .post(`/api/patient/inquiries/${threadId}/close`)
       .set(auth(patientToken));
-    expect(close.status).toBe(200);
+    expect(patientClose.status).toBe(200);
+    expect(patientClose.body.closed).toBe(false);
+
+    const stillOpen = await pool.execute('SELECT status FROM inquiry_threads WHERE id = ?', [threadId]);
+    expect(stillOpen[0][0].status).toBe('open');
+
+    const pharmacistClose = await request(app)
+      .post(`/api/pharmacist/inquiries/${threadId}/close`)
+      .set(auth(pharmToken));
+    expect(pharmacistClose.status).toBe(200);
+    expect(pharmacistClose.body.closed).toBe(true);
 
     const [msgs] = await pool.execute(
       'SELECT COUNT(*) AS c FROM inquiry_messages WHERE thread_id = ?',
@@ -199,6 +209,26 @@ describe('Inquiry ownership and atomic pharmacist claims', () => {
       request(app).post(`/api/pharmacist/inquiries/${id}/close`).set(auth(otherPharmToken)),
     ]);
     expect([read.status, reply.status, close.status]).toEqual([404, 404, 404]);
+  });
+
+  test('only the assigned pharmacist can save and retrieve a private inquiry note', async () => {
+    const id = await openInquiry(patientToken, 'private note thread');
+    await request(app).get(`/api/pharmacist/inquiries/${id}/messages`).set(auth(pharmToken)).expect(200);
+
+    await request(app)
+      .put(`/api/pharmacist/inquiries/${id}/note`)
+      .set(auth(pharmToken))
+      .send({ note: 'Review response after the next scheduled dose.' })
+      .expect(200);
+    const read = await request(app).get(`/api/pharmacist/inquiries/${id}/note`).set(auth(pharmToken));
+    expect(read.body.note).toBe('Review response after the next scheduled dose.');
+
+    await request(app).get(`/api/pharmacist/inquiries/${id}/note`).set(auth(otherPharmToken)).expect(404);
+    await request(app)
+      .put(`/api/pharmacist/inquiries/${id}/note`)
+      .set(auth(otherPharmToken))
+      .send({ note: 'Unauthorized note' })
+      .expect(404);
   });
 
   test('competing pharmacist replies atomically assign exactly one pharmacist', async () => {

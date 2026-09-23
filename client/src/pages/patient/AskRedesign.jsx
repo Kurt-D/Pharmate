@@ -5,6 +5,7 @@ import { useLanguage } from '../../context/LanguageContext.jsx';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { useInquiryConsent } from '../../lib/useInquiryConsent.js';
 import InquiryConsent from '../../components/InquiryConsent.jsx';
+import askPharmacistChatIllustration from '../../assets/ask-pharmacist-chat-illustration.png';
 
 function loadPriorityTokens() {
   try {
@@ -49,6 +50,13 @@ function spendPriorityToken(threadId) {
     JSON.stringify([...new Set([threadId, ...inquiries])])
   );
   return tokens;
+}
+
+function normalizeThreads(items) {
+  return items.map((item) => ({
+    ...item,
+    priority: item.priority === 'high' || isPriorityInquiry(item.id) ? 'high' : 'normal',
+  }));
 }
 
 function ChatIcon({ name }) {
@@ -100,6 +108,12 @@ function ChatIcon({ name }) {
       </>
     ),
     close: <path d="m6 6 12 12M18 6 6 18" />,
+    clock: (
+      <>
+        <circle cx="12" cy="12" r="8" />
+        <path d="M12 7v5l3 2" />
+      </>
+    ),
   };
   return (
     <svg
@@ -141,7 +155,7 @@ export default function AskRedesign() {
   );
   const [editingLabelId, setEditingLabelId] = useState(null);
   const [labelDraft, setLabelDraft] = useState('');
-  const [showAllHistory, setShowAllHistory] = useState(true);
+  const [showAllHistory, setShowAllHistory] = useState(false);
   const [historyQuery, setHistoryQuery] = useState('');
   const [historySearchResults, setHistorySearchResults] = useState([]);
   const [historySearchLoading, setHistorySearchLoading] = useState(false);
@@ -149,12 +163,19 @@ export default function AskRedesign() {
   const [chatQuery, setChatQuery] = useState('');
   const [historyMessageQuery, setHistoryMessageQuery] = useState('');
   const [requestStep, setRequestStep] = useState(0);
+  const [launchingRequest, setLaunchingRequest] = useState(false);
   const [showConsent, setShowConsent] = useState(false);
   const [draft, setDraft] = useState('');
   const [error, setError] = useState('');
   const [restoringThread, setRestoringThread] = useState(true);
-  const tourChatChoiceVisible = false;
+  // The tour must reveal the real chat-type controls before it tries to
+  // spotlight them.  Keeping this separate from the normal request flow
+  // means a first-time tour never changes or submits a patient's inquiry.
+  const [tourChatChoiceVisible, setTourChatChoiceVisible] = useState(
+    () => sessionStorage.getItem('pm_tour_ask_mode') === 'chat-options'
+  );
   const poll = useRef(null);
+  const launchTimer = useRef(null);
   const threadId = thread?.id;
   const threadStatus = thread?.status;
   const [scheduleInquiry] = useState(() => {
@@ -172,12 +193,27 @@ export default function AskRedesign() {
     setRequestStep(1);
   }, [scheduleInquiry]);
 
+  useEffect(() => () => clearTimeout(launchTimer.current), []);
+
   useEffect(() => {
     if (!showConsent || !consent.consented) return;
     setShowConsent(false);
     setUsePriority(false);
     setRequestStep(1);
   }, [consent.consented, showConsent]);
+
+  useEffect(() => {
+    const syncTourChatChoices = (event) => {
+      const step = event?.detail;
+      setTourChatChoiceVisible(
+        step?.id === 'priority-chat' || sessionStorage.getItem('pm_tour_ask_mode') === 'chat-options'
+      );
+    };
+
+    syncTourChatChoices();
+    window.addEventListener('pm-tour-step', syncTourChatChoices);
+    return () => window.removeEventListener('pm-tour-step', syncTourChatChoices);
+  }, []);
 
   useEffect(() => {
     api('/api/directory/branches')
@@ -195,18 +231,29 @@ export default function AskRedesign() {
       })
       .catch(() => setPriorityTokens(loadPriorityTokens()));
   }, []);
+
+  const loadThreads = useCallback(async () => {
+    const response = await api('/api/patient/inquiries');
+    const latestThreads = normalizeThreads(response.data);
+    setThreads(latestThreads);
+    // Keep an open conversation in sync when the pharmacist accepts, replies,
+    // or closes it. This changes the waiting state into the live chat without
+    // requiring the patient to reload the page.
+    setThread((current) => {
+      if (!current) return current;
+      const latest = latestThreads.find((item) => item.id === current.id);
+      return latest ? { ...current, ...latest } : current;
+    });
+    return latestThreads;
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
 
     async function restoreOpenThread() {
       try {
-        const response = await api('/api/patient/inquiries');
+        await loadThreads();
         if (cancelled) return;
-        const restoredThreads = response.data.map((item) => ({
-          ...item,
-          priority: item.priority === 'high' || isPriorityInquiry(item.id) ? 'high' : 'normal',
-        }));
-        setThreads(restoredThreads);
       } catch (requestError) {
         if (!cancelled) setError(requestError.message);
       } finally {
@@ -218,7 +265,7 @@ export default function AskRedesign() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [loadThreads]);
   useEffect(() => {
     setPharmacist(null);
     if (!branchId) {
@@ -237,10 +284,7 @@ export default function AskRedesign() {
         api('/api/patient/inquiries'),
       ]);
       setMessages(messageResponse.data);
-      const refreshedThreads = threadResponse.data.map((item) => ({
-        ...item,
-        priority: item.priority === 'high' || isPriorityInquiry(item.id) ? 'high' : 'normal',
-      }));
+      const refreshedThreads = normalizeThreads(threadResponse.data);
       const current = refreshedThreads.find((item) => item.id === id);
       setThreads(refreshedThreads);
       if (current) setThread((old) => ({ ...old, ...current }));
@@ -258,8 +302,47 @@ export default function AskRedesign() {
   }, [threadId, threadStatus, refresh]);
 
   useEffect(() => {
+    function receiveInquiryUpdate(event) {
+      const detail = event.detail;
+      if (detail?.event !== 'INQUIRY_UPDATED') return;
+      const updatedThreadId = detail.payload?.inquiry_id;
+      loadThreads()
+        .then((latestThreads) => {
+          const updatedThread = latestThreads.find((item) => item.id === updatedThreadId);
+          if (!updatedThread) return undefined;
+          if (updatedThreadId === threadId) return refresh(updatedThreadId);
+          // A pharmacist accepting the request or sending the first reply is
+          // actionable for the patient, so surface that same conversation and
+          // load the reply instead of leaving it hidden behind Resume.
+          if (['accepted', 'pharmacist_message'].includes(detail.payload?.action)) {
+            setThread(updatedThread);
+            return refresh(updatedThreadId);
+          }
+          return undefined;
+        })
+        .catch(() => {});
+    }
+
+    window.addEventListener('pm-domain-updated', receiveInquiryUpdate);
+    return () => window.removeEventListener('pm-domain-updated', receiveInquiryUpdate);
+  }, [loadThreads, refresh, threadId]);
+
+  useEffect(() => {
+    // Socket events provide the immediate update. This small fallback keeps an
+    // unselected conversation current when a device is temporarily reconnecting.
+    if (threadId) return undefined;
+    const refreshList = () => loadThreads().catch(() => {});
+    const timer = window.setInterval(refreshList, 10000);
+    window.addEventListener('focus', refreshList);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener('focus', refreshList);
+    };
+  }, [loadThreads, threadId]);
+
+  useEffect(() => {
     const query = historyQuery.trim().toLowerCase();
-    if (query.length < 2) {
+    if (!query) {
       setHistorySearchResults([]);
       setHistorySearchLoading(false);
       return undefined;
@@ -268,7 +351,10 @@ export default function AskRedesign() {
     const timer = setTimeout(async () => {
       setHistorySearchLoading(true);
       try {
-        const candidates = threads.filter((item) => item.status === 'closed');
+        // Search every conversation the patient owns: current chats as well as
+        // completed history. Results can match the pharmacist, subject, label,
+        // or any message content.
+        const candidates = threads;
         const messageGroups = await Promise.all(
           candidates.map(async (item) => {
             const response = await api(`/api/patient/inquiries/${item.id}/messages`);
@@ -324,14 +410,17 @@ export default function AskRedesign() {
           pharmacist_id: pharmacist.id,
           medication_id: scheduleInquiry?.medicationId || null,
           medication_draft_id: scheduleInquiry?.draftKey || null,
+          use_priority_token: usePriority && priorityTokens > 0,
         },
       });
       await api(`/api/patient/inquiries/${response.data.thread_id}/messages`, {
         method: 'POST',
         body: { message: question.trim() },
       });
-      const priorityApplied = usePriority && priorityTokens > 0;
-      if (priorityApplied) setPriorityTokens(spendPriorityToken(response.data.thread_id));
+      const priorityApplied = response.data.priority_tier === 'token';
+      if (Number.isFinite(response.data.priority_tokens)) {
+        setPriorityTokens(response.data.priority_tokens);
+      }
       setThread({
         id: response.data.thread_id,
         status: 'open',
@@ -340,7 +429,8 @@ export default function AskRedesign() {
         branch_id: branchId,
         pharmacist_id: pharmacist.id,
         subject: scheduleInquiry?.topic || question.trim(),
-        priority: priorityApplied ? 'high' : 'normal',
+        priority: response.data.priority || (priorityApplied ? 'high' : 'normal'),
+        priority_tier: response.data.priority_tier || 'standard',
       });
       setQuestion('');
       sessionStorage.removeItem('pm_schedule_inquiry_draft');
@@ -488,15 +578,6 @@ export default function AskRedesign() {
     : historyMessages;
   return (
     <main className="pm-ask-page">
-      <header>
-        <h1>{tr('Ask a Pharmacist', 'Magtanong sa Parmasyutiko')}</h1>
-        <p>
-          {tr(
-            "We're here to help you with your health.",
-            'Narito kami upang tumulong sa iyong kalusugan.'
-          )}
-        </p>
-      </header>
       {!thread && requestStep > 0 && (
         <div
           aria-label={tr('Ask a pharmacist progress', 'Progreso sa pagtatanong sa parmasyutiko')}
@@ -592,52 +673,72 @@ export default function AskRedesign() {
                 <InquiryConsent consent={consent} />
               </div>
             ) : (
-              <div className="pm-ask-home-options">
-                <section className="pm-ask-card pm-ask-home-card">
-                  <span className="pm-ask-home-icon">
-                    <ChatIcon name="user" />
+              <div className="pm-ask-inbox">
+                <section className="pm-ask-inbox__hero" aria-label={tr('Ask a pharmacist', 'Magtanong sa parmasyutiko')}>
+                  <img
+                    className="pm-ask-inbox__illustration"
+                    src={askPharmacistChatIllustration}
+                    alt=""
+                    aria-hidden="true"
+                  />
+                  <span className="pm-ask-inbox__side-art pm-ask-inbox__side-art--left" aria-hidden="true">
+                    <ChatIcon name="shield" />
                   </span>
-                  <div>
-                    <h2>{tr('Ask a Pharmacist', 'Magtanong sa Parmasyutiko')}</h2>
-                    <p>
-                      {tr(
-                        'Start a new private conversation about your medicine.',
-                        'Magsimula ng pribadong usapan tungkol sa iyong gamot.'
-                      )}
-                    </p>
-                  </div>
+                  <span className="pm-ask-inbox__side-art pm-ask-inbox__side-art--right" aria-hidden="true">
+                    <ChatIcon name="bookmark" />
+                  </span>
                   <button
-                    className="pm-ask-primary"
+                    className={`pm-ask-inbox__ask-button${launchingRequest ? ' is-launching' : ''}`}
                     onClick={() => {
-                      if (consent.consented) {
-                        setUsePriority(false);
-                        setRequestStep(1);
-                      } else {
-                        setShowConsent(true);
-                      }
+                      if (launchingRequest) return;
+                      setLaunchingRequest(true);
+                      launchTimer.current = window.setTimeout(() => {
+                        setLaunchingRequest(false);
+                        if (consent.consented) {
+                          setUsePriority(false);
+                          setRequestStep(1);
+                        } else {
+                          setShowConsent(true);
+                        }
+                      }, 280);
                     }}
+                    disabled={launchingRequest}
                     type="button"
                   >
                     {tr('Ask a Pharmacist', 'Magtanong sa Parmasyutiko')}
                   </button>
+                  {launchingRequest && <span className="pm-ask-launch-transition" aria-hidden="true" />}
+                  <p className="pm-ask-inbox__privacy-note">
+                    <ChatIcon name="shield" />
+                    {tr(
+                      'Private chat: messages are securely handled and available only to you and your assigned pharmacist.',
+                      'Pribadong chat: ligtas na pinoproseso ang mga mensahe at para lamang sa iyo at sa nakatalagang parmasyutiko.'
+                    )}
+                  </p>
                 </section>
-                <section className="pm-ask-card pm-ask-home-card pm-ask-history-card">
-                  <span className="pm-ask-home-icon">
-                    <ChatIcon name="bookmark" />
-                  </span>
-                  <div>
-                    <h2>{tr('Conversation History', 'Kasaysayan ng Usapan')}</h2>
-                    <p>
-                      {savedOpenThread
-                        ? tr(
-                            'You have a conversation in progress.',
-                            'May usapan kang kasalukuyang nagpapatuloy.'
-                          )
-                        : tr(
-                            `${closedThreads.length} saved conversation${closedThreads.length === 1 ? '' : 's'}`,
-                            `${closedThreads.length} naka-save na usapan`
-                          )}
-                    </p>
+                <div className="pm-ask-inbox__panel">
+                  <div className="pm-ask-home-options">
+                    <section className="pm-ask-card pm-ask-home-card pm-ask-history-card">
+                  <div className="pm-inbox-history-tabs" role="tablist" aria-label={tr('Conversation filters', 'Mga filter ng usapan')}>
+                    <button
+                      aria-selected={!showAllHistory}
+                      className={!showAllHistory ? 'active' : ''}
+                      onClick={() => setShowAllHistory(false)}
+                      role="tab"
+                      type="button"
+                    >
+                      {tr('Recent', 'Kamakailan')}
+                    </button>
+                    <button
+                      aria-selected={showAllHistory}
+                      className={showAllHistory ? 'active' : ''}
+                      onClick={() => setShowAllHistory(true)}
+                      role="tab"
+                      type="button"
+                    >
+                      <ChatIcon name="bookmark" />
+                      {tr('History', 'Kasaysayan')}
+                    </button>
                   </div>
                   <label className="pm-conversation-search">
                     <ChatIcon name="search" />
@@ -660,7 +761,7 @@ export default function AskRedesign() {
                       </button>
                     )}
                   </label>
-                  {historyQuery.trim().length >= 2 && (
+                  {historyQuery.trim().length >= 1 && (
                     <div className="pm-conversation-search-results">
                       {historySearchLoading ? (
                         <p>{tr('Searching conversations…', 'Naghahanap sa mga usapan…')}</p>
@@ -693,27 +794,67 @@ export default function AskRedesign() {
                       )}
                     </div>
                   )}
-                  {savedOpenThread && (
-                    <button
-                      className="pm-ask-primary"
-                      onClick={() => setThread(savedOpenThread)}
-                      type="button"
-                    >
-                      {tr('Resume Current Conversation', 'Ipagpatuloy ang Kasalukuyang Usapan')}
-                    </button>
-                  )}
-                  {closedThreads.length > 0 && (
-                    <button
-                      className="pm-ask-secondary"
-                      onClick={() => setShowAllHistory((value) => !value)}
-                      type="button"
-                    >
-                      {showAllHistory
-                        ? tr('Hide Conversation History', 'Itago ang Kasaysayan')
-                        : tr('View Conversation History', 'Tingnan ang Kasaysayan')}
-                    </button>
-                  )}
-                </section>
+                  <div className="pm-inbox-history-list">
+                    <p className="pm-inbox-history-list__label">
+                      {showAllHistory ? tr('History', 'Kasaysayan') : tr('Recent', 'Kamakailan')}
+                    </p>
+                    {showAllHistory && closedThreads.length === 0 && (
+                      <div className="pm-inbox-history-empty">
+                        <span><ChatIcon name="clock" /></span>
+                        <strong>{tr('No conversation history yet', 'Wala pang kasaysayan ng usapan')}</strong>
+                        <p>
+                          {tr(
+                            'Completed pharmacist conversations will appear here.',
+                            'Dito lalabas ang mga natapos na usapan sa parmasyutiko.'
+                          )}
+                        </p>
+                      </div>
+                    )}
+                    {!showAllHistory && savedOpenThread && (
+                      <button
+                        className="pm-inbox-history-row"
+                        onClick={() => setThread(savedOpenThread)}
+                        type="button"
+                      >
+                        <span className="pm-inbox-history-row__icon"><ChatIcon name="user" /></span>
+                        <span>
+                          <strong>{savedOpenThread.pharmacist_name || tr('PharMate Pharmacist', 'Parmasyutiko ng PharMate')}</strong>
+                          <small>{tr('Conversation in progress', 'Kasalukuyang nagpapatuloy na usapan')}</small>
+                        </span>
+                        <time>{tr('Open', 'Bukas')}</time>
+                      </button>
+                    )}
+                    {closedThreads.slice(0, showAllHistory ? closedThreads.length : 3).map((item) => (
+                      <button
+                        className="pm-inbox-history-row"
+                        key={item.id}
+                        onClick={() => viewHistory(item)}
+                        type="button"
+                      >
+                        <span className="pm-inbox-history-row__icon"><ChatIcon name="user" /></span>
+                        <span>
+                          <strong>{item.pharmacist_name || tr('PharMate Pharmacist', 'Parmasyutiko ng PharMate')}</strong>
+                          <small>{conversationLabels[item.id] || item.subject || tr('Medicine question', 'Tanong tungkol sa gamot')}</small>
+                        </span>
+                        <time>{new Date(item.closed_at || item.opened_at).toLocaleDateString([], { month: 'short', day: 'numeric' })}</time>
+                      </button>
+                    ))}
+                    {!showAllHistory && !savedOpenThread && closedThreads.length === 0 && (
+                      <div className="pm-inbox-history-empty">
+                        <span><ChatIcon name="clock" /></span>
+                        <strong>{tr('No recent conversations yet', 'Wala pang kamakailang usapan')}</strong>
+                        <p>
+                          {tr(
+                            'Your active pharmacist conversations will appear here.',
+                            'Dito lalabas ang iyong aktibong usapan sa parmasyutiko.'
+                          )}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                    </section>
+                  </div>
+                </div>
               </div>
             ))}
 
@@ -939,7 +1080,7 @@ export default function AskRedesign() {
             >
               ‹
             </button>
-            <b>{(thread.pharmacist_name || pharmacist?.full_name || 'Pharmacist').slice(0, 1)}</b>
+            <b><ChatIcon name="user" /></b>
             <span>
               <strong>
                 {thread.pharmacist_name || pharmacist?.full_name || 'Selected Pharmacist'}
@@ -1093,7 +1234,7 @@ export default function AskRedesign() {
               </p>
             )}
           </div>
-          {thread.status === 'open' && thread.validation_status === 'accepted' && (
+          {thread.status === 'open' && thread.validation_status === 'accepted' && !thread.patient_completed_at && !thread.pharmacist_completed_at && (
             <div className="pm-chat-compose">
               <input
                 value={draft}
@@ -1107,10 +1248,15 @@ export default function AskRedesign() {
               </button>
             </div>
           )}
-          {thread.status === 'open' && (
+          {thread.status === 'open' && !thread.patient_completed_at && (
             <button type="button" className="pm-chat-close" onClick={close}>
-              Complete &amp; save conversation
+              Complete conversation
             </button>
+          )}
+          {thread.status === 'open' && thread.patient_completed_at && (
+            <p className="pm-chat-completion-pending" role="status">
+              You completed this conversation. It will move to History once the pharmacist confirms completion.
+            </p>
           )}
           {thread.status === 'closed' && (
             <div className="pm-chat-complete-actions">
@@ -1127,7 +1273,7 @@ export default function AskRedesign() {
       {!restoringThread &&
         !thread &&
         requestStep === 0 &&
-        showAllHistory &&
+        false &&
         closedThreads.length > 0 && (
           <section className="pm-ask-card pm-chat-history">
             <header className="pm-chat-history-header">

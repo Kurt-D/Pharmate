@@ -15,6 +15,8 @@ export const NOTIFICATION_TYPES = [
   'caregiver_update',
   'appointment_update',
   'counseling_summary_ready',
+  'otc_back_in_stock',
+  'order_update',
 ];
 
 const DEFAULT_LIMIT = 20;
@@ -190,6 +192,7 @@ export async function createPatientNotification({
       'Counseling summary ready',
       'Your pharmacist-reviewed counseling summary is ready.',
     ],
+    otc_back_in_stock: ['Medicine available', `${medicine} is back in stock.`],
   }[type];
   const safeMetadata = Object.fromEntries(
     Object.entries(metadata).filter(
@@ -205,6 +208,7 @@ export async function createPatientNotification({
           'streak_days',
           'warning_level',
           'dose_count',
+          'drug_id',
         ].includes(key) &&
         (typeof value === 'string' || Number.isInteger(value))
     )

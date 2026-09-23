@@ -18,18 +18,21 @@ import StreakDetails from './pages/patient/StreakDetails.jsx';
 import Ask from './pages/patient/AskRedesign.jsx';
 import Orders from './pages/patient/OrdersRedesign.jsx';
 import Shop from './pages/patient/Shop.jsx';
+import PrescriptionShop from './pages/patient/PrescriptionShop.jsx';
 import Profile from './pages/patient/ProfileRedesign.jsx';
 import AccessibilitySettings from './pages/patient/AccessibilitySettings.jsx';
+import SecuritySessions from './pages/patient/SecuritySessions.jsx';
 import { HelpCenterPage } from './components/TutorialCenterScreen.jsx';
 import PharmacistLayout from './pages/pharmacist/PharmacistLayout.jsx';
 import DrugCuration from './pages/pharmacist/DrugCuration.jsx';
+import MedicineRules from './pages/pharmacist/MedicineRules.jsx';
 import Validation from './pages/pharmacist/Validation.jsx';
 import Inquiries from './pages/pharmacist/InquiriesRedesign.jsx';
 import OrdersQueue from './pages/pharmacist/OrdersQueue.jsx';
-import Patients from './pages/pharmacist/PatientsRedesign.jsx';
-import PharmacistDashboard from './pages/pharmacist/PharmacistDashboard.jsx';
-import PharmacistAlerts from './pages/pharmacist/Alerts.jsx';
-import PharmacistCounseling from './pages/pharmacist/Counseling.jsx';
+import ConnectedPharmacistDashboard from './pages/pharmacist/ConnectedDashboard.jsx';
+import PharmacistSettings from './pages/pharmacist/Settings.jsx';
+import PatientCareHub from './pages/pharmacist/PatientCareHub.jsx';
+import PharmacistHistory from './pages/pharmacist/History.jsx';
 import AdminLayout from './pages/admin/AdminLayout.jsx';
 import AdminDashboard from './pages/admin/DashboardRedesign.jsx';
 import AdminUsers from './pages/admin/UsersRedesign.jsx';
@@ -37,6 +40,12 @@ import AdminMedicines from './pages/admin/Medicines.jsx';
 import AdminOrders from './pages/admin/Orders.jsx';
 import AdminAlerts from './pages/admin/Alerts.jsx';
 import AdminAccessibility from './pages/admin/Accessibility.jsx';
+import AdminReports from './pages/admin/Reports.jsx';
+import AdminOcrValidation from './pages/admin/OcrValidation.jsx';
+import AdminClinicalGovernance from './pages/admin/ClinicalGovernance.jsx';
+import AdminPriority from './pages/admin/Priority.jsx';
+import AdminSecurityActivity from './pages/admin/SecurityActivity.jsx';
+import AdminHistory from './pages/admin/History.jsx';
 import CaregiverPortal from './pages/caregiver/CaregiverPortal.jsx';
 import ProtectedRoute from './components/ProtectedRoute.jsx';
 import './App.css';
@@ -85,9 +94,13 @@ export default function App() {
                   <Route path="medications/:id/prescription" element={<PrescriptionUpload />} />
                   <Route path="ask" element={<Ask />} />
                   <Route path="orders" element={<Orders />} />
+                  <Route path="orders/checkout" element={<Shop />} />
                   <Route path="shop" element={<Shop />} />
+                  <Route path="cart" element={<Shop />} />
+                  <Route path="prescription-cart" element={<PrescriptionShop checkoutPage />} />
                   <Route path="profile" element={<Profile />} />
                   <Route path="accessibility" element={<AccessibilitySettings />} />
+                  <Route path="security" element={<SecuritySessions />} />
                   <Route path="help" element={<HelpCenterPage />} />
                 </Route>
                 <Route
@@ -99,23 +112,23 @@ export default function App() {
                   }
                 >
                   <Route index element={<Navigate to="/pharmacist/dashboard" replace />} />
-                  <Route path="dashboard" element={<PharmacistDashboard />} />
+                  <Route path="dashboard" element={<ConnectedPharmacistDashboard />} />
                   <Route
                     path="verification-queue"
-                    element={<Navigate to="/pharmacist/dashboard" replace />}
+                    element={<Navigate to="/pharmacist/validation" replace />}
                   />
                   <Route path="curation" element={<DrugCuration />} />
-                  <Route
-                    path="medicine-rules"
-                    element={<Navigate to="/pharmacist/dashboard?tab=medicine-rules" replace />}
-                  />
+                  <Route path="medicine-rules" element={<MedicineRules />} />
                   <Route path="validation" element={<Validation />} />
                   <Route path="inquiries" element={<Inquiries />} />
                   <Route path="orders" element={<OrdersQueue />} />
                   <Route path="queue" element={<OrdersQueue />} />
-                  <Route path="patients" element={<Patients />} />
-                  <Route path="alerts" element={<PharmacistAlerts />} />
-                  <Route path="appointments" element={<PharmacistCounseling />} />
+                  <Route path="patient-care" element={<PatientCareHub />} />
+                  <Route path="patients" element={<Navigate to="/pharmacist/patient-care" replace />} />
+                  <Route path="alerts" element={<Navigate to="/pharmacist/patient-care?panel=alerts" replace />} />
+                  <Route path="appointments" element={<Navigate to="/pharmacist/patient-care?panel=appointments" replace />} />
+                  <Route path="settings" element={<PharmacistSettings />} />
+                  <Route path="history" element={<PharmacistHistory />} />
                 </Route>
                 <Route
                   path="/admin"
@@ -129,16 +142,15 @@ export default function App() {
                   <Route path="dashboard" element={<AdminDashboard />} />
                   <Route path="users" element={<AdminUsers />} />
                   <Route path="medicines" element={<AdminMedicines />} />
-                  <Route path="rules" element={<Navigate to="/admin/medicines" replace />} />
-                  <Route
-                    path="ocr-validation"
-                    element={<Navigate to="/admin/dashboard" replace />}
-                  />
+                  <Route path="rules" element={<AdminClinicalGovernance />} />
+                  <Route path="ocr-validation" element={<AdminOcrValidation />} />
                   <Route path="orders" element={<AdminOrders />} />
-                  <Route path="priority" element={<Navigate to="/admin/dashboard" replace />} />
-                  <Route path="alerts" element={<AdminAlerts />} />
+                  <Route path="priority" element={<AdminPriority />} />
+                  <Route path="alerts" element={<Navigate to="/admin/reports" replace />} />
+                  <Route path="security-activity" element={<AdminSecurityActivity />} />
+                  <Route path="history" element={<AdminHistory />} />
                   <Route path="settings" element={<AdminAccessibility />} />
-                  <Route path="reports" element={<Navigate to="/admin/dashboard" replace />} />
+                  <Route path="reports" element={<AdminReports />} />
                 </Route>
                 <Route
                   path="/caregiver/*"

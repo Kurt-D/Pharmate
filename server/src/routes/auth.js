@@ -1,15 +1,14 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { createHash, randomBytes } from 'node:crypto';
+import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { OAuth2Client } from 'google-auth-library';
-import { ipKeyGenerator, rateLimit as expressRateLimit } from 'express-rate-limit';
 import { v4 as uuidv4 } from 'uuid';
 import { pool } from '../db/connection.js';
 import { encrypt } from '../utils/crypto.js';
 import { generatePatientCode } from '../utils/patientCode.js';
 import { requireAuth } from '../middleware/auth.js';
-import { rateLimit } from '../middleware/rateLimit.js';
+import { failedAttemptLimit, rateLimit } from '../middleware/rateLimit.js';
 import { issueSelfHostedCaptcha, verifyCaptcha } from '../middleware/verifyTurnstile.js';
 import { validatePassword } from '../utils/passwordPolicy.js';
 import { normalizeEmail } from '../utils/email.js';
@@ -18,6 +17,7 @@ import {
   invalidateUndeliveredOtp,
   issueOtp,
   OTP_PURPOSE,
+  OTP_RESEND_MS,
   verifyOtp,
 } from '../services/otpService.js';
 import { recordAudit } from '../services/audit.js';
@@ -35,6 +35,15 @@ import {
 
 const router = Router();
 
+// Authentication responses can contain access, refresh, MFA, or password-reset
+// credentials. Never allow browsers, proxies, or CDNs to retain them.
+router.use((_req, res, next) => {
+  res.set('Cache-Control', 'no-store, max-age=0');
+  res.set('Pragma', 'no-cache');
+  res.set('Expires', '0');
+  next();
+});
+
 const ACCESS_EXPIRES = process.env.JWT_ACCESS_EXPIRES || '15m';
 const REFRESH_DAYS = Number(process.env.JWT_REFRESH_EXPIRES_DAYS) || 30;
 // bcrypt cost is 12 in production (D-G). Overridable so CI/tests aren't dominated
@@ -48,40 +57,126 @@ const FORGOT_RESPONSE = {
 };
 const INVALID_RESET_RESPONSE = { error: 'Invalid or expired password reset request' };
 const INVALID_PIN_RESPONSE = { error: 'Invalid or expired PIN' };
+const REFRESH_COOKIE = 'pm_refresh';
+const CSRF_COOKIE = 'pm_csrf';
+
+function cookieValue(req, name) {
+  return String(req.headers.cookie || '').split(';').map((part) => part.trim())
+    .find((part) => part.startsWith(`${name}=`))?.slice(name.length + 1);
+}
+function authCookieOptions(httpOnly) {
+  const secure = process.env.NODE_ENV === 'production' || process.env.AUTH_COOKIE_SECURE === 'true';
+  return { httpOnly, secure, sameSite: process.env.AUTH_COOKIE_SAME_SITE || 'lax', path: '/api/auth' };
+}
+function issueSession(res, session, status = 200) {
+  const csrfToken = randomBytes(32).toString('hex');
+  const lifetime = session.persistent ? { maxAge: REFRESH_DAYS * 86400000 } : {};
+  res.cookie(REFRESH_COOKIE, session.refreshToken, { ...authCookieOptions(true), ...lifetime });
+  res.cookie(CSRF_COOKIE, csrfToken, { ...authCookieOptions(false), ...lifetime });
+  const safeSession = { ...session };
+  delete safeSession.refreshToken;
+  return res.status(status).json({ ...safeSession, csrfToken });
+}
+function clearSessionCookies(res) {
+  res.clearCookie(REFRESH_COOKIE, authCookieOptions(true));
+  res.clearCookie(CSRF_COOKIE, authCookieOptions(false));
+}
+function requireCsrf(req, res, next) {
+  const cookie = cookieValue(req, CSRF_COOKIE);
+  const header = req.get('x-csrf-token');
+  if (!cookie || !header || cookie.length !== header.length || !timingSafeEqual(Buffer.from(cookie), Buffer.from(header))) return res.status(403).json({ error: 'CSRF validation failed' });
+  return next();
+}
 
 const registerLimit = rateLimit({
+  scope: 'auth-register',
   windowMs: 60 * 60 * 1000,
   max: process.env.NODE_ENV === 'test' ? 1000 : 5,
 });
-const loginLimit = expressRateLimit({
+const loginLimit = failedAttemptLimit({
+  scope: 'auth-login',
   windowMs: FIFTEEN_MINUTES,
   max: 5,
-  standardHeaders: 'draft-7',
-  legacyHeaders: false,
-  skipSuccessfulRequests: true,
-  keyGenerator: (req) => `${ipKeyGenerator(req.ip)}:${normalizeEmail(req.body?.email) || '-'}`,
-  handler: (_req, res) =>
-    res.status(429).json({ error: 'Too many failed attempts; try again later' }),
+  keyGenerator: (req) => `${req.ip || 'unknown'}:${normalizeEmail(req.body?.email) || '-'}`,
 });
-const refreshLimit = rateLimit({ windowMs: FIFTEEN_MINUTES, max: 30 });
+const refreshLimit = rateLimit({ scope: 'auth-refresh', windowMs: FIFTEEN_MINUTES, max: 30 });
 const forgotIpLimit = rateLimit({
+  scope: 'auth-forgot-ip',
   windowMs: FIFTEEN_MINUTES,
   max: process.env.NODE_ENV === 'test' ? 1000 : 3,
 });
 const forgotEmailLimit = rateLimit({
+  scope: 'auth-forgot-email',
   windowMs: 60 * 60 * 1000,
   max: process.env.NODE_ENV === 'test' ? 1000 : 3,
   keyGenerator: (req) => normalizeEmail(req.body?.email) || 'invalid-email',
 });
 const otpResendLimit = rateLimit({
+  scope: 'auth-otp-resend',
   windowMs: 60 * 1000,
   max: process.env.NODE_ENV === 'test' ? 1000 : 1,
   keyGenerator: (req) => normalizeEmail(req.body?.email) || req.ip || 'invalid-email',
 });
-const resetLimit = rateLimit({ windowMs: FIFTEEN_MINUTES, max: 10 });
-const verifyPinLimit = rateLimit({ windowMs: FIFTEEN_MINUTES, max: 10 });
-const captchaIssueLimit = rateLimit({ windowMs: FIFTEEN_MINUTES, max: 30 });
+const resetLimit = rateLimit({ scope: 'auth-reset', windowMs: FIFTEEN_MINUTES, max: 10 });
+const verifyPinLimit = rateLimit({
+  scope: 'auth-verify-pin',
+  windowMs: FIFTEEN_MINUTES,
+  max: 10,
+});
+const captchaIssueLimit = rateLimit({
+  scope: 'auth-captcha',
+  windowMs: FIFTEEN_MINUTES,
+  max: 30,
+});
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+const PATIENT_CHALLENGE_THRESHOLD = 3;
+
+async function requireRiskBasedHumanVerification(req, res, next) {
+  const email = normalizeEmail(req.body?.email);
+  if (!email) return next();
+
+  try {
+    const [[candidate]] = await pool.execute(
+      `SELECT id, role, failed_login_attempts
+       FROM users WHERE email = ? LIMIT 1`,
+      [email]
+    );
+    // Patients are challenged only after repeated failures. Staff retains the
+    // existing stricter bot-verification posture before its MFA step.
+    const required = Boolean(
+      candidate &&
+        (isStaffRole(candidate.role) ||
+          (candidate.role === 'patient' &&
+            Number(candidate.failed_login_attempts || 0) >= PATIENT_CHALLENGE_THRESHOLD))
+    );
+    if (!required) return next();
+
+    req.humanVerificationRequired = true;
+    await recordAudit({
+      actor: candidate,
+      action: 'human_verification_required',
+      entityType: 'user_security',
+      entityId: candidate.id,
+      metadata: { reason: isStaffRole(candidate.role) ? 'staff_login' : 'repeated_failed_logins' },
+    });
+    res.once('finish', () => {
+      if (res.statusCode >= 400) {
+        void recordAudit({
+          actor: candidate,
+          action: 'human_verification_failed',
+          entityType: 'user_security',
+          entityId: candidate.id,
+          metadata: { reason: 'verification_denied' },
+        }).catch((error) => {
+          console.error('Unable to record human-verification failure', { message: error.message });
+        });
+      }
+    });
+    return verifyCaptcha(req, res, next);
+  } catch (error) {
+    return next(error);
+  }
+}
 
 function validateRecoveryPassword(password) {
   const policyError = validatePassword(password);
@@ -90,6 +185,33 @@ function validateRecoveryPassword(password) {
   if (!/[a-z]/.test(password)) return 'Password must include a lowercase letter';
   if (!/\d/.test(password)) return 'Password must include a number';
   if (!/[^A-Za-z0-9]/.test(password)) return 'Password must include a special character';
+  return null;
+}
+
+function validateRegistrationEmail(email) {
+  if (!email) return 'Email address is required';
+  if (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) {
+    return 'Enter a valid email address';
+  }
+  return null;
+}
+
+function validateFullName(fullName) {
+  // Older public registration clients collect this later in the patient
+  // profile. Keep the field optional at account creation, but validate it
+  // strictly whenever a value is supplied.
+  if (fullName === undefined || fullName === null) return null;
+  if (typeof fullName !== 'string') return 'Full name is required';
+  const value = fullName.trim();
+  const containsControlCharacter = [...value].some((character) => {
+    const code = character.codePointAt(0);
+    return code <= 31 || code === 127;
+  });
+  if (value.length < 2 || value.length > 100 || containsControlCharacter) {
+    return 'Enter a valid full name (2 to 100 characters)';
+  }
+  const letters = value.match(/\p{L}/gu) || [];
+  if (letters.length < 1) return 'Full name must contain at least one letter';
   return null;
 }
 
@@ -133,7 +255,7 @@ function lockDurationMinutes(failedAttempts) {
   return Math.min(60, ACCOUNT_LOCK_BASE_MINUTES * 2 ** lockLevel);
 }
 
-async function createSession(user, executor = pool) {
+async function createSession(user, executor = pool, options = {}) {
   let extra = {};
   if (user.role === 'patient') {
     const [patientRows] = await executor.execute('SELECT patient_code FROM patients WHERE id = ?', [
@@ -149,12 +271,18 @@ async function createSession(user, executor = pool) {
     sessionVersion: user.session_version,
   });
   const rawRefresh = randomBytes(40).toString('hex');
+  const refreshId = uuidv4();
+  // Staff keep the pre-existing persistent-session behavior. Patients opt in
+  // explicitly, so closing a browser normally clears their session cookie.
+  const persistent = user.role === 'patient' ? Boolean(options.persistent) : true;
+  const deviceLabel = String(options.deviceLabel || '').trim().slice(0, 160) || null;
   await executor.execute(
-    'INSERT INTO refresh_tokens (id, user_id, token_hash, expires_at) VALUES (?, ?, ?, ?)',
-    [uuidv4(), user.id, hashToken(rawRefresh), refreshExpiresAt()]
+    `INSERT INTO refresh_tokens (id,user_id,family_id,token_hash,expires_at,persistent,device_label,last_used_at)
+     VALUES (?,?,?,?,?,?,?,NOW(3))`,
+    [refreshId, user.id, refreshId, hashToken(rawRefresh), refreshExpiresAt(), persistent ? 1 : 0, deviceLabel]
   );
   const profile = { id: user.id, email: user.email, role: user.role, ...extra };
-  return { accessToken, refreshToken: rawRefresh, role: user.role, profile, user: profile };
+  return { accessToken, refreshToken: rawRefresh, role: user.role, profile, user: profile, persistent };
 }
 
 async function createPatientRecords(conn, userId, fullName) {
@@ -211,6 +339,8 @@ router.post('/register', registerLimit, verifyCaptcha, async (req, res) => {
   if (!email || !password || !role) {
     return res.status(400).json({ error: 'email, password, and role are required' });
   }
+  const emailError = validateRegistrationEmail(email);
+  if (emailError) return res.status(400).json({ error: emailError });
   if (!['patient', 'caregiver'].includes(role)) {
     return res
       .status(403)
@@ -220,12 +350,6 @@ router.post('/register', registerLimit, verifyCaptcha, async (req, res) => {
   if (confirmation !== undefined && password !== confirmation) {
     return res.status(400).json({ error: 'Passwords do not match' });
   }
-  if (full_name !== undefined && (typeof full_name !== 'string' || full_name.trim().length < 2)) {
-    return res.status(400).json({ error: 'Enter a valid full name' });
-  }
-  const passwordError = validatePassword(password);
-  if (passwordError) return res.status(400).json({ error: passwordError });
-
   const [existing] = await pool.execute(
     'SELECT id,email,role,is_verified,session_version,password_hash FROM users WHERE email = ?',
     [email]
@@ -241,16 +365,63 @@ router.post('/register', registerLimit, verifyCaptcha, async (req, res) => {
           'UPDATE users SET is_verified=1,email_verified_at=COALESCE(email_verified_at,NOW(3)) WHERE id=?',
           [existing[0].id]
         );
-        return res.status(200).json(await createSession(existing[0]));
+        return issueSession(res, await createSession(existing[0]));
+      }
+      const otpConn = await pool.getConnection();
+      let issued;
+      try {
+        await otpConn.beginTransaction();
+        issued = await issueOtp(otpConn, existing[0].id, OTP_PURPOSE.EMAIL_VERIFICATION);
+        await otpConn.commit();
+      } catch (error) {
+        await otpConn.rollback();
+        throw error;
+      } finally {
+        otpConn.release();
+      }
+      if (issued.cooldownSeconds) {
+        return res.status(200).json({
+          message: 'A verification code was sent recently. Check your email or wait to resend.',
+          verificationRequired: true,
+          codeSent: false,
+          retryAfter: issued.cooldownSeconds,
+          email,
+        });
+      }
+      try {
+        await sendOtpEmail({
+          email,
+          otp: issued.otp,
+          purpose: OTP_PURPOSE.EMAIL_VERIFICATION,
+        });
+      } catch (error) {
+        await invalidateUndeliveredOtp(pool, issued.id);
+        console.error('Email verification delivery failed', {
+          code: error?.code || 'EMAIL_PROVIDER_ERROR',
+          status: error?.response?.status || null,
+        });
+        return res.status(503).json({
+          code: 'EMAIL_DELIVERY_FAILED',
+          message: 'The verification email could not be sent. Please retry.',
+          verificationRequired: true,
+          email,
+        });
       }
       return res.status(200).json({
-        message: 'Account verification is still required.',
+        message: 'A new verification code was sent to your email.',
         verificationRequired: true,
+        codeSent: true,
+        retryAfter: Math.ceil(OTP_RESEND_MS / 1000),
         email,
       });
     }
     return res.status(409).json({ error: 'Email already registered' });
   }
+
+  const fullNameError = validateFullName(full_name);
+  if (fullNameError) return res.status(400).json({ error: fullNameError });
+  const passwordError = validateRecoveryPassword(password);
+  if (passwordError) return res.status(400).json({ error: passwordError });
 
   const passwordHash = await bcrypt.hash(password, BCRYPT_COST);
   const userId = uuidv4();
@@ -298,9 +469,7 @@ router.post('/register', registerLimit, verifyCaptcha, async (req, res) => {
   // Production can never enter this branch; OTP-specific tests opt in explicitly.
   if (testAutoVerify) return res.status(201).json({ message: 'Account created.' });
   if (developmentAutoVerify) {
-    return res
-      .status(201)
-      .json(await createSession({ id: userId, email, role, session_version: 0 }));
+    return issueSession(res, await createSession({ id: userId, email, role, session_version: 0 }), 201);
   }
 
   const connForOtp = await pool.getConnection();
@@ -333,16 +502,23 @@ router.post('/register', registerLimit, verifyCaptcha, async (req, res) => {
   res.status(201).json({
     message: 'Account created. Enter the verification code sent to your email.',
     verificationRequired: true,
+    codeSent: true,
+    retryAfter: Math.ceil(OTP_RESEND_MS / 1000),
     email,
   });
 });
 
 // ── POST /api/auth/login ──────────────────────────────────────────────────────
-router.post('/login', loginLimit, verifyCaptcha, async (req, res) => {
+router.post('/login', loginLimit, requireRiskBasedHumanVerification, async (req, res) => {
   const { password, role: selectedRole, accountGroup } = req.body;
   const email = normalizeEmail(req.body.email);
-  if (!email || !password) {
+  if (!email || typeof password !== 'string' || !password) {
     return res.status(400).json({ error: 'email and password are required' });
+  }
+  const emailError = validateRegistrationEmail(email);
+  if (emailError) return res.status(400).json({ error: emailError });
+  if (Buffer.byteLength(password, 'utf8') > 72) {
+    return res.status(400).json({ error: 'Password must not exceed 72 UTF-8 bytes' });
   }
   if (selectedRole !== undefined && !['patient', 'caregiver'].includes(selectedRole)) {
     return res.status(400).json({ error: 'Invalid mobile account type' });
@@ -365,11 +541,20 @@ router.post('/login', loginLimit, verifyCaptcha, async (req, res) => {
       [email]
     );
     const user = rows[0];
+    const humanVerificationUsed = req.humanVerificationRequired === true;
     const lockedUntil = user?.account_locked_until
       ? new Date(user.account_locked_until).getTime()
       : 0;
     if (user && lockedUntil > Date.now()) {
       const retryAfter = Math.max(1, Math.ceil((lockedUntil - Date.now()) / 1000));
+      await recordAudit({
+        actor: user,
+        action: 'login_blocked',
+        entityType: 'user_security',
+        entityId: user.id,
+        metadata: { reason: 'account_locked' },
+        executor: conn,
+      });
       await conn.commit();
       res.set('Retry-After', String(retryAfter));
       return res.status(423).json({ error: 'Account temporarily locked', retryAfter });
@@ -382,8 +567,9 @@ router.post('/login', loginLimit, verifyCaptcha, async (req, res) => {
 
     if (!user || !match || !user.is_active) {
       let retryAfter = 0;
+      let failedAttempts = null;
       if (user) {
-        const failedAttempts = Number(user.failed_login_attempts || 0) + 1;
+        failedAttempts = Number(user.failed_login_attempts || 0) + 1;
         const lockMinutes =
           failedAttempts >= ACCOUNT_LOCK_THRESHOLD ? lockDurationMinutes(failedAttempts) : 0;
         const lockUntil = lockMinutes ? new Date(Date.now() + lockMinutes * 60 * 1000) : null;
@@ -395,6 +581,19 @@ router.post('/login', loginLimit, verifyCaptcha, async (req, res) => {
           [failedAttempts, lockUntil, user.id]
         );
       }
+      await recordAudit({
+        actor: user || null,
+        action: 'login_failed',
+        entityType: 'user_security',
+        entityId: user?.id || null,
+        metadata: {
+          reason: 'invalid_credentials',
+          accountKnown: Boolean(user),
+          accountLocked: Boolean(retryAfter),
+          failedAttempts,
+        },
+        executor: conn,
+      });
       await conn.commit();
       if (retryAfter) {
         res.set('Retry-After', String(retryAfter));
@@ -404,6 +603,14 @@ router.post('/login', loginLimit, verifyCaptcha, async (req, res) => {
     }
 
     if (!user.is_verified) {
+      await recordAudit({
+        actor: user,
+        action: 'login_blocked',
+        entityType: 'user_security',
+        entityId: user.id,
+        metadata: { reason: 'email_verification_required' },
+        executor: conn,
+      });
       await conn.commit();
       return res.status(403).json({
         code: 'EMAIL_VERIFICATION_REQUIRED',
@@ -414,6 +621,14 @@ router.post('/login', loginLimit, verifyCaptcha, async (req, res) => {
     const roleMismatch = selectedRole && user.role !== selectedRole;
     const staffMismatch = accountGroup === 'staff' && !['pharmacist', 'admin'].includes(user.role);
     if (roleMismatch || staffMismatch) {
+      await recordAudit({
+        actor: user,
+        action: 'login_blocked',
+        entityType: 'user_security',
+        entityId: user.id,
+        metadata: { reason: 'account_type_mismatch' },
+        executor: conn,
+      });
       await conn.commit();
       return res.status(403).json({ error: 'This account does not match the selected login type' });
     }
@@ -443,7 +658,10 @@ router.post('/login', loginLimit, verifyCaptcha, async (req, res) => {
       'UPDATE users SET failed_login_attempts = 0, account_locked_until = NULL WHERE id = ?',
       [user.id]
     );
-    const session = await createSession(user, conn);
+    const session = await createSession(user, conn, {
+      persistent: user.role === 'patient' && req.body?.staySignedIn === true,
+      deviceLabel: req.get('user-agent'),
+    });
     await recordAudit({
       actor: user,
       action: 'login_succeeded',
@@ -452,8 +670,18 @@ router.post('/login', loginLimit, verifyCaptcha, async (req, res) => {
       metadata: { method: 'password' },
       executor: conn,
     });
+    if (humanVerificationUsed) {
+      await recordAudit({
+        actor: user,
+        action: 'human_verification_passed',
+        entityType: 'user_security',
+        entityId: user.id,
+        metadata: { method: 'risk_based_login' },
+        executor: conn,
+      });
+    }
     await conn.commit();
-    return res.json(session);
+    return issueSession(res, session);
   } catch (error) {
     await conn.rollback();
     throw error;
@@ -510,7 +738,7 @@ router.post('/mfa/enroll/verify', resetLimit, async (req, res) => {
       executor: conn,
     });
     await conn.commit();
-    return res.json(session);
+    return issueSession(res, session);
   } catch (error) {
     await conn.rollback();
     throw error;
@@ -564,7 +792,7 @@ router.post('/mfa/verify', resetLimit, async (req, res) => {
       executor: conn,
     });
     await conn.commit();
-    return res.json(session);
+    return issueSession(res, session);
   } catch (error) {
     await conn.rollback();
     throw error;
@@ -655,7 +883,7 @@ router.post('/google', loginLimit, async (req, res) => {
 
     const session = await createSession(user, conn);
     await conn.commit();
-    return res.json(session);
+    return issueSession(res, session);
   } catch (error) {
     await conn.rollback();
     if (error?.code === 'ER_DUP_ENTRY') {
@@ -683,13 +911,22 @@ router.post(
       try {
         await conn.beginTransaction();
         const [rows] = await conn.execute(
-          'SELECT id, email FROM users WHERE email = ? AND is_active = 1 FOR UPDATE',
+          'SELECT id, email, role FROM users WHERE email = ? AND is_active = 1 FOR UPDATE',
           [email]
         );
         const user = rows[0];
         if (user) {
           const issued = await issueOtp(conn, user.id, OTP_PURPOSE.PASSWORD_RESET);
-          if (!issued.cooldownSeconds) delivery = { email: user.email, otp: issued.otp };
+          if (!issued.cooldownSeconds) {
+            delivery = { email: user.email, otp: issued.otp, otpId: issued.id };
+            if (user.role === 'admin') {
+              await recordAudit({
+                actor: { id: user.id, role: 'admin' }, action: 'ADMIN_RECOVERY_REQUESTED',
+                entityType: 'user_security', entityId: user.id,
+                metadata: { recovery_method: 'email_otp' }, executor: conn,
+              });
+            }
+          }
         }
         await conn.commit();
       } catch (error) {
@@ -706,17 +943,14 @@ router.post(
       try {
         await sendOtpEmail({ ...delivery, purpose: OTP_PURPOSE.PASSWORD_RESET });
       } catch (error) {
+        await invalidateUndeliveredOtp(pool, delivery.otpId);
         console.error('Password-reset email delivery failed', {
           code: error?.code || 'EMAIL_PROVIDER_ERROR',
           status: error?.response?.status || null,
         });
-        return res.status(503).json({
-          code: 'EMAIL_DELIVERY_FAILED',
-          error: 'The verification email could not be delivered. Please try again later.',
-        });
       }
     }
-    res.status(200).json(FORGOT_RESPONSE);
+    return res.status(200).json(FORGOT_RESPONSE);
   }
 );
 
@@ -795,7 +1029,8 @@ router.post('/verify-email', verifyPinLimit, async (req, res) => {
     ]);
     const session = await createSession(user, conn);
     await conn.commit();
-    return res.json({ message: 'Email verified successfully', ...session });
+    res.set('X-Session-Message', 'Email verified successfully');
+    return issueSession(res, session);
   } catch (error) {
     await conn.rollback();
     throw error;
@@ -889,7 +1124,7 @@ router.post('/reset-password', resetLimit, async (req, res) => {
   try {
     await conn.beginTransaction();
     const [rows] = await conn.execute(
-      `SELECT oc.id, oc.user_id, oc.expires_at, oc.used_at, u.is_active, u.session_version
+      `SELECT oc.id, oc.user_id, oc.expires_at, oc.used_at, u.is_active, u.session_version, u.role
        FROM otp_codes oc
        JOIN users u ON u.id = oc.user_id
        WHERE oc.id = ? AND oc.user_id = ? AND oc.purpose='PASSWORD_RESET'
@@ -925,6 +1160,14 @@ router.post('/reset-password', resetLimit, async (req, res) => {
       'UPDATE refresh_tokens SET revoked = 1, revoked_at = NOW(3) WHERE user_id = ? AND revoked = 0',
       [record.user_id]
     );
+    await recordAudit({
+      actor: { id: record.user_id, role: record.role },
+      action: record.role === 'admin' ? 'ADMIN_PASSWORD_RESET_COMPLETED' : 'password_reset_completed',
+      entityType: 'user_security',
+      entityId: record.user_id,
+      metadata: { sessionsRevoked: true, recovery_method: 'email_otp' },
+      executor: conn,
+    });
     await conn.commit();
     return res.json({ message: 'Password reset successfully' });
   } catch (error) {
@@ -936,54 +1179,102 @@ router.post('/reset-password', resetLimit, async (req, res) => {
 });
 
 // ── POST /api/auth/refresh ────────────────────────────────────────────────────
-router.post('/refresh', refreshLimit, async (req, res) => {
-  const { refreshToken } = req.body;
-  if (!refreshToken) return res.status(400).json({ error: 'refreshToken required' });
+router.post('/refresh', refreshLimit, requireCsrf, async (req, res) => {
+  const refreshToken = cookieValue(req, REFRESH_COOKIE);
+  if (!refreshToken) return res.status(401).json({ error: 'Invalid or expired refresh token' });
 
   const tokenHash = hashToken(refreshToken);
-  const [rows] = await pool.execute(
-    `SELECT rt.id, rt.user_id, rt.expires_at, rt.revoked, u.email, u.role, u.is_active,
-            u.session_version
-     FROM refresh_tokens rt
-     JOIN users u ON u.id = rt.user_id
-     WHERE rt.token_hash = ?`,
-    [tokenHash]
-  );
-  const record = rows[0];
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const [rows] = await conn.execute(
+      `SELECT rt.id,rt.user_id,rt.family_id,rt.persistent,rt.device_label,rt.expires_at,rt.revoked,rt.replaced_by_id,
+              u.email,u.role,u.is_active,u.session_version
+       FROM refresh_tokens rt
+       JOIN users u ON u.id=rt.user_id
+       WHERE rt.token_hash=? FOR UPDATE`,
+      [tokenHash]
+    );
+    const record = rows[0];
+    if (!record || !record.is_active || new Date(record.expires_at) < new Date()) {
+      await conn.rollback();
+      return res.status(401).json({ error: 'Invalid or expired refresh token' });
+    }
+    if (req.get('x-patient-session-restore') === '1' && record.role !== 'patient') {
+      await conn.rollback();
+      return res.status(401).json({ error: 'A patient session is required.' });
+    }
+    if (record.revoked) {
+      if (record.replaced_by_id) {
+        await conn.execute(
+          `UPDATE refresh_tokens SET revoked=1,revoked_at=COALESCE(revoked_at,NOW(3))
+           WHERE family_id=? AND revoked=0`,
+          [record.family_id]
+        );
+        await recordAudit({
+          actor: { id: record.user_id, role: record.role },
+          action: 'refresh_token_reuse_detected',
+          entityType: 'user_security',
+          entityId: record.user_id,
+          metadata: { tokenFamilyRevoked: true },
+          executor: conn,
+        });
+        await conn.commit();
+      } else {
+        await conn.rollback();
+      }
+      return res.status(401).json({ error: 'Invalid or expired refresh token' });
+    }
 
-  if (!record || record.revoked || !record.is_active || new Date(record.expires_at) < new Date()) {
-    return res.status(401).json({ error: 'Invalid or expired refresh token' });
+    const replacementId = uuidv4();
+    const newRaw = randomBytes(40).toString('hex');
+    await conn.execute(
+      `UPDATE refresh_tokens
+       SET revoked=1,revoked_at=NOW(3),replaced_by_id=? WHERE id=? AND revoked=0`,
+      [replacementId, record.id]
+    );
+    await conn.execute(
+      `INSERT INTO refresh_tokens (id,user_id,family_id,token_hash,expires_at,persistent,device_label,last_used_at)
+       VALUES (?,?,?,?,?,?,?,NOW(3))`,
+      [replacementId, record.user_id, record.family_id, hashToken(newRaw), refreshExpiresAt(), record.persistent, record.device_label]
+    );
+    const accessToken = signAccess({
+      sub: record.user_id,
+      id: record.user_id,
+      email: record.email,
+      role: record.role,
+      sessionVersion: record.session_version,
+    });
+    await conn.commit();
+    const profile = { id: record.user_id, email: record.email, role: record.role };
+    return issueSession(res, { accessToken, refreshToken: newRaw, user: profile, profile, persistent: Boolean(record.persistent) });
+  } catch (error) {
+    await conn.rollback();
+    throw error;
+  } finally {
+    conn.release();
   }
-
-  // Rotate: revoke old, issue new
-  await pool.execute('UPDATE refresh_tokens SET revoked = 1, revoked_at = NOW(3) WHERE id = ?', [
-    record.id,
-  ]);
-  const newRaw = randomBytes(40).toString('hex');
-  await pool.execute(
-    'INSERT INTO refresh_tokens (id, user_id, token_hash, expires_at) VALUES (?, ?, ?, ?)',
-    [uuidv4(), record.user_id, hashToken(newRaw), refreshExpiresAt()]
-  );
-
-  const accessToken = signAccess({
-    sub: record.user_id,
-    id: record.user_id,
-    email: record.email,
-    role: record.role,
-    sessionVersion: record.session_version,
-  });
-  res.json({ accessToken, refreshToken: newRaw });
 });
 
 // ── POST /api/auth/logout ─────────────────────────────────────────────────────
-router.post('/logout', requireAuth, async (req, res) => {
-  const { refreshToken } = req.body;
+router.post('/logout', requireAuth, requireCsrf, async (req, res) => {
+  const refreshToken = cookieValue(req, REFRESH_COOKIE);
+  let revokedCurrentSession = false;
   if (refreshToken) {
-    await pool.execute(
+    const [result] = await pool.execute(
       'UPDATE refresh_tokens SET revoked = 1, revoked_at = NOW(3) WHERE token_hash = ? AND user_id = ?',
       [hashToken(refreshToken), req.user.sub]
     );
+    revokedCurrentSession = result.affectedRows > 0;
   }
+  await recordAudit({
+    actor: req.user,
+    action: 'logout_completed',
+    entityType: 'user_security',
+    entityId: req.user.sub,
+    metadata: { revokedCurrentSession },
+  });
+  clearSessionCookies(res);
   res.json({ message: 'Logged out' });
 });
 
@@ -993,7 +1284,7 @@ router.post('/change-password', requireAuth, async (req, res) => {
   if (!currentPassword || !newPassword) {
     return res.status(400).json({ error: 'current_password and new_password are required' });
   }
-  const passwordError = validatePassword(newPassword);
+  const passwordError = validateRecoveryPassword(newPassword);
   if (passwordError) return res.status(400).json({ error: passwordError });
 
   const conn = await pool.getConnection();
@@ -1025,6 +1316,14 @@ router.post('/change-password', requireAuth, async (req, res) => {
       'UPDATE refresh_tokens SET revoked = 1, revoked_at = NOW(3) WHERE user_id = ? AND revoked = 0',
       [req.user.sub]
     );
+    await recordAudit({
+      actor: req.user,
+      action: 'password_changed',
+      entityType: 'user_security',
+      entityId: req.user.sub,
+      metadata: { sessionsRevoked: true },
+      executor: conn,
+    });
     await conn.commit();
     res.json({ message: 'Password changed successfully' });
   } catch (error) {
@@ -1047,6 +1346,14 @@ router.post('/logout-all', requireAuth, async (req, res) => {
       'UPDATE refresh_tokens SET revoked = 1, revoked_at = NOW(3) WHERE user_id = ? AND revoked = 0',
       [req.user.sub]
     );
+    await recordAudit({
+      actor: req.user,
+      action: 'logout_all_completed',
+      entityType: 'user_security',
+      entityId: req.user.sub,
+      metadata: { sessionsRevoked: true },
+      executor: conn,
+    });
     await conn.commit();
     res.json({ message: 'Logged out from all sessions' });
   } catch (error) {

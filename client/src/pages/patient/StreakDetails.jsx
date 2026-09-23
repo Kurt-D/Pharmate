@@ -25,6 +25,7 @@ function Icon({ name, size = 23 }) {
         <path d="M12 8v13M3 12h18M7.5 8C5 8 4 6.5 4 5.4 4 4 5.1 3 6.4 3 8.5 3 10.3 5.6 12 8M16.5 8C19 8 20 6.5 20 5.4 20 4 18.9 3 17.6 3 15.5 3 13.7 5.6 12 8" />
       </>
     ),
+    flame: <path d="M12 22c4.1 0 7-2.7 7-6.4 0-2.8-1.8-5.1-4.2-7.8.1 2.2-1 3.8-2.4 4.6.3-3.7-1.5-6.4-4.2-8.4.3 3.7-2.1 5.6-3.4 7.8C3.6 14 4.2 17.1 6 19.2 7.5 20.9 9.5 22 12 22Z" />,
     info: (
       <>
         <circle cx="12" cy="12" r="9" />
@@ -35,6 +36,12 @@ function Icon({ name, size = 23 }) {
       <>
         <path d="M12 3 5 6v5c0 5 3 8 7 10 4-2 7-5 7-10V6Z" />
         <path d="m9 12 2 2 4-4" />
+      </>
+    ),
+    freeze: (
+      <>
+        <path d="M12 3v18M4.2 7.5l15.6 9M4.2 16.5l15.6-9" />
+        <path d="m8.5 5.2 3.5 2 3.5-2M8.5 18.8l3.5-2 3.5 2M5.2 9l2 3-2 3M18.8 9l-2 3 2 3" />
       </>
     ),
     star: <path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-2.9-5.6 2.9 1.1-6.2L3 9.6l6.2-.9Z" />,
@@ -59,7 +66,7 @@ function Icon({ name, size = 23 }) {
 function loadStreak() {
   try {
     const stored = JSON.parse(localStorage.getItem('pm_priority_streak') || 'null');
-    return stored?.lastTaken ? stored : { days: 0, tokens: 0 };
+    return Number.isFinite(Number(stored?.days)) ? stored : { days: 0, tokens: 0 };
   } catch {
     return { days: 0, tokens: 0 };
   }
@@ -70,8 +77,21 @@ export default function StreakDetails() {
   const { language } = useLanguage();
   const tr = (en, fil) => (language === 'fil' ? fil : en);
   const [streak, setStreak] = useState(loadStreak);
+  const [rewardTokens, setRewardTokens] = useState(0);
+  const [claiming, setClaiming] = useState(false);
+  const [claimMessage, setClaimMessage] = useState('');
   const days = Math.min(7, Number(streak.days || 0));
-  const remaining = Math.max(0, 7 - days);
+  const today = new Date();
+  const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const streakStart = new Date(todayStart);
+  streakStart.setDate(todayStart.getDate() - days + 1);
+  const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+  const calendarCells = Array.from({ length: monthStart.getDay() + new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate() }, (_, index) => {
+    if (index < monthStart.getDay()) return null;
+    const day = index - monthStart.getDay() + 1;
+    const date = new Date(today.getFullYear(), today.getMonth(), day);
+    return { day, isToday: day === today.getDate(), isComplete: days > 0 && date >= streakStart && date <= todayStart };
+  });
 
   useEffect(() => {
     let active = true;
@@ -81,21 +101,16 @@ export default function StreakDetails() {
         const next = {
           days: response.data.current_days,
           tokens: response.data.priority_tokens,
+          freezesRemaining: response.data.freezes_remaining,
+          today: response.data.today,
           lastTaken: new Date().toISOString(),
         };
         if (!active) return;
         setStreak(next);
         localStorage.setItem('pm_priority_streak', JSON.stringify(next));
-
-        // Opening the reward screen counts as viewing an earned-token notice.
-        const notices = await api(
-          '/api/patient/notifications?type=reward_earned&unread_only=true&limit=20'
-        );
-        await Promise.all(
-          (notices.data.notifications || []).map((item) =>
-            api(`/api/patient/notifications/${item.id}/read`, { method: 'PATCH' })
-          )
-        );
+        const notices = await api('/api/patient/notifications?type=reward_earned&unread_only=true&limit=20');
+        const pendingReward = (notices.data.notifications || []).find((item) => item.metadata?.claimable);
+        setRewardTokens(Math.max(0, Number(pendingReward?.metadata?.tokens || 0)));
         window.dispatchEvent(new Event('pm-streak-updated'));
       } catch {
         // The locally cached value remains available when the device is offline.
@@ -106,6 +121,30 @@ export default function StreakDetails() {
       active = false;
     };
   }, []);
+
+  async function claimReward() {
+    if (!rewardTokens || claiming) return;
+    setClaiming(true);
+    try {
+      const response = await api('/api/patient/streak/claim-reward', { method: 'POST' });
+      const tokens = Number(response.data.priority_tokens || 0);
+      const next = { ...streak, tokens, lastTaken: new Date().toISOString() };
+      setStreak(next);
+      localStorage.setItem('pm_priority_streak', JSON.stringify(next));
+      setRewardTokens(0);
+      setClaimMessage(
+        tr(
+          `${response.data.claimed_tokens} Priority Token${response.data.claimed_tokens === 1 ? '' : 's'} added to your balance.`,
+          `${response.data.claimed_tokens} Priority Token ang naidagdag sa iyong balanse.`
+        )
+      );
+      window.dispatchEvent(new Event('pm-streak-updated'));
+    } catch (error) {
+      setClaimMessage(error.message || tr('Unable to claim the reward.', 'Hindi makuha ang reward.'));
+    } finally {
+      setClaiming(false);
+    }
+  }
 
   return (
     <main className="pm-streak-page">
@@ -123,57 +162,79 @@ export default function StreakDetails() {
         </span>
       </header>
 
-      <section className="pm-streak-overview" aria-labelledby="streak-overview-title">
-        <div className="pm-streak-overview__tokens">
-          <span>
-            <Icon name="star" size={24} />
-          </span>
-          <div>
-            <small>{tr('Priority Tokens', 'Priority Tokens')}</small>
-            <strong>{streak.tokens || 0}</strong>
-          </div>
-          <Link to="/patient/ask">
-            <Icon name="ask" size={20} /> {tr('Ask a Pharmacist', 'Magtanong sa Parmasyutiko')}
-          </Link>
-        </div>
-        <div className="pm-streak-overview__status">
-          <div
-            className="pm-streak-ring pm-streak-ring--clean"
-            style={{ '--streak-progress': `${(days / 7) * 360}deg` }}
-          >
+      <section className="pm-streak-dashboard" aria-labelledby="streak-overview-title">
+        <div className="pm-streak-dashboard__top">
+          <small>{tr('PERSONAL ADHERENCE', 'PERSONAL ADHERENCE')}</small>
+          <div className="pm-streak-dashboard__hero">
             <div>
-              <strong>{days}</strong>
-              <span>{tr('of 7 days', 'sa 7 araw')}</span>
+              <strong>{Number(streak.days || 0)}</strong>
+              <span>{tr('day streak!', 'araw na streak!')}</span>
             </div>
+            <span className="pm-streak-dashboard__flame" aria-hidden="true"><Icon name="flame" size={84} /></span>
           </div>
-          <div>
-            <small>{tr('CURRENT STREAK', 'KASALUKUYANG STREAK')}</small>
-            <h2 id="streak-overview-title">
-              {days === 7
-                ? tr('Seven days completed', 'Kumpleto ang pitong araw')
-                : tr('Build your healthy routine', 'Buuin ang iyong healthy routine')}
-            </h2>
-            <p>
-              {remaining
-                ? tr(
-                    `${remaining} ${remaining === 1 ? 'day' : 'days'} remaining until your 7-day reward.`,
-                    `${remaining} araw pa bago ang iyong 7-day reward.`
-                  )
-                : tr('Your final reward has been earned.', 'Nakuha mo na ang final reward.')}
-            </p>
+          <div className="pm-streak-dashboard__tip">
+            <span aria-hidden="true"><Icon name="flame" size={31} /></span>
+            <p>{tr('Keep your ', 'Panatilihin ang iyong ')}<b>{tr('healthy streak', 'healthy streak')}</b>{tr(' by taking your medicines every day!', ' sa pag-inom ng gamot araw-araw!')}</p>
           </div>
         </div>
-        <div
-          className="pm-streak-week pm-streak-week--clean"
-          aria-label={`${days} of 7 days completed`}
-        >
-          {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day, i) => (
-            <span className={i < days ? 'complete' : ''} key={day}>
-              <small>{day}</small>
-              <b>{i < days ? <Icon name="check" size={16} /> : i + 1}</b>
+        <header className="pm-streak-dashboard__month">
+          <h2 id="streak-overview-title">{today.toLocaleDateString(language === 'fil' ? 'fil-PH' : 'en-PH', { month: 'long', year: 'numeric' })}</h2>
+          <span aria-hidden="true">‹ ›</span>
+        </header>
+        <div className="pm-streak-dashboard__stats">
+          <article><span><Icon name="star" size={20} /></span><div><strong>{streak.tokens || 0}</strong><small>{tr('Priority Tokens', 'Priority Token')}</small></div></article>
+          <article><span><Icon name="freeze" size={20} /></span><div><strong>{Number.isFinite(Number(streak.freezesRemaining)) ? streak.freezesRemaining : 2}/2</strong><small>{tr('Streak Freezes available', 'Streak Freeze na available')}</small></div></article>
+        </div>
+        <div className="pm-streak-dashboard__calendar" aria-label={tr('Adherence calendar', 'Kalendaryo ng adherence')}>
+          {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map((day) => <b key={day}>{day}</b>)}
+          {calendarCells.map((cell, index) => cell ? <span className={`${cell.isComplete ? 'is-complete ' : ''}${cell.isToday ? 'is-today' : ''}`} key={index}>{cell.isComplete ? <Icon name="flame" size={17} /> : cell.day}</span> : <i key={index} />)}
+        </div>
+        <p className="pm-streak-dashboard__message">
+          <Icon name="check" size={20} /> {tr('Great job today! Keep your medicine routine going tomorrow.', 'Mahusay ngayon! Ipagpatuloy ang iyong routine sa gamot bukas.')}
+        </p>
+      </section>
+
+      {(rewardTokens > 0 || claimMessage) && (
+        <section className="pm-streak-claim-card" aria-live="polite">
+          <span aria-hidden="true"><Icon name="gift" size={28} /></span>
+          <div>
+            <strong>
+              {rewardTokens > 0
+                ? tr(`You earned ${rewardTokens} Priority Token${rewardTokens === 1 ? '' : 's'}!`, `May nakuha kang ${rewardTokens} Priority Token!`)
+                : tr('Priority Token claimed!', 'Nakuha na ang Priority Token!')}
+            </strong>
+            <small>{claimMessage || tr('Claim it to add it to your balance.', 'I-claim ito upang madagdag sa iyong balanse.')}</small>
+          </div>
+          {rewardTokens > 0 && (
+            <button type="button" onClick={claimReward} disabled={claiming}>
+              {claiming ? tr('Claiming…', 'Kino-claim…') : tr('Claim reward', 'I-claim ang reward')}
+            </button>
+          )}
+        </section>
+      )}
+
+      <section className="pm-streak-reward-path" aria-labelledby="reward-path-title">
+        <header>
+          <div>
+            <Icon name="gift" />
+            <span>
+              <h2 id="reward-path-title">{tr('Reward progress', 'Reward progress')}</h2>
+              <small>{tr(`Day ${days} of 7`, `Araw ${days} sa 7`)}</small>
             </span>
+          </div>
+          <strong>{days}/7</strong>
+        </header>
+        <progress max="7" value={days}>{days} of 7</progress>
+        <div className="pm-streak-milestones">
+          {[{ d: 3, t: '1 Token' }, { d: 6, t: '1 Token' }, { d: 7, t: '2 Tokens' }].map((step) => (
+            <article className={days >= step.d ? 'complete' : ''} key={step.d}>
+              <span><Icon name={step.d === 7 ? 'star' : 'shield'} size={20} /></span>
+              <strong>{tr(`Day ${step.d}`, `Araw ${step.d}`)}</strong>
+              <small>{step.t}</small>
+            </article>
           ))}
         </div>
+        <p>{tr('Earn 1 token on Day 3 and Day 6, then 2 tokens for completing Day 7.', 'Makakuha ng 1 token sa Day 3 at Day 6, at 2 token kapag nakumpleto ang Day 7.')}</p>
       </section>
 
       <section className="pm-streak-rules" aria-labelledby="how-streak-works">
@@ -259,43 +320,6 @@ export default function StreakDetails() {
             </small>
           </p>
         </div>
-      </section>
-
-      <section className="pm-streak-reward-path" aria-labelledby="reward-path-title">
-        <header>
-          <div>
-            <Icon name="gift" />
-            <span>
-              <h2 id="reward-path-title">{tr('Reward progress', 'Reward progress')}</h2>
-              <small>{tr(`Day ${days} of 7`, `Araw ${days} sa 7`)}</small>
-            </span>
-          </div>
-          <strong>{days}/7</strong>
-        </header>
-        <progress max="7" value={days}>
-          {days} of 7
-        </progress>
-        <div className="pm-streak-milestones">
-          {[
-            { d: 3, t: '1 Token' },
-            { d: 6, t: '1 Token' },
-            { d: 7, t: '2 Tokens' },
-          ].map((step) => (
-            <article className={days >= step.d ? 'complete' : ''} key={step.d}>
-              <span>
-                <Icon name={step.d === 7 ? 'star' : 'shield'} size={20} />
-              </span>
-              <strong>{tr(`Day ${step.d}`, `Araw ${step.d}`)}</strong>
-              <small>{step.t}</small>
-            </article>
-          ))}
-        </div>
-        <p>
-          {tr(
-            'Earn 1 token on Day 3 and Day 6, then 2 tokens for completing Day 7.',
-            'Makakuha ng 1 token sa Day 3 at Day 6, at 2 token kapag nakumpleto ang Day 7.'
-          )}
-        </p>
       </section>
 
       <aside className="pm-streak-tip pm-streak-tip--clean">

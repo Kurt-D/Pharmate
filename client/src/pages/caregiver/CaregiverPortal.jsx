@@ -253,6 +253,7 @@ export default function CaregiverPortal() {
       id: crypto.randomUUID(),
       message,
       medicine: medicine || 'scheduled medicine',
+      scheduleId: doseId,
       caregiverName: profile?.display_name || 'your caregiver',
       patientCode: selectedCode,
       createdAt: new Date().toISOString(),
@@ -292,7 +293,13 @@ export default function CaregiverPortal() {
     setSendingReminder(true);
     try {
       const preset = reminderPresets(selectedPatient?.displayLabel, dose.medicine)[0];
-      await sendVoiceAlert({ message: preset.message, medicine: dose.medicine, doseId: dose.id });
+      const message =
+        dose.status === 'overdue'
+          ? `${selectedPatient?.displayLabel || 'Your caregiver'} noticed you missed ${dose.medicine}. Please check in or ask your pharmacist if you need help.`
+          : dose.status === 'upcoming'
+            ? `${selectedPatient?.displayLabel || 'Your caregiver'} reminds you that ${dose.medicine} is coming up at ${dose.time}.`
+            : preset.message;
+      await sendVoiceAlert({ message, medicine: dose.medicine, doseId: dose.id });
     } catch (error) {
       showToast(error.message || 'Could not send the reminder. Please try again.', 'error');
     } finally {

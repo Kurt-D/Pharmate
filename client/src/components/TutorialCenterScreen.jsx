@@ -56,7 +56,7 @@ export default function TutorialCenterScreen({
           <BookOpen />
         </span>
         <span>
-          <strong>Replay Full 8-Step Tour</strong>
+          <strong>Replay Full 9-Step Tour</strong>
           <small>See the important controls directly on each screen.</small>
         </span>
         <ArrowRight />

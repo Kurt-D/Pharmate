@@ -8,6 +8,9 @@ const REQUIRED_VARIABLES = [
 ];
 
 const MIN_JWT_SECRET_LENGTH = 64;
+const LOCAL_DEVELOPMENT_ORIGIN =
+  /^https?:\/\/(localhost|127\.0\.0\.1|10\.0\.2\.2|192\.168\.\d{1,3}\.\d{1,3}|10\.\d{1,3}\.\d{1,3}\.\d{1,3})(:\d+)?$/i;
+const LOCAL_DATABASE_HOST = /^(localhost|127\.0\.0\.1|::1)$/i;
 
 export function validateEnvironment(env = process.env) {
   const missing = REQUIRED_VARIABLES.filter((name) => !env[name]?.trim());
@@ -31,9 +34,25 @@ export function validateEnvironment(env = process.env) {
   }
 
   if (env.NODE_ENV === 'production') {
+    if (!env.DB_USER?.trim() || /^(root|mysql|administrator)$/i.test(env.DB_USER.trim())) {
+      errors.push('DB_USER must be a dedicated non-root application account in production');
+    }
+    if (!env.DB_PASS?.trim()) errors.push('DB_PASS is required in production');
+    if (!LOCAL_DATABASE_HOST.test(env.DB_HOST || '') && env.DB_TLS_REQUIRED !== 'true') {
+      errors.push('DB_TLS_REQUIRED=true is required when production MySQL is not local');
+    }
+    if (env.DB_TLS_REQUIRED === 'true' && !env.DB_TLS_CA_PATH?.trim()) {
+      errors.push('DB_TLS_CA_PATH is required when DB_TLS_REQUIRED=true');
+    }
     if (!env.GOOGLE_CLIENT_ID?.trim()) errors.push('GOOGLE_CLIENT_ID is required in production');
     if (!env.OTP_SECRET?.trim() || env.OTP_SECRET.length < 64) {
       errors.push('OTP_SECRET must be at least 64 characters in production');
+    }
+    const resetSecret = env.RESET_TOKEN_SECRET || env.PASSWORD_RESET_JWT_SECRET;
+    if (!resetSecret?.trim() || resetSecret.length < 64) {
+      errors.push('RESET_TOKEN_SECRET must be at least 64 characters in production');
+    } else if ([env.JWT_SECRET, env.JWT_REFRESH_SECRET, env.OTP_SECRET].includes(resetSecret)) {
+      errors.push('RESET_TOKEN_SECRET must be different from JWT and OTP secrets');
     }
   }
   const captchaProvider = String(env.CAPTCHA_PROVIDER || 'turnstile')
@@ -54,6 +73,13 @@ export function validateEnvironment(env = process.env) {
     !env.TURNSTILE_SECRET_KEY?.trim()
   ) {
     errors.push('TURNSTILE_SECRET_KEY is required when CAPTCHA_PROVIDER=turnstile');
+  }
+  if (
+    env.NODE_ENV === 'production' &&
+    captchaProvider === 'turnstile' &&
+    !env.TURNSTILE_ALLOWED_HOSTNAMES?.trim()
+  ) {
+    errors.push('TURNSTILE_ALLOWED_HOSTNAMES is required in production');
   }
   if (env.CAPTCHA_SIGNING_SECRET && env.CAPTCHA_SIGNING_SECRET.length < 64) {
     errors.push('CAPTCHA_SIGNING_SECRET must be at least 64 characters');
@@ -118,6 +144,10 @@ export function trustedOrigins(env = process.env) {
     env.NODE_ENV === 'production' ? [] : ['http://localhost:5173', 'http://127.0.0.1:5173'];
 
   return new Set([...configured, ...localDevelopment]);
+}
+
+export function isLocalDevelopmentOrigin(origin, env = process.env) {
+  return env.NODE_ENV !== 'production' && LOCAL_DEVELOPMENT_ORIGIN.test(String(origin || ''));
 }
 
 export { MIN_JWT_SECRET_LENGTH, REQUIRED_VARIABLES };

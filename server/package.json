@@ -22,6 +22,8 @@
     "dedupe:provisional-drugs": "node src/db/dedupe-provisional-drugs.js",
     "validate:clinical-rules": "node src/db/validate-clinical-rules.js",
     "repair:invite-codes": "node src/db/repair-invite-codes.js",
+    "verify:audit-chain": "node scripts/verify-audit-chain.js",
+    "retention:report": "node scripts/retention-report.js",
     "db:test:setup": "node src/db/setup-test-db.js",
     "purge:photos": "node src/jobs/purgePhotos.js",
     "sweep:missed": "node src/jobs/sweepMissed.js",
@@ -46,6 +48,7 @@
     "mysql2": "^3.24.2",
     "node-cron": "^4.2.1",
     "nodemailer": "^9.0.6",
+    "sharp": "^0.34.5",
     "socket.io": "^4.8.3",
     "svg-captcha": "^1.4.0",
     "uuid": "^11.1.0"
@@ -58,6 +61,7 @@
   },
   "allowScripts": {
     "@firebase/util@1.15.1": true,
-    "protobufjs@7.6.6": true
+    "protobufjs@7.6.6": true,
+    "sharp@0.34.5": true
   }
 }

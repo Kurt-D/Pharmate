@@ -32,6 +32,7 @@ export default function Login() {
     try {
       const res = await fetch(apiUrl('/api/auth/login'), {
         method: 'POST',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           email,
@@ -46,7 +47,7 @@ export default function Login() {
         return;
       }
 
-      login(data.user, data.accessToken, data.refreshToken);
+      login(data.user, data.accessToken, data.csrfToken);
       navigate(ROLE_ROUTES[data.user.role] ?? '/login', { replace: true });
     } catch {
       setError('Cannot reach the server. Please try again.');

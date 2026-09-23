@@ -15,12 +15,17 @@ function parseStructuredJson(field, next) {
   }
 }
 
+const tls = process.env.DB_TLS_REQUIRED === 'true'
+  ? { ca: fs.readFileSync(process.env.DB_TLS_CA_PATH, 'utf8'), rejectUnauthorized: true }
+  : undefined;
+
 export const pool = mysql.createPool({
   host: process.env.DB_HOST || 'localhost',
   port: Number(process.env.DB_PORT) || 3306,
   database: process.env.DB_NAME || 'pharmate',
   user: process.env.DB_USER || 'pharmate',
   password: process.env.DB_PASS || '',
+  ssl: tls,
   waitForConnections: true,
   connectionLimit: 10,
   timezone: '+08:00',

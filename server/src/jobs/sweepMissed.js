@@ -1,7 +1,7 @@
 /**
  * Missed-dose sweep job (Sprint 6, D-C — the 30-minute rule).
  *
- * Marks scheduled doses more than 30 minutes overdue as MISSED. Intended to run
+ * Marks scheduled doses at least 30 minutes overdue as MISSED. Intended to run
  * frequently (the node-cron dispatcher arrives with the reminder pipeline); can
  * also be run manually: `npm run sweep:missed`.
  *

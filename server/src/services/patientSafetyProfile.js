@@ -62,6 +62,7 @@ export function validateSafetyProfile(body = {}) {
 
 export function missingSafetyContext(profile) {
   const missing = [];
+  if (!profile.profile_completed) missing.push('profile_completed');
   if (!profile.date_of_birth) missing.push('date_of_birth');
   if (!profile.allergies) missing.push('allergies');
   if (!profile.conditions) missing.push('conditions');

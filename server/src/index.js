@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import express from 'express';
 import { createServer } from 'node:http';
+import { v4 as uuidv4 } from 'uuid';
 import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
@@ -18,7 +19,12 @@ import directoryRouter from './routes/directory.js';
 import realtimeRouter from './routes/realtime.js';
 import medicationRouter from './routes/medication.js';
 import notificationsRouter from './routes/notifications.js';
-import { trustedOrigins, trustedProxyHops, validateEnvironment } from './config/environment.js';
+import {
+  isLocalDevelopmentOrigin,
+  trustedOrigins,
+  trustedProxyHops,
+  validateEnvironment,
+} from './config/environment.js';
 import { initializeSocketServer } from './realtime/socketServer.js';
 
 validateEnvironment();
@@ -28,13 +34,21 @@ const PORT = process.env.PORT || 3000;
 const proxyHops = trustedProxyHops();
 if (proxyHops) app.set('trust proxy', proxyHops);
 
+app.use((req, res, next) => {
+  req.requestId = uuidv4();
+  res.set('X-Request-ID', req.requestId);
+  next();
+});
+
 app.use(helmet());
 const allowedOrigins = trustedOrigins();
 app.use(
   cors({
     credentials: true,
     origin(origin, callback) {
-      if (!origin || allowedOrigins.has(origin)) return callback(null, true);
+      if (!origin || allowedOrigins.has(origin) || isLocalDevelopmentOrigin(origin)) {
+        return callback(null, true);
+      }
       const error = new Error('Origin not allowed');
       error.status = 403;
       return callback(error);
@@ -42,7 +56,18 @@ app.use(
   })
 );
 if (process.env.NODE_ENV !== 'test') {
-  app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
+  const productionLog = (tokens, req, res) =>
+    JSON.stringify({
+      timestamp: new Date().toISOString(),
+      event: 'http_request',
+      request_id: req.requestId || null,
+      method: tokens.method(req, res),
+      path: tokens.url(req, res)?.split('?')[0],
+      status: Number(tokens.status(req, res)),
+      duration_ms: Number(tokens['response-time'](req, res)),
+      source_ip: req.ip || null,
+    });
+  app.use(morgan(process.env.NODE_ENV === 'production' ? productionLog : 'dev'));
 }
 app.use(express.json({ limit: process.env.JSON_BODY_LIMIT || '32kb' }));
 

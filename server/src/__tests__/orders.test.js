@@ -136,7 +136,7 @@ describe('Catalog ordering is separate from medication scheduling', () => {
       `SELECT id FROM drug_reference
        WHERE rx_class='RX' AND availability=1 AND is_restricted=0 LIMIT 1`
     );
-    const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAAeklEQVR4nNXOQREAAAyDMPybZiL62BEFwTiMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwzi+A6sDylPSwv6dS34AAAAASUVORK5CYII=', 'base64');
     const order = await request(app)
       .post('/api/patient/orders')
       .set(auth())
@@ -192,7 +192,7 @@ describe('Delivery requests (TC-08 — branch limitation)', () => {
 });
 
 describe('UC-09 — prescription gating for refills & deliveries', () => {
-  const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAAeklEQVR4nNXOQREAAAyDMPybZiL62BEFwTiMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwziMwzi+A6sDylPSwv6dS34AAAAASUVORK5CYII=', 'base64');
 
   // amoxicillin is Rx (antibiotic) in the PH FDA formulary; paracetamol is OTC.
   async function encode(t, { drug_name = 'amoxicillin', source = 'RX_VALIDATED' } = {}) {

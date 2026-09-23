@@ -4,6 +4,7 @@ import { createPatientNotification } from './patientNotifications.js';
 const MANILA_OFFSET_MS = 8 * 60 * 60 * 1000;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const TAKEN = new Set(['taken', 'taken_late']);
+const WEEKLY_FREEZE_LIMIT = 2;
 
 export function manilaDayKey(instant = new Date()) {
   const shifted = new Date(new Date(instant).getTime() + MANILA_OFFSET_MS);
@@ -17,6 +18,13 @@ export function manilaDayKey(instant = new Date()) {
 function shiftDay(dayKey, days) {
   const midnight = new Date(`${dayKey}T00:00:00.000Z`);
   return manilaDayKey(new Date(midnight.getTime() + days * DAY_MS - MANILA_OFFSET_MS));
+}
+
+function weekKey(dayKey) {
+  const date = new Date(`${dayKey}T00:00:00.000Z`);
+  const mondayOffset = (date.getUTCDay() + 6) % 7;
+  date.setUTCDate(date.getUTCDate() - mondayOffset);
+  return date.toISOString().slice(0, 10);
 }
 
 function utcBounds(dayKey) {
@@ -80,10 +88,31 @@ export async function evaluateStreakDay(patientId, dayKey, now = new Date()) {
 
     const complete = summary.taken === summary.total && summary.missed === 0;
     const yesterday = shiftDay(dayKey, -1);
-    const continued = streak.last_completed_date
-      ? manilaDayKey(streak.last_completed_date) === yesterday
-      : false;
-    const nextDays = complete ? (continued ? Number(streak.current_days) + 1 : 1) : 0;
+    const [[yesterdayOutcome]] = await connection.execute(
+      'SELECT result FROM patient_streak_days WHERE patient_id=? AND dose_date=?',
+      [patientId, yesterday]
+    );
+    const continued =
+      (streak.last_completed_date && manilaDayKey(streak.last_completed_date) === yesterday) ||
+      yesterdayOutcome?.result === 'frozen';
+    let result = complete ? 'complete' : 'broken';
+    let nextDays = complete ? (continued ? Number(streak.current_days) + 1 : 1) : 0;
+    let freezeUsed = false;
+    if (!complete && Number(streak.current_days) > 0) {
+      const [[usage]] = await connection.execute(
+        'SELECT COUNT(*) AS count FROM patient_streak_freezes WHERE patient_id=? AND week_key=? FOR UPDATE',
+        [patientId, weekKey(dayKey)]
+      );
+      if (Number(usage.count) < WEEKLY_FREEZE_LIMIT) {
+        result = 'frozen';
+        nextDays = Number(streak.current_days);
+        freezeUsed = true;
+        await connection.execute(
+          'INSERT INTO patient_streak_freezes (patient_id,dose_date,week_key) VALUES (?,?,?)',
+          [patientId, dayKey, weekKey(dayKey)]
+        );
+      }
+    }
     const tokens = complete ? rewardForDay(nextDays) : 0;
 
     await connection.execute(
@@ -93,7 +122,7 @@ export async function evaluateStreakDay(patientId, dayKey, now = new Date()) {
       [
         patientId,
         dayKey,
-        complete ? 'complete' : 'broken',
+        result,
         summary.total,
         summary.taken,
         nextDays,
@@ -103,10 +132,10 @@ export async function evaluateStreakDay(patientId, dayKey, now = new Date()) {
     );
     await connection.execute(
       `UPDATE patient_streaks
-       SET current_days = ?, priority_tokens = priority_tokens + ?,
+       SET current_days = ?,
            last_completed_date = ?, updated_at = ?
        WHERE patient_id = ?`,
-      [nextDays, tokens, complete ? dayKey : null, now, patientId]
+      [nextDays, complete ? dayKey : streak.last_completed_date, now, patientId]
     );
 
     if (tokens > 0) {
@@ -116,10 +145,10 @@ export async function evaluateStreakDay(patientId, dayKey, now = new Date()) {
         eventKey: `streak-reward:${patientId}:${dayKey}`,
         title: 'Priority Token reward earned',
         message: `You completed a ${nextDays}-day streak and earned ${tokens} Priority Token${tokens === 1 ? '' : 's'}.`,
-        metadata: { screen: 'StreakDetails', tokens, streak_days: nextDays },
+        metadata: { screen: 'StreakDetails', tokens, streak_days: nextDays, claimable: true },
         executor: connection,
       });
-    } else if (!complete) {
+    } else if (!complete && !freezeUsed) {
       await createPatientNotification({
         patientId,
         type: 'streak_reset',
@@ -131,7 +160,7 @@ export async function evaluateStreakDay(patientId, dayKey, now = new Date()) {
       });
     }
     await connection.commit();
-    return { processed: true, result: complete ? 'complete' : 'broken', nextDays, tokens, summary };
+    return { processed: true, result, nextDays, tokens, freeze_used: freezeUsed, summary };
   } catch (error) {
     await connection.rollback();
     throw error;
@@ -147,7 +176,7 @@ export async function getStreakStatus(patientId, now = new Date()) {
   await evaluateStreakDay(patientId, today, now);
   await ensureStreak(patientId);
 
-  const [summary, [[streak]], [[yesterdayResult]], [[reward]]] = await Promise.all([
+  const [summary, [[streak]], [[yesterdayResult]], [[reward]], [[freezeUsage]]] = await Promise.all([
     daySummary(patientId, today),
     pool.execute('SELECT * FROM patient_streaks WHERE patient_id = ?', [patientId]),
     pool.execute('SELECT result FROM patient_streak_days WHERE patient_id = ? AND dose_date = ?', [
@@ -156,28 +185,87 @@ export async function getStreakStatus(patientId, now = new Date()) {
     ]),
     pool.execute(
       `SELECT COUNT(*) AS count FROM patient_notifications
-       WHERE patient_id = ? AND type = 'reward_earned' AND read_at IS NULL`,
+       WHERE patient_id = ? AND type = 'reward_earned' AND read_at IS NULL
+         AND JSON_UNQUOTE(JSON_EXTRACT(metadata, '$.claimable')) = 'true'`,
       [patientId]
+    ),
+    pool.execute(
+      'SELECT COUNT(*) AS count FROM patient_streak_freezes WHERE patient_id=? AND week_key=?',
+      [patientId, weekKey(today)]
     ),
   ]);
 
   const manilaHour = new Date(now.getTime() + MANILA_OFFSET_MS).getUTCHours();
   const rewardReady = Number(reward?.count || 0) > 0;
+  // A streak day is earned as soon as the first dose for that new day is
+  // recorded. The day is still reconciled at completion (and is reset if a
+  // dose is missed), but the patient gets immediate feedback for Day 1 and
+  // every continued day instead of waiting for remaining doses.
+  const recordedDays = Number(streak.current_days);
+  const completedDate = streak.last_completed_date
+    ? manilaDayKey(streak.last_completed_date)
+    : null;
+  const earnedToday = summary.taken > 0 && summary.missed === 0 && completedDate !== today;
+  const currentDays = earnedToday
+    ? completedDate === yesterday
+      ? recordedDays + 1
+      : 1
+    : recordedDays;
   let state = 'active';
   if (rewardReady) state = 'reward_ready';
   else if (summary.total > 0 && summary.taken === summary.total) state = 'safe';
-  else if (manilaHour >= 18 && summary.pending > 0 && Number(streak.current_days) > 0)
+  else if (manilaHour >= 18 && summary.pending > 0 && currentDays > 0)
     state = 'at_risk';
   else if (yesterdayResult?.result === 'broken') state = 'broken';
 
   return {
     state,
-    current_days: Number(streak.current_days),
+    current_days: currentDays,
     priority_tokens: Number(streak.priority_tokens),
     reward_ready: rewardReady,
+    freezes_remaining: Math.max(0, WEEKLY_FREEZE_LIMIT - Number(freezeUsage?.count || 0)),
+    freezes_used: Number(freezeUsage?.count || 0),
     today: summary,
     generated_at: new Date(now).toISOString(),
   };
+}
+
+/** Claim one earned streak reward exactly once, then expose the new balance. */
+export async function claimStreakReward(patientId) {
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    await ensureStreak(patientId, connection);
+    const [[reward]] = await connection.execute(
+      `SELECT id, metadata FROM patient_notifications
+       WHERE patient_id = ? AND type = 'reward_earned' AND read_at IS NULL
+         AND JSON_UNQUOTE(JSON_EXTRACT(metadata, '$.claimable')) = 'true'
+       ORDER BY created_at ASC LIMIT 1 FOR UPDATE`,
+      [patientId]
+    );
+    if (!reward) {
+      await connection.rollback();
+      return { error: 'no_reward_available' };
+    }
+    const metadata = typeof reward.metadata === 'string' ? JSON.parse(reward.metadata || '{}') : reward.metadata || {};
+    const tokens = Math.max(1, Number(metadata.tokens) || 1);
+    await connection.execute(
+      'UPDATE patient_streaks SET priority_tokens = priority_tokens + ?, updated_at = NOW(3) WHERE patient_id = ?',
+      [tokens, patientId]
+    );
+    await connection.execute('UPDATE patient_notifications SET read_at = NOW(3) WHERE id = ?', [reward.id]);
+    const [[streak]] = await connection.execute(
+      'SELECT priority_tokens FROM patient_streaks WHERE patient_id = ?',
+      [patientId]
+    );
+    await connection.commit();
+    return { claimed_tokens: tokens, priority_tokens: Number(streak?.priority_tokens || 0) };
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
 }
 
 export async function listPatientsForStreakJob() {

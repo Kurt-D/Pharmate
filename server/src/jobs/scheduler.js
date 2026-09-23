@@ -3,7 +3,7 @@
  * and purge jobs referenced. Starts the periodic pipeline in a running server:
  *
  *   every minute      → dispatchReminders()  repeat genuinely DUE doses at most every 5 minutes
- *   every 5 minutes   → sweepMissed()        mark >30-min-overdue doses missed (D-C)
+ *   every minute      → sweepMissed()        mark 30-min-overdue doses missed (D-C)
  *   daily 03:15 Manila→ purge retained read notifications and prescription photos
  *
  * Ticks are serialized per job (a slow run skips its next overlap) and never
@@ -47,7 +47,7 @@ export function startScheduler() {
 
   console.log(
     `[cron] starting — reminders every minute (FCM ${pushConfigured() ? 'on' : 'off, local-only'}), ` +
-      `missed-sweep every 5 min`
+      `missed-sweep every minute`
   );
 
   const tasks = [
@@ -63,7 +63,7 @@ export function startScheduler() {
       })
     ),
     cron.schedule(
-      '*/5 * * * *',
+      '* * * * *',
       guard('sweep-missed', async () => {
         const n = await sweepMissed();
         if (n > 0) console.log(`[cron:sweep-missed] marked ${n} dose(s) missed`);

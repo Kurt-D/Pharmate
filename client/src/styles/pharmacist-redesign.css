@@ -25,7 +25,7 @@
   padding: 0.7rem 1rem;
 }
 .pw-navlink.active {
-  background: #1769f5;
+  background: #578EF5;
   box-shadow: 0 4px 8px rgba(23, 105, 245, 0.24);
 }
 .pw-operations-label {
@@ -136,7 +136,7 @@
 }
 .px-followup > i {
   background: #eaf2ff;
-  color: #1769f5;
+  color: #578EF5;
   display: grid;
   font-style: normal;
   height: 36px;
@@ -157,7 +157,7 @@
   font-size: 0.58rem;
 }
 .px-followup em {
-  color: #1769f5;
+  color: #578EF5;
   font-style: normal;
 }
 .px-priority {
@@ -187,8 +187,8 @@
   font-size: 0.58rem;
 }
 .px-priority button {
-  background: #1769f5;
-  border: 1px solid #1769f5;
+  background: #578EF5;
+  border: 1px solid #578EF5;
   border-radius: 0.25rem;
   color: #fff;
   font-size: 0.58rem;
@@ -197,7 +197,7 @@
 }
 .px-priority button + button {
   background: #fff;
-  color: #1769f5;
+  color: #578EF5;
 }
 .px-chart-area {
   display: flex;
@@ -290,7 +290,7 @@
 }
 .px-patient-stats i,
 .px-alert-stats i {
-  color: #1769f5;
+  color: #578EF5;
   font-size: 1.7rem;
   font-style: normal;
 }
@@ -330,7 +330,7 @@
 .px-patient-list > button > i {
   background: #e7f0ff;
   border-radius: 50%;
-  color: #1769f5;
+  color: #578EF5;
   display: grid;
   font-size: 0.6rem;
   font-style: normal;
@@ -416,7 +416,7 @@
 }
 .px-followup-row button,
 .px-alert-list button {
-  background: #1769f5;
+  background: #578EF5;
   border: 0;
   border-radius: 0.25rem;
   color: #fff;
@@ -447,8 +447,8 @@
 }
 .px-alert-list button + button {
   background: #fff;
-  border: 1px solid #1769f5;
-  color: #1769f5;
+  border: 1px solid #578EF5;
+  color: #578EF5;
 }
 .px-alert-stats {
   grid-template-columns: repeat(4, 1fr);
@@ -480,8 +480,8 @@
 }
 .px-alert-layout td button {
   background: #fff;
-  border: 1px solid #1769f5;
-  color: #1769f5;
+  border: 1px solid #578EF5;
+  color: #578EF5;
 }
 .px-alert-detail > div {
   display: flex;
@@ -514,7 +514,7 @@
   width: 100%;
 }
 .px-alert-detail button.primary {
-  background: #1769f5;
+  background: #578EF5;
 }
 .px-alert-detail button.success {
   background: #19a653;

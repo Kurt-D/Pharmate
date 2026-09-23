@@ -86,6 +86,7 @@ export async function logDose(patientId, scheduleId, opts = {}) {
   const logId = log_id || uuidv4();
   let sched;
   let status;
+  let snoozedUntil = null;
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
@@ -144,10 +145,11 @@ export async function logDose(patientId, scheduleId, opts = {}) {
     }
     if (['taken', 'taken_late'].includes(status)) {
       const maximum = Number(sched.max_daily_doses);
-      if (!Number.isInteger(maximum) || maximum <= 0) {
-        await conn.rollback();
-        return { error: 'dose_limit_unavailable' };
-      }
+      // Some valid patient schedules (especially prescription medicines entered
+      // before a label review) do not carry a daily-limit snapshot.  That
+      // missing optional reference must not make the basic "Mark as Taken"
+      // action impossible.  Enforce a limit whenever one is available.
+      const hasReviewedDailyLimit = Number.isInteger(maximum) && maximum > 0;
       const [recentLogs] = await conn.execute(
         `SELECT DISTINCT dose_log.schedule_id,dose_log.logged_at
          FROM dose_logs dose_log
@@ -172,7 +174,11 @@ export async function logDose(patientId, scheduleId, opts = {}) {
         for (let right = left; right < events.length; right += 1) {
           if (events[right].time - events[left].time > dayMs) break;
           const window = events.slice(left, right + 1);
-          if (window.some((event) => event.candidate) && window.length > maximum) {
+          if (
+            hasReviewedDailyLimit &&
+            window.some((event) => event.candidate) &&
+            window.length > maximum
+          ) {
             exceedsMaximum = true;
             break;
           }
@@ -183,22 +189,10 @@ export async function logDose(patientId, scheduleId, opts = {}) {
         await conn.rollback();
         return { error: 'max_daily_doses_exceeded', max_daily_doses: maximum };
       }
-      const minimumInterval = Number(sched.min_interval_hours || 0);
-      if (minimumInterval > 0) {
-        const conflicting = recentLogs.find(
-          (row) =>
-            Math.abs(new Date(row.logged_at).getTime() - candidateTime) <
-            minimumInterval * 60 * 60 * 1000
-        );
-        if (conflicting) {
-          await conn.rollback();
-          return {
-            error: 'minimum_dose_interval_not_met',
-            min_interval_hours: minimumInterval,
-            nearest_logged_at: conflicting.logged_at,
-          };
-        }
-      }
+      // PharMate records the patient or prescriber's approved schedule; it does
+      // not prescribe a replacement interval at the point of logging. An
+      // overdue scheduled dose is therefore recorded as taken late instead of
+      // being blocked by a generic interval rule.
     }
     await conn.execute(
       `INSERT INTO dose_logs
@@ -206,7 +200,15 @@ export async function logDose(patientId, scheduleId, opts = {}) {
        VALUES (?,?,?,?,?,?,?,1)`,
       [logId, scheduleId, patientId, loggedAt, confirmationMethod, status, notes]
     );
-    await conn.execute('UPDATE medication_schedules SET status=? WHERE id=?', [status, scheduleId]);
+    snoozedUntil = action === 'snooze' ? new Date(loggedAt.getTime() + 5 * 60 * 1000) : null;
+    if (snoozedUntil) {
+      await conn.execute(
+        'UPDATE medication_schedules SET status=?, scheduled_time=? WHERE id=?',
+        [status, snoozedUntil, scheduleId]
+      );
+    } else {
+      await conn.execute('UPDATE medication_schedules SET status=? WHERE id=?', [status, scheduleId]);
+    }
     await conn.commit();
   } catch (error) {
     await conn.rollback();
@@ -231,6 +233,7 @@ export async function logDose(patientId, scheduleId, opts = {}) {
     adherence_status: status,
     log_id: logId,
     reflow,
+    scheduled_at: snoozedUntil?.toISOString() || null,
   };
 }
 
@@ -246,7 +249,7 @@ export async function sweepMissed(now = new Date()) {
     `SELECT ms.id, ms.patient_id, ms.scheduled_time, m.drug_name_raw
      FROM medication_schedules ms
      JOIN medications m ON m.id = ms.medication_id
-     WHERE ms.status = 'scheduled'
+     WHERE ms.status IN ('scheduled', 'snoozed')
        AND ms.is_confirmed = 1
        AND m.schedule_status = 'APPROVED'
        AND m.status = 'active'
@@ -259,13 +262,13 @@ export async function sweepMissed(now = new Date()) {
   let missed = 0;
   for (const r of rows) {
     const delayMin = (now.getTime() - new Date(r.scheduled_time).getTime()) / 60000;
-    if (delayMin > DEFAULT_DUE_WINDOW_MINUTES) {
+    if (delayMin >= DEFAULT_DUE_WINDOW_MINUTES) {
       const conn = await pool.getConnection();
       let changed = false;
       try {
         await conn.beginTransaction();
         const [res] = await conn.execute(
-          `UPDATE medication_schedules SET status = 'missed' WHERE id = ? AND status = 'scheduled'`,
+          `UPDATE medication_schedules SET status = 'missed' WHERE id = ? AND status IN ('scheduled', 'snoozed')`,
           [r.id]
         );
         changed = res.affectedRows > 0;

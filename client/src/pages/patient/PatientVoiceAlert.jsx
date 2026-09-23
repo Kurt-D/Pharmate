@@ -15,7 +15,9 @@ export default function PatientVoiceAlert({
   const { language } = useLanguage();
   const tr = (en, fil) => (language === 'fil' ? fil : en);
   const [speaking, setSpeaking] = useState(false);
-  const medicine = dose?.drug_name || alert?.medicine || tr('your medicine', 'iyong gamot');
+  const medicine = String(dose?.drug_name || alert?.medicine || tr('medicine', 'gamot'))
+    .replace(/^your\s+/i, '')
+    .trim();
   const reminderText = tr(
     `It’s time to take your ${medicine}.`,
     `Oras nang inumin ang ${medicine}.`
@@ -100,11 +102,16 @@ export default function PatientVoiceAlert({
           <span key={index} style={{ '--wave-index': index }} />
         ))}
       </div>
-      {dose && (
-        <>
+      <div className="pm-caregiver-voice-card__actions">
           <button
             className="pm-action-button pm-action-button--outline"
             onClick={onTake}
+            disabled={!onTake}
+            title={
+              onTake
+                ? tr('Mark this scheduled dose as taken', 'Markahan ang naka-iskedyul na dose bilang nainom')
+                : tr('No matching active dose is available yet', 'Wala pang katugmang aktibong dose')
+            }
             type="button"
           >
             <CheckCircle2 /> {tr('Mark as Taken', 'Markahan bilang Nainom')}
@@ -112,14 +119,18 @@ export default function PatientVoiceAlert({
           <button className="pm-action-button" onClick={onScan} type="button">
             <ScanLine /> {tr('Scan Medicine', 'I-scan ang Gamot')}
           </button>
-          <small className="pm-scan-hint">
-            {tr('Scan for a more accurate record.', 'I-scan para sa mas tumpak na tala.')}
-          </small>
-          <button className="pm-caregiver-voice-card__snooze" onClick={onSnooze} type="button">
-            <Clock3 /> {tr('Snooze for 15 minutes', 'Ipagpaliban nang 15 minuto')}
+          <button
+            className="pm-caregiver-voice-card__snooze"
+            disabled={!dose}
+            onClick={onSnooze}
+            type="button"
+          >
+            <Clock3 /> {tr('Snooze for 5 minutes', 'Ipagpaliban nang 5 minuto')}
           </button>
-        </>
-      )}
+      </div>
+      <small className="pm-scan-hint">
+        {tr('Scan for a more accurate record.', 'I-scan para sa mas tumpak na tala.')}
+      </small>
     </section>
   );
 }

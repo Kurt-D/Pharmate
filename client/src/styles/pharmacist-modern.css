@@ -1,0 +1,643 @@
+/* Cohesive clinical workspaces based on the approved PharMate pharmacist UI. */
+.pw-workspace .pw-content { background: #f7f8fa; }
+.ph-connected-dashboard { gap: 1rem; max-width: none; padding: 0; }
+.ph-connected-dashboard > header { background: #fff; border: 1px solid #e4e8ef; border-radius: 0.85rem; box-shadow: none; color: #17233b; padding: 1.05rem 1.2rem; }
+.ph-connected-dashboard > header span { color: #578EF5; font-size: .63rem; }
+.ph-connected-dashboard > header h2 { color: #17233b; font-size: 1.2rem; margin: .18rem 0; }
+.ph-connected-dashboard > header p { color: #64748b; font-size: .75rem; }
+.ph-connected-dashboard > header button { border-color: #bfd2ee; border-radius: .45rem; color: #578EF5; font-size: .72rem; min-height: 2.35rem; padding: .45rem .7rem; }
+.ph-dashboard-intro { align-items: start; display: grid; gap: 1rem; grid-template-columns: minmax(0, 1.45fr) minmax(280px, .75fr); }
+.ph-dashboard-main { display: grid; gap: .9rem; min-width: 0; }
+.ph-dashboard-welcome { align-items: center; background: #578EF5; border-radius: 1rem; color: #fff; display: flex; justify-content: space-between; min-height: 13.25rem; overflow: hidden; padding: 1.55rem 1.7rem; position: relative; }
+.ph-dashboard-welcome::before { border: 1px solid rgba(255,255,255,.18); border-radius: 50%; content: ''; height: 19rem; position: absolute; right: -5rem; top: -9rem; width: 19rem; }
+.ph-dashboard-welcome > div:first-child { max-width: 34rem; position: relative; z-index: 1; }
+.ph-dashboard-eyebrow { align-items: center; color: rgba(255,255,255,.82); display: inline-flex; font-size: .62rem; font-weight: 800; gap: .35rem; letter-spacing: .08em; }
+.ph-dashboard-welcome h2 { color: #fff; font-size: clamp(1.45rem, 2.2vw, 2rem); font-weight: 700; letter-spacing: -.035em; margin: .45rem 0; }
+.ph-dashboard-welcome p { color: rgba(255,255,255,.9); font-size: .78rem; line-height: 1.55; margin: 0; max-width: 31rem; }
+.ph-dashboard-welcome__meta { display: flex; flex-wrap: wrap; gap: .7rem; margin-top: 1rem; }
+.ph-dashboard-welcome__meta span { align-items: center; background: rgba(255,255,255,.14); border: 1px solid rgba(255,255,255,.22); border-radius: 999px; color: #fff; display: inline-flex; font-size: .66rem; gap: .35rem; padding: .38rem .6rem; }
+.ph-dashboard-welcome__visual { align-items: center; display: grid; height: 8.8rem; justify-items: center; margin-right: 1.3rem; position: relative; width: 8.8rem; z-index: 1; }
+.ph-dashboard-welcome__visual span { align-items: center; background: #fff; border-radius: 1.2rem; box-shadow: 0 12px 24px rgba(30,72,161,.22); color: #578EF5; display: flex; height: 4.7rem; justify-content: center; transform: rotate(-7deg); width: 4.7rem; z-index: 2; }
+.ph-dashboard-welcome__visual i,.ph-dashboard-welcome__visual b { border: 2px solid rgba(255,255,255,.38); border-radius: 50%; display: block; position: absolute; }
+.ph-dashboard-welcome__visual i { height: 7.8rem; width: 7.8rem; }.ph-dashboard-welcome__visual b { border-style: dashed; height: 10rem; width: 10rem; }
+.ph-dashboard-side { display: grid; gap: 0.8rem; }
+.ph-dashboard-profile { background: #fff; border: 1px solid #d8e4f3; border-radius: 1rem; overflow: hidden; }
+.ph-dashboard-profile > header { align-items: center; background: #578EF5; color: #fff; display: flex; justify-content: space-between; min-height: 3.1rem; padding: 0.7rem 0.85rem; position: relative; }.ph-dashboard-profile > header::after { border: 1px solid rgba(255,255,255,.17); border-radius: 50%; content: ''; height: 6rem; position: absolute; right: 1.4rem; top: -4.2rem; width: 6rem; }.ph-dashboard-profile > header span { font-size: .62rem; font-weight: 850; letter-spacing: .07em; position: relative; z-index: 1; }.ph-dashboard-profile > header button { align-items: center; background: rgba(255,255,255,.16); border: 0; border-radius: .45rem; color: #fff; cursor: pointer; display: inline-flex; font-size: .9rem; height: 1.75rem; justify-content: center; position: relative; width: 1.75rem; z-index: 1; }
+.ph-dashboard-profile__identity { align-items: center; display: flex; gap: .75rem; padding: .85rem .9rem; }.ph-dashboard-profile__identity > b { align-items: center; background: #dff4f7; border-radius: 50%; color: #578EF5; display: inline-flex; font-size: .82rem; height: 3.35rem; justify-content: center; width: 3.35rem; }.ph-dashboard-profile__identity div { display: grid; gap: .08rem; min-width: 0; }.ph-dashboard-profile__identity strong { color: #172b4d; font-size: .8rem; font-weight: 750; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.ph-dashboard-profile__identity small { color: #77879b; font-size: .58rem; font-weight: 750; text-transform: uppercase; }.ph-dashboard-profile__identity em { color: #60708a; font-size: .61rem; font-style: normal; }
+.ph-dashboard-profile footer { border-top: 1px solid #e8eef6; display: grid; grid-template-columns: repeat(3, 1fr); padding: .55rem .3rem; }.ph-dashboard-profile footer div { border-right: 1px solid #e8eef6; display: grid; gap: .1rem; padding: 0 .45rem; text-align: center; }.ph-dashboard-profile footer div:last-child { border-right: 0; }.ph-dashboard-profile footer small { color: #8090a4; font-size: .52rem; }.ph-dashboard-profile footer strong { color: #263b59; font-size: .8rem; font-weight: 750; }
+.ph-dashboard-agenda { background: #fff; border: 1px solid #d8e4f3; border-radius: 1rem; overflow: hidden; padding: 1rem; }
+.ph-dashboard-agenda header { align-items: center; display: flex; gap: .6rem; }.ph-dashboard-agenda header > span { align-items: center; background: #eef5ff; border-radius: .65rem; color: #578EF5; display: inline-flex; height: 2.3rem; justify-content: center; width: 2.3rem; }.ph-dashboard-agenda header div { display: grid; gap: .1rem; }.ph-dashboard-agenda header small { color: #578EF5; font-size: .56rem; font-weight: 850; letter-spacing: .08em; }.ph-dashboard-agenda header strong { color: #172b4d; font-size: .85rem; font-weight: 700; }.ph-dashboard-agenda header button { background: #eef5ff; border: 0; border-radius: .45rem; color: #578EF5; cursor: pointer; font: inherit; font-size: .62rem; font-weight: 800; margin-left: auto; padding: .4rem .55rem; }
+.ph-dashboard-calendar { background: #f7faff; border-radius: .75rem; display: grid; grid-template-columns: repeat(7, 1fr); margin-top: .75rem; padding: .45rem .25rem; }.ph-dashboard-calendar span { align-items: center; border-radius: .5rem; color: #65758c; display: grid; gap: .15rem; justify-items: center; min-height: 3rem; padding: .25rem .1rem; }.ph-dashboard-calendar small { font-size: .55rem; font-weight: 700; }.ph-dashboard-calendar b { font-size: .73rem; font-weight: 750; }.ph-dashboard-calendar span.has-appointment:not(.is-today) b { color: #578EF5; text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: .25rem; }.ph-dashboard-calendar span.is-today { background: #578EF5; color: #fff; box-shadow: 0 4px 10px rgba(87,142,245,.24); }
+.ph-dashboard-agenda__date { border-bottom: 1px solid #e8eef6; color: #667a96; font-size: .66rem; font-weight: 700; margin-top: .75rem; padding: 0 0 .55rem; text-transform: uppercase; }
+.ph-dashboard-agenda__loading { color: #77879b; font-size: .7rem; margin: .9rem 0 0; text-align: center; }
+.ph-dashboard-agenda button { align-items: center; background: transparent; border: 0; border-bottom: 1px solid #eef2f7; color: inherit; cursor: pointer; display: grid; gap: .6rem; grid-template-columns: 2.35rem 1fr; padding: .7rem 0; text-align: left; width: 100%; }.ph-dashboard-agenda button:last-child { border-bottom: 0; padding-bottom: 0; }.ph-dashboard-agenda button:hover strong { color: #578EF5; }.ph-dashboard-agenda time { color: #578EF5; font-size: .63rem; font-weight: 850; }.ph-dashboard-agenda button span { display: grid; gap: .08rem; }.ph-dashboard-agenda button strong { color: #263b59; font-size: .7rem; font-weight: 700; transition: color .15s ease; }.ph-dashboard-agenda button small { color: #77879b; font-size: .6rem; }
+.ph-dashboard-charts { display: grid; gap: .85rem; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.ph-dashboard-charts > button { background: #fff; border: 1px solid #d8e4f3; border-radius: .9rem; cursor: pointer; display: grid; gap: .6rem; grid-template-columns: 4.25rem 1fr; padding: .9rem; text-align: left; transition: border-color .15s ease, box-shadow .15s ease, transform .15s ease; }.ph-dashboard-charts > button > small { color: #6e7e93; font-size: .56rem; font-weight: 850; grid-column: 1 / -1; letter-spacing: .06em; }.ph-dashboard-charts > button:hover { border-color: #578EF5; box-shadow: 0 10px 22px rgba(87,142,245,.12); transform: translateY(-2px); }
+.ph-dashboard-chart { align-items: center; background: #eef5ff; border-radius: .65rem; display: flex; height: 4rem; justify-content: center; overflow: hidden; width: 4.25rem; }.ph-dashboard-chart__line { fill: none; height: 3rem; overflow: visible; stroke: #578EF5; stroke-linecap: round; stroke-linejoin: round; stroke-width: 2.2; width: 4rem; }.ph-dashboard-chart__line circle { fill: #578EF5; stroke: #fff; stroke-width: 1.5; }.ph-dashboard-chart__line.is-inquiry { stroke: #25a89a; }.ph-dashboard-chart__line.is-inquiry circle { fill: #25a89a; }.ph-dashboard-chart__line.is-followup { stroke: #e5a23c; }.ph-dashboard-chart__line.is-followup circle { fill: #e5a23c; }
+.ph-dashboard-charts > button > div { align-content: center; display: grid; gap: .08rem; min-width: 0; }.ph-dashboard-charts > button strong { color: #172b4d; font-size: 1.35rem; font-weight: 700; line-height: 1; }.ph-dashboard-charts > button div > span { color: #526176; font-size: .66rem; }.ph-dashboard-charts > button em { color: #578EF5; font-size: .57rem; font-style: normal; font-weight: 750; margin-top: .18rem; }
+.ph-dashboard-progress { display: grid; gap: .9rem; grid-template-columns: minmax(0, .82fr) minmax(0, 1.18fr); }
+.ph-dashboard-workload,.ph-dashboard-plan { background: #fff; border: 1px solid #d8e4f3; border-radius: .95rem; padding: 1rem; }.ph-dashboard-workload > header,.ph-dashboard-plan > header { align-items: center; display: flex; justify-content: space-between; }.ph-dashboard-workload header small,.ph-dashboard-plan header small { color: #6e7e93; font-size: .57rem; font-weight: 850; letter-spacing: .07em; }.ph-dashboard-workload header button { background: #eef5ff; border: 0; border-radius: .42rem; color: #578EF5; cursor: pointer; font: inherit; font-size: .6rem; font-weight: 800; padding: .4rem .55rem; }.ph-dashboard-plan header span { background: #eef5ff; border-radius: 999px; color: #578EF5; font-size: .58rem; font-weight: 800; padding: .3rem .5rem; }
+.ph-dashboard-workload__body { align-items: center; display: grid; gap: 1rem; grid-template-columns: 7.4rem 1fr; margin-top: 1rem; }.ph-dashboard-donut { align-content: center; background: conic-gradient(#578EF5 0 48%, #f08f85 48% 74%, #e56bd8 74% 100%); border-radius: 50%; display: grid; height: 7.2rem; justify-items: center; position: relative; width: 7.2rem; }.ph-dashboard-donut::after { background: #fff; border-radius: 50%; content: ''; height: 5.4rem; inset: .9rem; position: absolute; width: 5.4rem; }.ph-dashboard-donut strong,.ph-dashboard-donut span { position: relative; z-index: 1; }.ph-dashboard-donut strong { color: #172b4d; font-size: 1.45rem; font-weight: 700; margin-top: 1.8rem; }.ph-dashboard-donut span { color: #718096; font-size: .57rem; margin-bottom: 1.8rem; }
+.ph-dashboard-workload dl { display: grid; gap: .6rem; margin: 0; }.ph-dashboard-workload dl div { align-items: center; display: flex; justify-content: space-between; }.ph-dashboard-workload dt { color: #60708a; font-size: .68rem; }.ph-dashboard-workload dd { color: #172b4d; font-size: .88rem; font-weight: 700; margin: 0; }
+.ph-dashboard-plan__rows { display: grid; gap: .8rem; margin-top: 1rem; }.ph-dashboard-plan__rows > div { display: grid; gap: .35rem; }.ph-dashboard-plan__rows p { display: flex; justify-content: space-between; margin: 0; }.ph-dashboard-plan__rows p span { color: #526176; font-size: .68rem; }.ph-dashboard-plan__rows p b { color: #263b59; font-size: .68rem; font-weight: 750; }.ph-dashboard-plan__rows i { background: #edf1f6; border-radius: 999px; display: block; height: .38rem; overflow: hidden; }.ph-dashboard-plan__rows em { border-radius: inherit; display: block; height: 100%; transition: width .2s ease; }.ph-dashboard-plan__rows em.is-blue { background: #578EF5; }.ph-dashboard-plan__rows em.is-coral { background: #f08f85; }.ph-dashboard-plan__rows em.is-pink { background: #e56bd8; }
+.ph-connected-grid { gap: .7rem; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.ph-connected-grid button { border-color: #e4e8ef; border-radius: .7rem; gap: .2rem; min-height: 6.5rem; padding: .75rem; }
+.ph-connected-grid button > span { align-items: center; background: #eef5ff; border-radius: .55rem; display: inline-flex; height: 2.15rem; justify-content: center; width: 2.15rem; }
+.ph-connected-grid strong { font-size: 1.35rem; }.ph-connected-grid small { font-size: .63rem; font-weight: 650; }
+.ph-connected-workspace { gap: .75rem; grid-template-columns: 1fr 1fr; }.ph-connected-panel { border-color: #e4e8ef; border-radius: .7rem; }
+.ph-connected-panel > header { padding: .85rem .95rem; }.ph-connected-panel h3 { font-size: .86rem; }.ph-connected-panel > header span { font-size: .56rem; }
+.ph-connected-panel > header > button { border-radius: .4rem; font-size: .62rem; }.ph-connected-patient-list, .ph-connected-activity-list { padding: .4rem; }
+
+.px-patients { color: #17233b; }.px-search { margin-bottom: .7rem; }.px-search input { border-color: #dbe3ee; border-radius: .5rem; font-size: .72rem; }
+.px-search button { background: #fff; border: 1px solid #dbe3ee; border-radius: .5rem; color: #578EF5; }
+.px-patient-stats { gap: .7rem; }.px-patient-stats > div { border-color: #e4e8ef; border-radius: .7rem; min-height: 4.8rem; }.px-patient-stats i { color: #578EF5; }
+.px-patient-stats small { font-size: .61rem; }.px-patient-stats strong { font-size: 1.3rem; }
+.px-patient-stats > svg { color: #578EF5; flex: 0 0 auto; height: 1.7rem; width: 1.7rem; }
+.px-patient-columns { gap: .75rem; grid-template-columns: 250px minmax(0, 1fr) 310px; }.px-panel { border-color: #e4e8ef; border-radius: .7rem; box-shadow: 0 3px 12px rgba(22,40,70,.035); padding: .85rem; }
+.px-panel > h2 { font-size: .78rem; }.px-patient-list { max-height: 610px; overflow: auto; padding: .5rem; }.px-patient-list > button { border-radius: .5rem; margin-bottom: .15rem; padding: .65rem; }.px-patient-list > button.selected { background: #f0f6ff; box-shadow: inset 2px 0 #578EF5; }
+.px-patient-detail { min-height: 460px; }.px-patient-detail h3 { color: #1d3d6b; font-size: .7rem; }.px-patient-detail dl div { border-bottom: 1px solid #edf0f4; padding: .45rem .25rem; }.px-notes { border-radius: .55rem; padding: .75rem; }.px-alert-list article { background: #fffafa; border-radius: .55rem; }.px-followup-row button, .px-alert-list button { border-radius: .35rem; font-size: .58rem; padding: .2rem .45rem; }
+.px-patient-detail h3, .px-notes strong, .px-alert-detail h3 { align-items: center; display: flex; gap: .35rem; }
+.px-alert-stats > svg { color: #578EF5; flex: 0 0 auto; font-size: 1.7rem; height: 1.7rem; width: 1.7rem; }
+
+.px-inquiries { color: #17233b; display: grid; gap: .8rem; }.px-page-heading { align-items: center; display: flex; justify-content: space-between; }.px-page-heading > div:first-child > span { color: #578EF5; font-size: .6rem; font-weight: 800; letter-spacing: .09em; }.px-page-heading h2 { font-size: 1.25rem; margin: .1rem 0; }.px-page-description { color: #66758a; font-size: .72rem; line-height: 1.55; margin: 0; max-width: 720px; }.px-inquiry-stats { display: flex; gap: .55rem; }.px-inquiry-stats b { background: #fff; border: 1px solid #e4e8ef; border-radius: .55rem; color: #578EF5; display: grid; font-size: 1rem; min-width: 5.2rem; padding: .4rem .65rem; text-align: center; }.px-inquiry-stats small { color: #68778d; font-size: .52rem; font-weight: 650; }
+.px-inquiry-queue, .px-inquiry-chat { border-color: #e4e8ef; border-radius: .75rem; box-shadow: 0 3px 12px rgba(22,40,70,.035); }.px-inquiry-queue .btn { border: 1px solid #e7ebf1 !important; border-radius: .55rem; color: #1e2c42; font-size: .7rem; transition: background .15s ease, border .15s ease; }.px-inquiry-queue .btn:hover, .px-inquiry-queue .btn-primary { background: #f0f6ff !important; border-color: #9dc4ff !important; color: #174b9b !important; }.px-inquiry-queue .btn-primary .pw-code { color: #578EF5; }.px-inquiry-chat { min-height: 480px; }.px-inquiry-chat .alert { border-radius: .55rem; font-size: .71rem; }.px-inquiry-chat .btn-success { background: #578EF5; border-color: #578EF5; }.pw-inquiry-messages { background: #f8fafc; border: 1px solid #e7ebf1; border-radius: .65rem; max-height: 360px; padding: .85rem; }.pw-inquiry-messages > div > span { border-radius: .6rem; font-size: .72rem; line-height: 1.45; }.pw-inquiry-messages .mine > span { background: #578EF5; color: #fff; }.pw-inquiry-messages .theirs > span { background: #fff; border: 1px solid #e3e9f2; }
+.px-inquiry-queue .small svg, .px-inquiry-chat .small svg { margin-right: .25rem; vertical-align: -2px; }
+
+/* Inquiry workspace: readable queues, explicit priority, and a private note surface. */
+.px-inquiries { gap: 1rem; }.px-page-heading h2 { font-size: 1.45rem; }.px-page-description { font-size: .82rem; max-width: 850px; }.px-inquiry-stats b { font-size: 1.2rem; min-width: 6.4rem; padding: .55rem .8rem; }.px-inquiry-stats small { font-size: .6rem; }
+.px-inquiries-grid { --bs-gutter-x: 1rem; }.px-inquiry-queue, .px-inquiry-chat { padding: 1.1rem !important; }.px-inquiry-queue > .d-flex strong { font-size: .96rem; }.px-inquiry-queue .badge { font-size: .7rem; min-width: 1.85rem; padding: .38rem .5rem; }.px-inquiry-queue .btn { min-height: 5.9rem; padding: .85rem 1rem !important; }.px-inquiry-queue .btn .pw-code { font-size: .86rem; font-weight: 800; }.px-inquiry-queue .btn .small { font-size: .72rem; line-height: 1.45; }.px-inquiry-queue .badge.bg-danger-subtle { font-size: .62rem; }
+.px-inquiry-chat { display: flex; flex-direction: column; }.px-inquiry-chat > .d-flex:first-child { margin-bottom: .85rem !important; }.px-inquiry-chat > .d-flex:first-child .pw-code { font-size: 1.05rem; }.px-inquiry-chat > .d-flex:first-child .small { font-size: .75rem; }.px-inquiry-chat .alert { font-size: .78rem; line-height: 1.5; padding: .75rem .9rem; }.pw-inquiry-messages { min-height: 270px; padding: 1rem; }.pw-inquiry-messages > div > span { font-size: .82rem; max-width: 80%; padding: .72rem .85rem; }.pw-inquiry-messages small { font-size: .62rem; }
+.px-inquiry-context { display: grid; gap: .75rem; grid-template-columns: minmax(190px, .72fr) minmax(0, 1.28fr); margin-top: .85rem; }.px-inquiry-patient-summary, .px-inquiry-note { border: 1px solid #dfe7f2; border-radius: .7rem; padding: .85rem; }.px-inquiry-patient-summary { background: #f7fbff; }.px-inquiry-patient-summary header, .px-inquiry-note header { align-items: flex-start; display: flex; gap: .55rem; }.px-inquiry-patient-summary header > svg, .px-inquiry-note header > svg { color: #578EF5; flex: 0 0 auto; margin-top: .1rem; }.px-inquiry-patient-summary header div, .px-inquiry-note header div { display: grid; gap: .04rem; }.px-inquiry-patient-summary header small { color: #6480a7; font-size: .6rem; font-weight: 750; text-transform: uppercase; }.px-inquiry-patient-summary header strong { color: #173b70; font-size: .82rem; }.px-inquiry-patient-summary header em { align-items: center; background: #fff0f1; border-radius: 999px; color: #d63d4c; display: inline-flex; font-size: .58rem; font-style: normal; font-weight: 750; gap: .25rem; margin-left: auto; padding: .28rem .4rem; }.px-inquiry-patient-summary dl { display: grid; gap: .38rem; margin: .75rem 0 0; }.px-inquiry-patient-summary dl div { align-items: center; display: flex; justify-content: space-between; }.px-inquiry-patient-summary dt { color: #64748b; font-size: .67rem; }.px-inquiry-patient-summary dd { color: #173b70; font-size: .68rem; font-weight: 750; margin: 0; }
+.px-inquiry-note { background: #fff; }.px-inquiry-note strong { color: #183b73; font-size: .76rem; }.px-inquiry-note header small { color: #6d7d92; font-size: .63rem; line-height: 1.35; }.px-inquiry-note textarea { background: #fbfdff; border: 1px solid #cbd9eb; border-radius: .55rem; font: inherit; font-size: .74rem; line-height: 1.45; margin-top: .7rem; min-height: 92px; padding: .6rem .7rem; resize: vertical; width: 100%; }.px-inquiry-note textarea:focus { border-color: #578EF5; box-shadow: 0 0 0 3px rgba(20,110,245,.12); outline: 0; }.px-inquiry-note footer { align-items: center; display: flex; justify-content: space-between; margin-top: .55rem; }.px-inquiry-note footer small { color: #718096; font-size: .61rem; }.px-inquiry-note footer button { align-items: center; background: #578EF5; border: 0; border-radius: .42rem; color: #fff; display: inline-flex; font-size: .66rem; font-weight: 750; gap: .32rem; min-height: 2rem; padding: .35rem .58rem; }.px-inquiry-note footer button:disabled { cursor: wait; opacity: .65; }
+@media (max-width: 1050px) { .px-inquiry-context { grid-template-columns: 1fr; } }.px-inquiry-chat > .d-flex.gap-2 { margin-top: .95rem !important; }.px-inquiry-chat > .d-flex.gap-2 input { font-size: .8rem; min-height: 2.65rem; }.px-inquiry-chat > .d-flex.gap-2 .btn { font-size: .76rem; min-width: 4.5rem; }
+
+/* Medication Alerts: compact clinical triage, not a sparse generic table. */
+.px-alerts { color: #17233b; display: grid; gap: .85rem; }
+.px-alert-page-heading { align-items: center; display: flex; justify-content: space-between; }.px-alert-page-heading > div > span { color: #578EF5; font-size: .61rem; font-weight: 800; letter-spacing: .09em; }.px-alert-page-heading h2 { font-size: 1.3rem; margin: .12rem 0; }.px-alert-page-heading p { color: #68778d; font-size: .72rem; margin: 0; }.px-alert-page-heading > button { align-items: center; background: #fff; border: 1px solid #cfdced; border-radius: .48rem; color: #578EF5; display: inline-flex; font-size: .68rem; font-weight: 750; gap: .4rem; min-height: 2.35rem; padding: .45rem .7rem; }
+.px-alerts .px-alert-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); margin: 0; }.px-alerts .px-alert-stats > div { border-color: #e3e8ef; border-radius: .7rem; min-height: 5.2rem; padding: .8rem; }.px-alerts .px-alert-stats > svg { background: #eef5ff; border-radius: .55rem; color: #578EF5; padding: .45rem; height: 2.3rem; width: 2.3rem; }.px-alerts .px-alert-stats > div:first-child > svg { background: #fff1f2; color: #e04454; }.px-alerts .px-alert-stats > div:nth-child(3) > svg { background: #edf9e9; color: #1d9f55; }
+.px-alerts .px-alert-layout { align-items: stretch; gap: .8rem; grid-template-columns: minmax(0, 1fr) 320px; min-height: 410px; }.px-alerts .px-panel { border-color: #dfe6ef; border-radius: .8rem; padding: 1rem; }.px-alerts .px-panel > h2 { color: #172b49; font-size: .82rem; margin: 0 0 .85rem; }
+.px-alerts .px-alert-layout table { font-size: .72rem; }.px-alerts .px-alert-layout th { background: #f7f9fc; color: #6b7a8f; font-size: .6rem; letter-spacing: .04em; padding: .7rem; text-transform: uppercase; }.px-alerts .px-alert-layout td { color: #263b59; font-size: .68rem; padding: .8rem .7rem; }.px-alerts .px-alert-layout tr { cursor: pointer; transition: background .15s ease; }.px-alerts .px-alert-layout tr:hover, .px-alerts .px-alert-layout tr.selected { background: #edf5ff; }.px-alerts .px-alert-layout td em, .px-alerts .px-alert-detail > div em { background: #fff3db; border-radius: 999px; color: #9a6500; font-size: .57rem; font-weight: 750; padding: .28rem .45rem; }.px-alerts .px-alert-layout td button { border: 1px solid #8ab8f7; border-radius: .35rem; color: #578EF5; font-size: .61rem; min-height: 1.8rem; padding: .2rem .45rem; }
+.px-alerts .px-alert-detail { background: #fff; display: flex; flex-direction: column; }.px-alerts .px-alert-detail > div:first-child { border-bottom: 1px solid #e7edf5; padding-bottom: .7rem; }.px-alerts .px-alert-detail > div small { color: #748399; font-size: .59rem; }.px-alerts .px-alert-detail h2 { color: #183b73; font-size: 1rem; margin: 1rem 0 .65rem; }.px-alerts .px-alert-detail h3 { color: #183b73; font-size: .73rem; margin: .75rem 0 .45rem; }.px-alerts .px-alert-detail dl { border-bottom: 1px solid #e7edf5; display: grid; gap: .45rem; grid-template-columns: 1fr; margin: 0; padding-bottom: .85rem; }.px-alerts .px-alert-detail dl dt { color: #68778d; font-size: .63rem; }.px-alerts .px-alert-detail dl dd { color: #263b59; font-size: .66rem; font-weight: 650; }.px-alerts .px-alert-detail button { align-items: center; border-radius: .45rem; display: flex; font-size: .7rem; font-weight: 750; gap: .45rem; justify-content: center; margin-top: .5rem; min-height: 2.55rem; }.px-alerts .px-alert-detail button.primary { background: #578EF5; }.px-alerts .px-alert-detail button.success { background: #1fa757; }
+@media (max-width: 820px) { .px-alert-page-heading { align-items: flex-start; flex-direction: column; gap: .6rem; }.px-alerts .px-alert-layout { grid-template-columns: 1fr; }.px-alerts .px-alert-detail { min-height: 300px; }.px-alerts .px-alert-stats { grid-template-columns: 1fr; } }
+
+@media (max-width: 1180px) { .ph-connected-grid { grid-template-columns: repeat(3, 1fr); }.px-patient-columns { grid-template-columns: 230px minmax(0, 1fr); }.px-alert-list { grid-column: 1 / -1; } }
+@media (max-width: 820px) { .ph-dashboard-intro, .ph-dashboard-charts, .ph-connected-grid, .ph-connected-workspace { grid-template-columns: repeat(2, 1fr); }.ph-dashboard-progress { grid-template-columns: 1fr; }.ph-dashboard-main, .ph-dashboard-side { grid-column: 1 / -1; }.ph-dashboard-side { grid-template-columns: repeat(2, minmax(0, 1fr)); }.ph-dashboard-charts > button:last-child { grid-column: 1 / -1; }.px-patient-columns { grid-template-columns: 1fr; }.px-inquiries-grid { display: grid; }.px-page-heading { align-items: flex-start; flex-direction: column; gap: .55rem; } }
+@media (max-width: 540px) { .ph-dashboard-intro, .ph-dashboard-side, .ph-dashboard-charts, .ph-connected-grid, .ph-connected-workspace { grid-template-columns: 1fr; }.ph-dashboard-welcome { min-height: 0; padding: 1.25rem; }.ph-dashboard-welcome__visual { display: none; }.ph-dashboard-charts > button:last-child { grid-column: auto; }.ph-dashboard-workload__body { grid-template-columns: 6.5rem 1fr; }.ph-dashboard-donut { height: 6.3rem; width: 6.3rem; }.ph-dashboard-donut::after { height: 4.7rem; inset: .8rem; width: 4.7rem; }.px-patient-stats { grid-template-columns: 1fr; }.px-inquiry-stats { width: 100%; }.px-inquiry-stats b { flex: 1; }.px-inquiry-chat { min-height: 400px; } }
+
+/* Counseling workspace: calm, task-focused two-pane consultation layout. */
+.pw-workspace .px-inquiries {
+  gap: 1.1rem;
+}
+.pw-workspace .px-page-heading {
+  align-items: flex-end;
+  padding: 0 0.1rem;
+}
+.pw-workspace .px-page-heading > div:first-child > span {
+  color: #578EF5;
+  font-size: 0.64rem;
+}
+.pw-workspace .px-page-heading h2 {
+  color: #172b4d;
+  font-size: 1.55rem;
+  letter-spacing: -0.035em;
+}
+.pw-workspace .px-page-description {
+  max-width: 960px;
+  padding: 0.8rem 0.95rem;
+  border-left: 3px solid #578EF5;
+  border-radius: 0 0.65rem 0.65rem 0;
+  background: #f5f8ff;
+  color: #5c6f8b;
+}
+.pw-workspace .px-page-description a { color: #578EF5; font-weight: 800; }
+.pw-workspace .px-inquiry-stats b {
+  min-width: 6.8rem;
+  border-color: #d7e3f4;
+  background: #fff;
+  color: #578EF5;
+  box-shadow: none;
+}
+.pw-workspace .px-inquiry-tabs {
+  display: flex;
+  gap: 0.4rem;
+  overflow-x: auto;
+  padding: 0 0.1rem;
+}
+.pw-workspace .px-inquiry-tabs button {
+  align-items: center;
+  background: #fff;
+  border: 1px solid #d7e3f2;
+  border-radius: 999px;
+  color: #526176;
+  cursor: pointer;
+  display: inline-flex;
+  flex: 0 0 auto;
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 750;
+  gap: 0.4rem;
+  min-height: 2.45rem;
+  padding: 0.45rem 0.75rem;
+}
+.pw-workspace .px-inquiry-tabs button span {
+  align-items: center;
+  background: #eef5ff;
+  border-radius: 999px;
+  color: #578EF5;
+  display: inline-flex;
+  font-size: 0.62rem;
+  font-weight: 850;
+  height: 1.3rem;
+  justify-content: center;
+  min-width: 1.3rem;
+  padding: 0 0.25rem;
+}
+.pw-workspace .px-inquiry-tabs button.is-active {
+  background: #578EF5;
+  border-color: #578EF5;
+  color: #fff;
+}
+.pw-workspace .px-inquiry-tabs button.is-active span { background: rgba(255, 255, 255, 0.22); color: #fff; }
+.pw-workspace .px-inquiries-grid { --bs-gutter-x: 1.15rem; }
+.pw-workspace .px-inquiry-queue,
+.pw-workspace .px-inquiry-chat {
+  border: 1px solid #d8e4f3;
+  border-radius: 1rem;
+  box-shadow: none;
+}
+.pw-workspace .px-inquiry-queue {
+  padding: 1rem !important;
+  background: #fff;
+}
+.pw-workspace .px-inquiry-queue > .d-flex {
+  align-items: center;
+  margin-bottom: 0.75rem !important;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid #e8eef6;
+}
+.pw-workspace .px-inquiry-queue > .d-flex strong { color: #172b4d; }
+.pw-workspace .px-inquiry-queue .btn {
+  min-height: 5.25rem;
+  margin-bottom: 0.55rem !important;
+  border-color: #e2e9f3 !important;
+  border-radius: 0.75rem;
+  background: #fff !important;
+}
+.pw-workspace .px-inquiry-queue .btn:hover,
+.pw-workspace .px-inquiry-queue .btn-primary {
+  border-color: #9fc0f9 !important;
+  background: #f2f7ff !important;
+  box-shadow: inset 3px 0 #578EF5;
+  color: #172b4d !important;
+}
+.pw-workspace .px-inquiry-queue .btn-primary .pw-code,
+.pw-workspace .px-inquiry-queue .pw-code { color: #578EF5; }
+.pw-workspace .px-inquiry-chat {
+  min-height: 33rem;
+  padding: 1rem !important;
+  background: #fff;
+}
+.pw-workspace .px-inquiry-chat > .text-muted {
+  display: grid;
+  min-height: 26rem;
+  place-content: center;
+  gap: 0.65rem;
+  color: #6c7d94 !important;
+  font-size: 0.84rem;
+}
+.pw-workspace .px-inquiry-chat > .text-muted::before {
+  display: grid;
+  width: 3.6rem;
+  height: 3.6rem;
+  place-items: center;
+  margin: 0 auto;
+  border-radius: 50%;
+  background: #eef4ff;
+  color: #578EF5;
+  content: '✉';
+  font-size: 1.35rem;
+}
+
+/* Dashboard hierarchy: restore the PharMate clinical banner while preserving
+   the quieter, professional work cards below it. */
+.pw-workspace .ph-connected-dashboard > header {
+  background: #578EF5;
+  border: 0;
+  border-radius: 1rem;
+  box-shadow: 0 14px 30px rgba(20, 110, 245, 0.22);
+  color: #fff;
+  min-height: 128px;
+  overflow: hidden;
+  position: relative;
+}
+.pw-workspace .ph-connected-dashboard > header::after {
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 50%;
+  content: '';
+  height: 150px;
+  position: absolute;
+  right: 5.5rem;
+  top: -64px;
+  width: 150px;
+}
+.pw-workspace .ph-connected-dashboard > header > * { position: relative; z-index: 1; }
+.pw-workspace .ph-connected-dashboard > header span { color: #dbeafe; }
+.pw-workspace .ph-connected-dashboard > header h2 { color: #fff; font-size: 1.35rem; }
+.pw-workspace .ph-connected-dashboard > header p { color: #e9f2ff; }
+.pw-workspace .ph-connected-dashboard > header button {
+  background: #fff;
+  border-color: rgba(255, 255, 255, 0.55);
+  box-shadow: 0 6px 16px rgba(9, 55, 137, 0.16);
+  color: #578EF5;
+}
+.pw-workspace .ph-connected-dashboard > header button:hover { background: #edf5ff; }
+
+/* Same shared brand depth used by the Admin dashboard hero. */
+.admin-hero { background: #578EF5; }
+
+/* PharMate page-title accent. */
+.pw-workspace .pw-header h1,
+.admin-shell .admin-header h1 { color: #578EF5; }
+
+/* Palette-first refinement: all pharmacist screens share the PharMate system. */
+.pw-workspace { background: var(--pm-canvas); color: var(--pm-text); }
+.pw-workspace .pw-sidebar { background: #578EF5; }
+.pw-workspace .pw-brand-mark,
+.pw-workspace .pw-navlink.active .pw-nav-icon { background: var(--pm-blue-100); }
+.pw-workspace .pw-navlink.active { color: var(--pm-blue-700); box-shadow: 0 8px 20px rgba(9,62,146,.16); }
+.pw-workspace .pw-main,
+.pw-workspace .pw-content { background: var(--pm-canvas); }
+.pw-workspace .pw-content:has(.ph-connected-dashboard) {
+  padding: clamp(0.85rem, 1.15vw, 1.35rem);
+}
+.pw-workspace .ph-connected-dashboard {
+  max-width: none;
+  width: 100%;
+}
+.pw-workspace .ph-dashboard-intro { gap: 1.15rem; grid-template-columns: minmax(0, 1.55fr) minmax(320px, .75fr); }
+.pw-workspace .ph-dashboard-main { gap: 1.05rem; }
+.pw-workspace .ph-dashboard-welcome { min-height: 15rem; padding: 1.8rem 2rem; }
+.pw-workspace .ph-dashboard-charts { gap: 1rem; }
+.pw-workspace .ph-dashboard-charts > button { min-height: 9rem; padding: 1.05rem; }
+.pw-workspace .ph-dashboard-progress { gap: 1rem; }
+.pw-workspace .ph-dashboard-workload,
+.pw-workspace .ph-dashboard-plan { min-height: 12.8rem; padding: 1.15rem; }
+.pw-workspace .pw-header { background: rgba(255,255,255,.92); border-color: var(--pm-line); }
+.pw-workspace .pw-header h1,
+.pw-workspace .px-page-heading h1,
+.pw-workspace .px-inquiries-heading h1 { color: var(--pm-blue-700); }
+.pw-workspace .ph-connected-dashboard > header,
+.pw-workspace .admin-hero { background: #ffffff; }
+.pw-workspace .pw-card,
+.pw-workspace .ph-connected-dashboard .dashboard-card,
+.pw-workspace .px-panel,
+.pw-workspace .px-inquiry-queue,
+.pw-workspace .px-inquiry-chat,
+.pw-workspace .px-alerts .px-panel { border-color: var(--pm-line); box-shadow: var(--pm-shadow-card); }
+.pw-workspace .px-metric,
+.pw-workspace .ph-connected-dashboard .stat-card { background: var(--pm-surface); border-color: var(--pm-line); }
+
+/* Dashboard metrics use the shared blue and lime palette to make the clinical
+   work queue easier to scan at a glance. */
+.pw-workspace .ph-connected-grid > button {
+  background: #fff !important;
+  border: 1px solid #d7e3f2;
+  box-shadow: 0 8px 18px rgba(31, 66, 122, 0.07);
+  color: #17233b !important;
+  transition: transform .18s ease, box-shadow .18s ease;
+}
+.pw-workspace .ph-connected-grid > button > span {
+  background: #eef5ff !important;
+  color: #578EF5 !important;
+}
+.pw-workspace .ph-connected-grid > button strong { color: #17233b !important; }
+.pw-workspace .ph-connected-grid > button small { color: #526176 !important; }
+.pw-workspace .ph-connected-grid > button:hover {
+  border-color: #578EF5;
+  box-shadow: 0 13px 26px rgba(87, 142, 245, 0.15);
+  transform: translateY(-3px);
+}
+.pw-workspace .btn-primary,
+.pw-workspace .px-inquiry-send,
+.pw-workspace .px-note-save,
+.pw-workspace .px-alert-primary-action { background: var(--pm-blue-600); border-color: var(--pm-blue-600); }
+.pw-workspace .btn-primary:hover,
+.pw-workspace .px-inquiry-send:hover,
+.pw-workspace .px-note-save:hover,
+.pw-workspace .px-alert-primary-action:hover { background: var(--pm-blue-700); border-color: var(--pm-blue-700); }
+.pw-workspace .px-inquiry-patient-summary,
+.pw-workspace .px-inquiry-context { background: var(--pm-blue-50); border-color: var(--pm-line); }
+.pw-workspace .px-inquiry-patient-summary header em { background: var(--pm-danger-soft); color: var(--pm-danger); }
+.pw-workspace .px-inquiry-note { background: var(--pm-surface); border-color: var(--pm-line); }
+.pw-workspace .px-note-saving,
+.pw-workspace .px-alert-warning,
+.pw-workspace .status-warning { background: var(--pm-warning-soft); color: var(--pm-warning); }
+.pw-workspace .px-alert-success,
+.pw-workspace .status-success { background: var(--pm-success-soft); color: var(--pm-success); }
+.pw-workspace button:focus-visible,
+.pw-workspace a:focus-visible,
+.pw-workspace input:focus-visible,
+.pw-workspace textarea:focus-visible,
+.pw-workspace select:focus-visible { box-shadow: var(--pm-focus-ring); outline: 0; }
+
+/* Keep the logo as a clear brand mark, never a cropped or stretched image. */
+.pw-workspace .pw-brand-mark {
+  align-items: center;
+  background: rgba(255,255,255,.16);
+  border: 1px solid rgba(255,255,255,.22);
+  border-radius: .72rem;
+  box-shadow: none;
+  display: inline-flex;
+  flex: 0 0 2.7rem;
+  height: 2.7rem;
+  justify-content: center;
+  overflow: hidden;
+  padding: .14rem;
+  width: 2.7rem;
+}
+
+.pw-workspace .pw-brand .pw-brand-mark img {
+  display: block;
+  height: 100%;
+  max-width: none;
+  object-fit: contain;
+  padding: 0;
+  transform: none;
+  width: 100%;
+}
+
+/* Account identity: an accessible profile avatar and one-line account details. */
+.pw-workspace .pw-user-badge {
+  align-items: center;
+  gap: .65rem;
+  max-width: 340px;
+  min-width: 250px;
+  padding: .6rem .8rem;
+}
+
+.pw-workspace .pw-user-avatar {
+  align-items: center;
+  background: var(--pm-blue-100);
+  border: 1px solid #cfe1ff;
+  border-radius: 50%;
+  color: var(--pm-blue-600);
+  display: inline-flex;
+  flex: 0 0 2.55rem;
+  height: 2.55rem;
+  justify-content: center;
+  width: 2.55rem;
+}
+
+.pw-workspace .pw-user-badge > span:last-child {
+  display: grid;
+  gap: .08rem;
+  min-width: 0;
+}
+
+.pw-workspace .pw-user-badge strong {
+  color: var(--pm-ink);
+  font-size: .8rem;
+  line-height: 1.25;
+}
+
+.pw-workspace .pw-user-badge small {
+  color: var(--pm-muted);
+  font-size: .69rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Keep notification and account identity on a single header row. */
+.pw-workspace .pw-header > .text-end {
+  align-items: center;
+  display: flex;
+  gap: .7rem;
+  justify-content: flex-end;
+}
+
+.pw-workspace .pw-navigation {
+  /* Active navigation pills extend to the sidebar edge.  Clip that visual
+     overhang so it cannot create a horizontal scrollbar in the sidebar. */
+  min-width: 0;
+  overflow-x: clip;
+  overscroll-behavior-x: none;
+}
+
+.pw-workspace .pw-navigation::-webkit-scrollbar:horizontal {
+  display: none;
+}
+
+@media (max-width: 620px) {
+  .pw-workspace .pw-header > .text-end {
+    align-items: flex-end;
+    flex-direction: column;
+  }
+
+  .pw-workspace .pw-user-badge {
+    min-width: 0;
+    width: 100%;
+  }
+}
+
+/* Pharmacist settings: concise, clinical preferences instead of an empty route. */
+.pw-workspace .px-settings { color: var(--pm-ink); display: grid; gap: 1rem; max-width: 1080px; }
+.pw-workspace .px-settings-intro > span { color: var(--pm-blue-600); font-size: .65rem; font-weight: 800; letter-spacing: .1em; }
+.pw-workspace .px-settings-intro h2 { color: var(--pm-blue-700); font-size: 1.55rem; margin: .2rem 0; }
+.pw-workspace .px-settings-intro p { color: var(--pm-muted); margin: 0; }
+.pw-workspace .px-settings-grid { display: grid; gap: 1rem; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.pw-workspace .px-settings-card { background: var(--pm-surface); border: 1px solid var(--pm-line); border-radius: .9rem; box-shadow: var(--pm-shadow-card); padding: 1rem; }
+.pw-workspace .px-settings-card header { align-items: flex-start; display: flex; gap: .65rem; margin-bottom: .9rem; }
+.pw-workspace .px-settings-card header > span { align-items: center; background: var(--pm-blue-100); border-radius: .55rem; color: var(--pm-blue-600); display: inline-flex; height: 2.3rem; justify-content: center; width: 2.3rem; }
+.pw-workspace .px-settings-card h3 { font-size: .9rem; margin: .05rem 0; }
+.pw-workspace .px-settings-card header p { color: var(--pm-muted); font-size: .72rem; line-height: 1.4; margin: .15rem 0 0; }
+.pw-workspace .px-settings-card dl { display: grid; gap: .55rem; margin: 0; }
+.pw-workspace .px-settings-card dl div { display: grid; gap: .12rem; }
+.pw-workspace .px-settings-card dt { color: var(--pm-muted); font-size: .67rem; }
+.pw-workspace .px-settings-card dd { color: var(--pm-ink); font-size: .76rem; font-weight: 700; margin: 0; overflow-wrap: anywhere; }
+.pw-workspace .px-settings-toggle { align-items: center; border-top: 1px solid var(--pm-line); cursor: pointer; display: flex; gap: .7rem; justify-content: space-between; padding: .75rem 0; }
+.pw-workspace .px-settings-toggle span { display: grid; gap: .14rem; }
+.pw-workspace .px-settings-toggle strong { font-size: .76rem; }
+.pw-workspace .px-settings-toggle small { color: var(--pm-muted); font-size: .67rem; line-height: 1.35; }
+.pw-workspace .px-settings-toggle input { accent-color: var(--pm-blue-600); height: 1.1rem; width: 1.1rem; }
+.pw-workspace .px-settings-actions { align-items: center; display: flex; gap: .8rem; justify-content: flex-end; }
+.pw-workspace .px-settings-actions span { color: var(--pm-success); font-size: .72rem; font-weight: 700; }
+.pw-workspace .px-settings-actions button { background: var(--pm-blue-600); border: 1px solid var(--pm-blue-600); border-radius: .5rem; color: #fff; font-size: .76rem; font-weight: 750; min-height: 2.4rem; padding: .45rem .85rem; }
+@media (max-width: 900px) { .pw-workspace .px-settings-grid { grid-template-columns: 1fr; } }
+
+/* Three-pane medication inquiry workspace. */
+.pw-workspace .px-inquiries { gap: .8rem; }
+.pw-workspace .px-inquiries-grid { --bs-gutter-x: .8rem; align-items: stretch; }
+.pw-workspace .px-inquiry-queue,
+.pw-workspace .px-inquiry-chat,
+.pw-workspace .px-inquiry-details { background: #fff; border: 1px solid #d8e4f3; border-radius: .9rem; box-shadow: none; height: 100%; }
+.pw-workspace .px-inquiry-queue { max-height: 42rem; overflow-y: auto; padding: .85rem !important; }.pw-workspace .px-inquiry-queue > .d-flex strong { font-size: .86rem; }.pw-workspace .px-inquiry-queue .btn { min-height: 4.75rem; padding: .7rem !important; }.pw-workspace .px-inquiry-queue .btn .pw-code { font-size: .75rem; }.pw-workspace .px-inquiry-queue .btn .small { font-size: .65rem; }
+.pw-workspace .px-inquiry-search { align-items: center; background: #f5f8fc; border-radius: .55rem; color: #718096; display: flex; gap: .4rem; margin: 0 0 .7rem; padding: 0 .55rem; }.pw-workspace .px-inquiry-search input { background: transparent; border: 0; color: #263b59; font: inherit; font-size: .68rem; height: 2.35rem; min-width: 0; outline: 0; width: 100%; }
+.pw-workspace .px-inquiry-chat { display: flex; flex-direction: column; min-height: 42rem; padding: .9rem !important; }.pw-workspace .px-inquiry-chat > .d-flex:first-child { border-bottom: 1px solid #e8eef6; margin: 0 0 .75rem !important; padding-bottom: .7rem; }.pw-workspace .pw-inquiry-messages { flex: 1; min-height: 19rem; }.pw-workspace .pw-inquiry-messages > div > span { font-size: .74rem; max-width: 78%; padding: .6rem .7rem; }.pw-workspace .px-inquiry-chat > .d-flex.gap-2 { border-top: 1px solid #e8eef6; margin-top: .75rem !important; padding-top: .75rem; }
+.pw-workspace .px-inquiry-details { display: grid; align-content: start; gap: .8rem; min-height: 42rem; padding: .9rem !important; }.px-inquiry-details__empty { align-items: center; color: #748399; display: grid; font-size: .72rem; line-height: 1.5; min-height: 20rem; place-items: center; text-align: center; }.px-inquiry-details__profile { align-items: center; border-bottom: 1px solid #e8eef6; display: grid; justify-items: center; padding: .25rem 0 .8rem; text-align: center; }.px-inquiry-details__profile > span { align-items: center; background: #dff4f7; border: 2px solid #eef5ff; border-radius: 50%; color: #578EF5; display: inline-flex; font-size: .82rem; font-weight: 800; height: 4rem; justify-content: center; width: 4rem; }.px-inquiry-details__profile strong { color: #172b4d; font-size: .8rem; margin-top: .45rem; }.px-inquiry-details__profile small { color: #73839a; font-size: .62rem; margin-top: .15rem; }.px-inquiry-details__profile em { align-items: center; background: #fff1f2; border-radius: 999px; color: #cb3345; display: inline-flex; font-size: .57rem; font-style: normal; font-weight: 750; gap: .2rem; margin-top: .45rem; padding: .25rem .42rem; }
+.pw-workspace .px-inquiry-details .px-inquiry-patient-summary,
+.pw-workspace .px-inquiry-details .px-inquiry-note { background: #f8fbff; border: 1px solid #e0e9f5; border-radius: .7rem; padding: .7rem; }.pw-workspace .px-inquiry-details .px-inquiry-note { background: #fff; }.pw-workspace .px-inquiry-details .px-inquiry-patient-summary header strong { font-size: .72rem; }.pw-workspace .px-inquiry-details .px-inquiry-patient-summary dl { margin-top: .6rem; }.pw-workspace .px-inquiry-details .px-inquiry-note textarea { min-height: 6rem; }.pw-workspace .px-inquiry-details .px-inquiry-note footer button { min-height: 1.9rem; }
+@media (max-width: 1100px) { .pw-workspace .px-inquiry-details { min-height: 0; }.pw-workspace .px-inquiry-chat { min-height: 34rem; }.pw-workspace .px-inquiry-queue { max-height: none; } }
+
+/* Medication inquiries: quieter clinical hierarchy with the shared blue palette. */
+.pw-workspace .px-inquiries { gap: 1rem; }
+.pw-workspace .px-inquiry-queue,
+.pw-workspace .px-inquiry-chat,
+.pw-workspace .px-inquiry-details { border-color: #dbe6f5; box-shadow: 0 10px 28px rgba(36, 69, 122, .045); }
+.pw-workspace .px-inquiry-queue { padding: 1rem !important; }
+.pw-workspace .px-inquiry-queue .btn { border-color: #e3ebf6 !important; transition: background .16s ease, border-color .16s ease, transform .16s ease; }
+.pw-workspace .px-inquiry-queue .btn:hover { transform: translateY(-1px); }
+.pw-workspace .px-inquiry-queue .btn-primary { background: #f5f8ff !important; border-color: #9fc0f9 !important; box-shadow: inset 3px 0 #578EF5; }
+.pw-workspace .px-inquiry-chat { background: linear-gradient(180deg, #fff 0%, #fbfdff 100%); padding: 1.2rem !important; }
+.pw-workspace .pw-inquiry-validation { align-self: center; margin: auto; max-width: 42rem; padding: 1rem .35rem; width: 100%; }
+.pw-workspace .pw-inquiry-validation .badge { border-radius: 999px; font-size: .62rem; font-weight: 750; letter-spacing: .02em; padding: .38rem .58rem; }
+.pw-workspace .pw-inquiry-validation h3 { color: #172b4d; font-size: 1.18rem; font-weight: 700; letter-spacing: -.02em; margin: .15rem 0 1.1rem; }
+.pw-workspace .pw-inquiry-validation p { border-bottom: 1px solid #e8eef6; color: #526176; font-size: .82rem; line-height: 1.55; margin: 0; padding: .65rem 0; }
+.pw-workspace .pw-inquiry-validation p strong { color: #263b59; }
+.pw-workspace .pw-inquiry-validation .btn-outline-danger { border-radius: .65rem; font-size: .76rem; font-weight: 700; min-height: 2.65rem; margin-top: 1rem; }
+.pw-workspace .pw-inquiry-validation .btn-primary { border-radius: .65rem; font-size: .8rem; font-weight: 750; min-height: 2.8rem; }
+.pw-workspace .px-inquiry-privacy { background: #f5f8ff; border: 1px solid #d7e5fa; border-radius: .65rem; color: #526b8d; font-size: .72rem; line-height: 1.55; margin: .65rem 0; padding: .7rem .8rem; }
+.pw-workspace .px-inquiry-details { background: #fff; padding: 1.1rem !important; }
+.pw-workspace .px-inquiry-details__profile { padding: .35rem 0 1rem; }
+.pw-workspace .px-inquiry-details__profile > span { background: #eef5ff; border-color: #d9e8ff; color: #578EF5; }
+.pw-workspace .px-inquiry-details .px-inquiry-patient-summary { background: #f8fbff; border-color: #dfeaf8; }
+.pw-workspace .px-inquiry-details .px-inquiry-note { border-color: #dfeaf8; }
+
+/* One Patient Care workspace with focused, function-preserving panels. */
+.pw-workspace .px-care-hub { background: #f4f7fc; border: 1px solid #dbe5f3; border-radius: 16px; display: grid; gap: 0; overflow: hidden; }
+.pw-workspace .px-care-hub__tabs { align-items: end; background: #eef3fb; display: flex; gap: .45rem; overflow-x: auto; padding: .8rem 1.5rem 0; }
+.pw-workspace .px-care-hub__tabs button { align-items: center; background: #dfe8f6; border: 1px solid transparent; border-bottom: 0; border-radius: 12px 12px 0 0; color: #66758a; cursor: pointer; display: inline-flex; flex: 0 0 auto; font-size: .78rem; font-weight: 700; gap: .45rem; min-height: 2.85rem; padding: .6rem 1.1rem; transition: background .16s ease, color .16s ease; }
+.pw-workspace .px-care-hub__tabs button:hover { background: #eaf1fb; color: #366fdb; }
+.pw-workspace .px-care-hub__tabs button.is-active { background: #fff; color: #245ab8; }
+.pw-workspace .px-care-hub__panel { background: #fff; min-width: 0; padding: 1.25rem; }
+@media (max-width: 640px) { .pw-workspace .px-care-hub__tabs { padding-left: 1rem; padding-right: 1rem; } .pw-workspace .px-care-hub__panel { padding: .8rem; } }
+
+/* Clinical Drug Review uses the same compact management-workspace language. */
+.pw-workspace .px-drug-review { background: #f4f7fc; border: 1px solid #dbe5f3; border-radius: 16px; overflow: hidden; padding: 0; }
+.pw-workspace .px-drug-review__tabs { align-items: end; background: #eef3fb; display: flex; gap: .45rem; overflow-x: auto; padding: .8rem 1.25rem 0; }
+.pw-workspace .px-drug-review__tabs button { background: #dfe8f6; border: 0; border-radius: 12px 12px 0 0; color: #66758a; cursor: pointer; font-size: .78rem; font-weight: 700; min-height: 2.85rem; padding: .6rem 1.1rem; white-space: nowrap; }
+.pw-workspace .px-drug-review__tabs button.is-active { background: #fff; color: #245ab8; }
+.pw-workspace .px-drug-review__tabs b { background: #578EF5; border-radius: 999px; color: #fff; font-size: .65rem; margin-left: .35rem; padding: .12rem .36rem; }
+.pw-workspace .px-drug-review__body { background: #fff; margin: 0; padding: 1.25rem; }
+.pw-workspace .px-drug-review .pw-drug-catalog { border: 0; border-radius: 0; box-shadow: none; }
+
+/* Shared compact queue treatment for clinical-review workspaces. */
+.pw-workspace .px-orders-workspace,
+.pw-workspace .history-page,
+.pw-workspace .pv-validation,
+.pw-workspace .pmr-rules,
+.pw-workspace .px-inquiries { background: #f4f7fc; border: 1px solid #dbe5f3; border-radius: 16px; padding: 1rem; }
+.pw-workspace .px-orders-workspace .pw-card,
+.pw-workspace .history-page .admin-card,
+.pw-workspace .pv-validation .pw-card,
+.pw-workspace .pmr-rules { background: #fff; border: 1px solid #e0e8f4; border-radius: 12px; box-shadow: none; }
+.pw-workspace .px-orders-workspace table thead th,
+.pw-workspace .history-page .history-table thead th,
+.pw-workspace .pmr-rules table thead th { background: #eef3fb; border-bottom: 0; color: #65758d; font-size: .68rem; font-weight: 800; letter-spacing: .02em; padding: .75rem; }
+.pw-workspace .px-orders-workspace table td,
+.pw-workspace .history-page .history-table td,
+.pw-workspace .pmr-rules table td { border-color: #edf1f6; color: #233958; font-size: .76rem; padding: .78rem .75rem; vertical-align: middle; }
+.pw-workspace .px-orders-workspace select,
+.pw-workspace .history-page select,
+.pw-workspace .pmr-rules select,
+.pw-workspace .pmr-rules input { border-color: #d6e1ef; border-radius: 8px; min-height: 2.35rem; }
+.pw-workspace .px-orders-workspace .btn-primary,
+.pw-workspace .history-page .btn-primary,
+.pw-workspace .pv-validation .btn-primary,
+.pw-workspace .pmr-rules .btn-primary { background: #578EF5; border-color: #578EF5; }
+
+/* Deliberately dense data-management surface, shared by pharmacist queues. */
+.pw-workspace .px-orders-workspace,
+.pw-workspace .history-page,
+.pw-workspace .pv-validation,
+.pw-workspace .pmr-rules,
+.pw-workspace .px-inquiries { box-shadow: 0 12px 30px rgba(39, 74, 124, .055); }
+.pw-workspace .px-orders-workspace .pw-card,
+.pw-workspace .history-page .admin-card,
+.pw-workspace .pv-validation .pw-card,
+.pw-workspace .pmr-rules { overflow: hidden; }
+.pw-workspace .px-orders-workspace table,
+.pw-workspace .history-page .history-table,
+.pw-workspace .pmr-rules table { border-collapse: separate; border-spacing: 0; width: 100%; }
+.pw-workspace .px-orders-workspace table tbody tr:hover,
+.pw-workspace .history-page .history-table tbody tr:hover,
+.pw-workspace .pmr-rules table tbody tr:hover { background: #f8fbff; }
+.pw-workspace .px-orders-workspace .btn-link,
+.pw-workspace .history-page .history-pagination button,
+.pw-workspace .pv-validation .btn-outline-secondary,
+.pw-workspace .pmr-rules .btn-outline-primary,
+.pw-workspace .px-inquiries .btn-outline-primary { border: 1px solid #8ab4f8; border-radius: 6px; color: #2d6fda; font-size: .72rem; font-weight: 700; text-decoration: none; }
+.pw-workspace .history-page .history-toolbar,
+.pw-workspace .pmr-rules > header,
+.pw-workspace .px-orders-workspace > header { align-items: center; background: #fff; border: 1px solid #e0e8f4; border-radius: 12px; display: flex; gap: .75rem; margin-bottom: 1rem; padding: .85rem 1rem; }
+.pw-workspace .px-inquiry-tabs { background: #eef3fb; border-radius: 12px 12px 0 0; margin-bottom: 0; padding: .65rem .8rem 0; }
+
+/* Medicine Rules & Safety: reference-style work list with live status filters. */
+.pw-workspace .pmr-rules { padding: 0 !important; }
+.pw-workspace .pmr-rules__header { background: #f4f7fc; border-bottom: 1px solid #e1e8f3; margin: 0 !important; padding: .8rem 1rem; }
+.pw-workspace .pmr-rules__tabs { align-items: end; background: #eef3fb; display: flex; gap: .4rem; overflow-x: auto; padding: .7rem 1rem 0; }
+.pw-workspace .pmr-rules__tabs button { background: #dfe8f6; border: 0; border-radius: 11px 11px 0 0; color: #65758d; cursor: pointer; flex: 0 0 auto; font-size: .74rem; font-weight: 750; min-height: 2.65rem; padding: .55rem .9rem; }
+.pw-workspace .pmr-rules__tabs button.is-active { background: #fff; color: #245ab8; }
+.pw-workspace .pmr-rules__workspace { background: #fff; margin: 0; padding: 1rem; }
+.pw-workspace .pmr-rules__filters { align-items: center; background: #fff; border: 1px solid #e0e8f4; border-radius: 10px; display: flex; gap: .65rem; margin-bottom: .75rem; padding: .65rem; }
+.pw-workspace .pmr-rules__filters input { flex: 1; min-width: 0; }
+.pw-workspace .pmr-rules__filters button { background: #578EF5; border: 1px solid #578EF5; border-radius: 7px; color: #fff; font-size: .72rem; font-weight: 750; min-height: 2.3rem; padding: 0 .8rem; }
+.pw-workspace .pmr-rules__list { border: 1px solid #e0e8f4; border-radius: 10px; max-height: 35rem; overflow-y: auto; }
+.pw-workspace .pmr-rules__list .list-group-item { border-color: #edf1f6; color: #233958; font-size: .78rem; padding: .78rem .85rem; }
+.pw-workspace .pmr-rules__list .list-group-item.active { background: #f4f8ff; border-color: #9fc0f9; box-shadow: inset 3px 0 #578EF5; color: #173b70; }
+
+/* Orders queue mirrors the tab-and-table work-management pattern. */
+.pw-workspace .px-orders-workspace { padding: 0; }
+.pw-workspace .px-orders-workspace__tabs { align-items: end; background: #eef3fb; display: flex; gap: .4rem; overflow-x: auto; padding: .75rem 1rem 0; }
+.pw-workspace .px-orders-workspace__tabs button { background: #dfe8f6; border: 0; border-radius: 11px 11px 0 0; color: #65758d; cursor: pointer; flex: 0 0 auto; font-size: .75rem; font-weight: 750; min-height: 2.7rem; padding: .55rem .9rem; }
+.pw-workspace .px-orders-workspace__tabs button.is-active { background: #fff; color: #245ab8; }
+.pw-workspace .px-orders-workspace__tabs b { background: #578EF5; border-radius: 999px; color: #fff; font-size: .64rem; margin-left: .35rem; padding: .1rem .35rem; }
+.pw-workspace .px-orders-workspace__table { border: 0; border-radius: 0; box-shadow: none; margin: 0; padding: 1rem; }
+.pw-workspace .px-orders-workspace__filters { align-items: center; border: 1px solid #e0e8f4; border-radius: 10px; display: flex; gap: .65rem; margin-bottom: .85rem; padding: .65rem; }
+.pw-workspace .px-orders-workspace__filters input { border: 1px solid #d6e1ef; border-radius: 7px; flex: 1; font: inherit; font-size: .78rem; min-height: 2.3rem; min-width: 0; padding: .45rem .65rem; }
+.pw-workspace .px-orders-workspace__filters button { background: #578EF5; border: 1px solid #578EF5; border-radius: 7px; color: #fff; font-size: .72rem; font-weight: 750; min-height: 2.3rem; padding: 0 .8rem; }
+
+/* Prescription Validation follows the same tabbed review-queue pattern. */
+.pw-workspace .pv-validation { padding: 0; overflow: hidden; }
+.pw-workspace .pv-validation__tabs { align-items: end; background: #eef3fb; display: flex; gap: .4rem; overflow-x: auto; padding: .75rem 1rem 0; }
+.pw-workspace .pv-validation__tabs button { background: #dfe8f6; border: 0; border-radius: 11px 11px 0 0; color: #65758d; cursor: pointer; flex: 0 0 auto; font-size: .75rem; font-weight: 750; min-height: 2.7rem; padding: .55rem .9rem; }
+.pw-workspace .pv-validation__tabs button.is-active { background: #fff; color: #245ab8; }
+.pw-workspace .pv-validation__tabs b { background: #578EF5; border-radius: 999px; color: #fff; font-size: .64rem; margin-left: .35rem; padding: .1rem .35rem; }
+.pw-workspace .pv-validation__tabs .pv-validation__refresh { background: #578EF5; border-radius: 7px; color: #fff; margin: 0 0 .35rem auto; min-height: 2.3rem; }
+.pw-workspace .pv-validation__workspace { background: #fff; margin: 0; padding: 1rem; }
+.pw-workspace .pv-validation__queue { border-color: #e0e8f4; border-radius: 10px; box-shadow: none; max-height: 40rem; overflow-y: auto; }
+.pw-workspace .pv-validation__queue-header { background: #eef3fb; border-radius: 8px; padding: .7rem .75rem; }
+.pw-workspace .pv-validation__queue button { border-color: #e2eaf4 !important; border-radius: 8px; font-size: .76rem; }
+.pw-workspace .pv-validation__queue button.btn-primary { background: #f4f8ff !important; border-color: #9fc0f9 !important; box-shadow: inset 3px 0 #578EF5; color: #173b70 !important; }
+.pw-workspace .pv-validation__review { border-color: #e0e8f4; border-radius: 10px; box-shadow: none; }
+.pw-workspace .pv-validation__history { border: 0; border-radius: 0; box-shadow: none; margin: 0; padding: 1rem; }
+
+/* Professional history uses the same tabbed, compact audit-table presentation. */
+.pw-workspace .history-page { padding: 0; overflow: hidden; }
+.pw-workspace .history-page__tabs { align-items: end; background: #eef3fb; display: flex; gap: .4rem; overflow-x: auto; padding: .75rem 1rem 0; }
+.pw-workspace .history-page__tabs button { background: #dfe8f6; border: 0; border-radius: 11px 11px 0 0; color: #65758d; cursor: pointer; flex: 0 0 auto; font-size: .74rem; font-weight: 750; min-height: 2.7rem; padding: .55rem .85rem; }
+.pw-workspace .history-page__tabs button.is-active { background: #fff; color: #245ab8; }
+.pw-workspace .history-page .history-toolbar { background: #fff; border: 0; border-radius: 0; justify-content: space-between; margin: 0; padding: .8rem 1rem; }
+.pw-workspace .history-page .history-toolbar > span { color: #65758d; font-size: .76rem; }
+.pw-workspace .history-page .history-card { border: 0; border-radius: 0; box-shadow: none; margin: 0; padding: 0 1rem 1rem; }
+.pw-workspace .history-page .history-pagination { border-top: 1px solid #edf1f6; margin-top: 0; padding: .85rem .1rem 0; }
+
+/* Medication inquiries: triage queue, secure conversation, and care context. */
+.pw-workspace .px-inquiries { padding: 0; overflow: hidden; }
+.pw-workspace .px-inquiry-tabs { align-items: end; border-radius: 0; display: flex; gap: .4rem; margin: 0; padding: .75rem 1rem 0; }
+.pw-workspace .px-inquiry-tabs button { background: #dfe8f6; border: 0; border-radius: 11px 11px 0 0; color: #65758d; flex: 0 0 auto; font-size: .75rem; font-weight: 750; min-height: 2.7rem; padding: .55rem .85rem; }
+.pw-workspace .px-inquiry-tabs button.is-active { background: #fff; color: #245ab8; }
+.pw-workspace .px-inquiry-tabs button span { background: #578EF5; border-radius: 999px; color: #fff; font-size: .63rem; margin-left: .3rem; padding: .1rem .34rem; }
+.pw-workspace .px-inquiry-tabs .px-inquiry-tabs__refresh { align-items: center; background: #578EF5; border-radius: 7px; color: #fff; display: inline-flex; gap: .35rem; margin: 0 0 .35rem auto; min-height: 2.3rem; }
+.pw-workspace .px-inquiries-grid { background: #fff; margin: 0; padding: 1rem; }
+.pw-workspace .px-inquiry-queue > .d-flex { background: #eef3fb; border-radius: 8px; margin: 0 0 .75rem !important; padding: .65rem .7rem; }
+.pw-workspace .px-inquiry-search { border: 1px solid #e0e8f4; border-radius: 8px; }
+.pw-workspace .px-inquiry-chat .pw-inquiry-validation { padding: .3rem; }
+
+/* Interactive pharmacist calendar. */
+.ph-dashboard-calendar button { align-items:center; appearance:none; background:transparent; border:0; border-radius:.5rem; box-sizing:border-box; color:#65758c; cursor:pointer; display:grid; font:inherit; font-size:.58rem; gap:.15rem; grid-template-columns:1fr; grid-template-rows:repeat(2,auto); justify-items:center; min-height:3rem; min-width:0; padding:.25rem .1rem; width:100%; }
+.ph-dashboard-calendar button small { font-size:.55rem; font-weight:700; }
+.ph-dashboard-calendar button b { font-size:.73rem; font-weight:750; }
+.ph-dashboard-calendar button:focus-visible { outline: 3px solid rgba(87, 142, 245, .42); outline-offset: 2px; }
+.ph-dashboard-calendar button.is-selected { background: #578EF5; box-shadow: 0 6px 12px rgba(87, 142, 245, .25); color: #fff; }
+.ph-dashboard-calendar button.has-appointment:not(.is-selected) b::after { background: #578EF5; border-radius: 999px; content: ''; display: block; height: 4px; margin: 3px auto 0; width: 4px; }

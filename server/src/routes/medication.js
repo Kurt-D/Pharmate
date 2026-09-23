@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { pool } from '../db/connection.js';
 import { requireAuth } from '../middleware/auth.js';
 import { requireRole } from '../middleware/role.js';
+import { rateLimit } from '../middleware/rateLimit.js';
 import { generateClinicalSchedule } from '../services/scheduleEngine.js';
 import { recordAudit } from '../services/audit.js';
 import { medicationChanged, scheduleChanged } from '../services/domainEvents.js';
@@ -17,6 +18,11 @@ import { evaluateMedicationSafety } from '../services/medicationSafety.js';
 import { serializeSafetyProfile } from '../services/patientSafetyProfile.js';
 
 const router = Router();
+const medicineSearchLimit = rateLimit({
+  scope: 'medicine-search', windowMs: 60 * 1000, max: 120,
+  keyGenerator: (req) => `${req.user?.sub || 'anonymous'}:${req.ip || 'unknown'}`,
+  message: 'Please pause briefly before searching again.',
+});
 router.use(requireAuth, requireRole('patient'));
 
 const FOOD_LABELS = {
@@ -30,15 +36,30 @@ const FOOD_LABELS = {
 
 function treatmentDateKeys(startDate, endDate, maximumDays = 366) {
   if (!startDate) return [];
-  if (!endDate) return [startDate];
   const dates = [];
   const current = new Date(`${startDate}T00:00:00Z`);
-  const end = new Date(`${endDate}T00:00:00Z`);
+  // An ongoing medicine still needs future reminder instances.  Keep a bounded
+  // rolling horizon so it cannot silently stop after its first day.
+  const end = endDate
+    ? new Date(`${endDate}T00:00:00Z`)
+    : new Date(current.getTime() + (maximumDays - 1) * 24 * 60 * 60 * 1000);
   while (current <= end && dates.length < maximumDays) {
     dates.push(current.toISOString().slice(0, 10));
     current.setUTCDate(current.getUTCDate() + 1);
   }
   return dates;
+}
+
+/**
+ * medication_schedules stores PharMate wall-clock reminders in Manila time.
+ * Never materialize a slot that is already in the past: the missed-dose
+ * worker would correctly classify it as missed immediately after saving.
+ */
+function isFutureReminderSlot(date, time, now = new Date()) {
+  const match = String(time || '').match(/^(\d{2}):(\d{2})$/);
+  if (!match) return false;
+  const scheduledAt = new Date(`${date}T${match[1]}:${match[2]}:00+08:00`);
+  return !Number.isNaN(scheduledAt.getTime()) && scheduledAt.getTime() > now.getTime();
 }
 const LABEL_FREQUENCIES = Object.freeze({
   QD: { daily: 1, interval: 0 },
@@ -142,6 +163,25 @@ function idsFrom(body) {
     .filter((record) => /^[0-9a-f-]{36}$/i.test(record.drug_id));
 }
 
+// Suggested scheduling must work from the medicine setup itself. Prefer an
+// entered frequency; otherwise normalize a catalog phrase. The final fallback
+// is a once-daily, profile-anchored suggestion that the patient can edit before
+// saving. This is scheduling assistance, not a clinical verification claim.
+function inferredFrequency(value) {
+  const text = String(value || '').trim().toUpperCase();
+  if (LABEL_FREQUENCIES[text]) return text;
+  // The patient experience uses a daily reminder for every saved medicine.
+  // “As needed” catalog wording therefore receives an editable once-daily
+  // suggestion instead of a tracker without an alarm.
+  if (/AS\s*NEEDED|WHEN\s*NEEDED|\bPRN\b/.test(text)) return 'QD';
+  if (/ONCE\s+(A\s+)?DAY|DAILY|ONE\s+TIME/.test(text)) return 'QD';
+  if (/TWICE\s+(A\s+)?DAY|TWO\s+TIMES/.test(text)) return 'BID';
+  if (/THREE\s+TIMES|3\s+TIMES/.test(text)) return 'TID';
+  if (/FOUR\s+TIMES|4\s+TIMES/.test(text)) return 'QID';
+  const everyHours = text.match(/EVERY\s*(4|6|8|12)\s*H(?:OURS?)?/);
+  return everyHours ? `Q${everyHours[1]}H` : 'QD';
+}
+
 async function loadRules(records, executor = pool) {
   if (!records.length) return [];
   const ids = [...new Set(records.map((record) => record.drug_id))];
@@ -177,7 +217,17 @@ async function loadRules(records, executor = pool) {
   );
   const requested = new Map(records.map((record) => [record.drug_id, record]));
   return rows.map((row) => {
-    const request = requested.get(row.drug_id);
+    const rawRequest = requested.get(row.drug_id);
+    const request =
+      rawRequest?.schedule_mode === 'SUGGESTED' && !rawRequest.label_frequency
+        ? {
+            ...rawRequest,
+            label_frequency: inferredFrequency(row.standard_frequency),
+            // PRN trackers require directions for display. Preserve catalog
+            // wording when the patient did not enter anything.
+            label_direction: rawRequest.label_direction || row.standard_frequency || null,
+          }
+        : rawRequest;
     const custom = request?.custom_strength;
     const suggested = request?.schedule_mode === 'SUGGESTED';
     const clinicalCheck = checkClinicalRule({
@@ -225,7 +275,10 @@ async function loadRules(records, executor = pool) {
             label_food_instruction: row.food_rule || 'NONE',
           }
         : request,
-      row
+      row,
+      // A supplement may legitimately use a non-numeric label such as
+      // “adult formula”. It must not prevent an editable reminder suggestion.
+      { allowUnknownStrength: suggested }
     );
     return {
       ...row,
@@ -236,7 +289,9 @@ async function loadRules(records, executor = pool) {
         row.administration_instruction || row.meal_instruction || FOOD_LABELS[row.food_rule],
       label_frequency: request?.label_frequency,
       label_food_instruction: request?.label_food_instruction,
-      first_dose_time: suggested ? '' : request?.first_dose_time,
+      // Suggested reminders are anchored to the patient's selected first dose.
+      // Approved prescription directions can still replace this later.
+      first_dose_time: request?.first_dose_time,
       frequency_source: request?.frequency_source,
       schedule_times: request?.schedule_times || [],
       schedule_mode: request?.schedule_mode,
@@ -373,6 +428,10 @@ async function generateFromRequest(body, executor = pool, patientId = null) {
   const scheduleMode = String(body?.schedule_mode || '')
     .trim()
     .toUpperCase();
+  // Reminder-only setup records the schedule the patient entered. It does not
+  // create prescription-order eligibility; refill and delivery routes retain
+  // their approved-prescription requirement.
+  const reminderOnly = body?.schedule_only === true;
   const requested = idsFrom(body).map((record) => ({ ...record, schedule_mode: scheduleMode }));
   if (!requested.length) return { error: 'Select at least one medication.', status: 400 };
   if (new Set(requested.map((item) => item.drug_id)).size !== requested.length) {
@@ -383,7 +442,6 @@ async function generateFromRequest(body, executor = pool, patientId = null) {
     };
   }
   const rules = await loadRules(requested, executor);
-  for (const rule of rules) rule.require_entered_timing = true;
   const approvedPrescriptions = await loadApprovedPrescriptionDirections(
     patientId,
     rules,
@@ -412,17 +470,13 @@ async function generateFromRequest(body, executor = pool, patientId = null) {
     return { error: 'One or more selected medications are unavailable.', status: 400 };
   }
   for (const rule of rules) {
-    if (String(rule.rx_class || '').toUpperCase() === 'RX') {
+    // A prescription record, when available, supplies better details. It is
+    // not a prerequisite for the patient-facing suggested-schedule tool.
+    // Without one, the same deterministic profile-based suggestion is made
+    // from the selected medicine, form and strength.
+    if (String(rule.rx_class || '').toUpperCase() === 'RX' && !reminderOnly) {
       const prescription = approvedPrescriptions.get(String(rule.drug_id));
-      if (!prescription) {
-        return {
-          error: `${rule.generic_name} can only use exact directions from an approved prescription. Upload the prescription or ask your pharmacist to validate it first.`,
-          code: 'APPROVED_PRESCRIPTION_REQUIRED',
-          drug_id: rule.drug_id,
-          medicine_name: rule.generic_name,
-          status: 422,
-        };
-      }
+      if (prescription) {
       const prescriptionFrequency = String(prescription.frequency_code || '').toUpperCase();
       const prescriptionRule = LABEL_FREQUENCIES[prescriptionFrequency];
       if (!prescriptionRule) {
@@ -476,9 +530,12 @@ async function generateFromRequest(body, executor = pool, patientId = null) {
         intake_error: null,
       });
       continue;
+      }
     }
     if (scheduleMode === 'SUGGESTED') {
-      if (!rule.verified_for_suggestion && !rule.reference_eligible) {
+      // Reminder-only scheduling follows the patient's entered label details
+      // for every supported medicine, including medicines with catalog rules.
+      if (reminderOnly || (!rule.verified_for_suggestion && !rule.reference_eligible)) {
         const labelRule = LABEL_FREQUENCIES[rule.label_frequency];
         if (!labelRule) {
           return {
@@ -488,9 +545,19 @@ async function generateFromRequest(body, executor = pool, patientId = null) {
         }
         if (rule.intake_error) return { error: rule.intake_error, status: 400 };
         rule.standard_frequency = rule.label_frequency;
-        rule.max_daily_doses = labelRule.daily;
-        rule.min_interval_hours = labelRule.interval;
+        // PRN has no intrinsic count/interval. Retain catalog limits when
+        // available so its non-recurring tracker can describe the patient's
+        // recorded medicine without inventing another fixed reminder.
+        rule.max_daily_doses = labelRule.daily || Number(rule.max_daily_doses) || null;
+        rule.min_interval_hours = labelRule.interval || Number(rule.min_interval_hours) || null;
         rule.rule_kind = labelRule.prn ? 'PRN' : rule.rule_kind;
+        // Every patient-confirmed medicine receives a daily reminder in the
+        // simplified workflow, including entries that originally said PRN.
+        if (labelRule.prn) {
+          rule.standard_frequency = 'QD';
+          rule.rule_kind = null;
+          rule.is_prn = false;
+        }
         rule.food_rule = rule.label_food_instruction;
         rule.food_instruction = FOOD_LABELS[rule.label_food_instruction] || FOOD_LABELS.NONE;
         rule.clinical_rule_status = 'PATIENT_LABEL';
@@ -554,6 +621,18 @@ async function generateFromRequest(body, executor = pool, patientId = null) {
     rule.clinical_rule_status = 'PATIENT_LABEL';
     rule.schedule_basis = 'PATIENT_LABEL';
   }
+  // The product's reminder policy is one editable daily reminder for every
+  // saved medicine. Normalize PRN catalog/prescription wording here too, so a
+  // verified PRN rule cannot bypass the daily-alarm path above.
+  if (scheduleMode === 'SUGGESTED') {
+    for (const rule of rules) {
+      if (String(rule.standard_frequency || '').toUpperCase() !== 'PRN') continue;
+      rule.standard_frequency = 'QD';
+      rule.rule_kind = null;
+      rule.is_prn = false;
+      rule.max_daily_doses = Number(rule.max_daily_doses) || 1;
+    }
+  }
   const interactions = await loadInteractions(rules, executor, patientId);
   const result = generateClinicalSchedule(rules, interactions);
   const safety = patientId
@@ -566,6 +645,18 @@ async function generateFromRequest(body, executor = pool, patientId = null) {
   result.medical_guarantee = false;
   result.disclaimer =
     'PharMate checks recorded rules and creates reminder times only. It does not guarantee that a medicine or schedule is medically safe, prescribe treatment, or replace a licensed clinician or pharmacist.';
+  // Reminder times are wall-clock times. Return the saved IANA timezone with
+  // the proposal so every client can label the review consistently instead of
+  // silently treating the times as browser-local.
+  if (patientId) {
+    const [[preferences]] = await executor.execute(
+      'SELECT timezone FROM patient_preferences WHERE patient_id=? LIMIT 1',
+      [patientId]
+    );
+    result.timezone = preferences?.timezone || 'Asia/Manila';
+  } else {
+    result.timezone = 'Asia/Manila';
+  }
   result.schedule_basis =
     scheduleMode === 'SUGGESTED'
       ? rules.some((rule) => rule.schedule_basis === 'PRESCRIPTION_DIRECTIONS')
@@ -580,6 +671,14 @@ async function generateFromRequest(body, executor = pool, patientId = null) {
       : 'PATIENT_LABEL';
   result.requires_prescription_match = result.schedule_basis === 'REFERENCE_REVIEW_REQUIRED';
   result.requires_label_match = result.schedule_basis === 'REFERENCE_REVIEW_REQUIRED';
+  result.suggestion_confidence =
+    result.schedule_basis === 'VERIFIED_CLINICAL_RULE' ||
+    result.schedule_basis === 'PRESCRIPTION_DIRECTIONS'
+      ? 'GOVERNED'
+      : result.schedule_basis === 'PATIENT_LABEL'
+        ? 'PATIENT_LABEL_REVIEW'
+        : 'REFERENCE_REVIEW';
+  result.reason_codes = [...new Set((result.warnings || []).map((warning) => warning.code))];
   result.rule_provenance = rules.map((rule) => ({
     drug_id: rule.drug_id,
     rule_version: Number(rule.rule_version || 1),
@@ -597,6 +696,7 @@ router.post('/validate-schedule', (req, res) => {
 });
 
 async function intakeFromRequest(body, executor = pool, patientId = null) {
+  const isManualSchedule = String(body?.schedule_mode || '').trim().toUpperCase() === 'MANUAL';
   const requested = idsFrom(body);
   if (!requested.length) return { error: 'Select at least one medication.', status: 400 };
   if (new Set(requested.map((item) => item.drug_id)).size !== requested.length) {
@@ -611,6 +711,18 @@ async function intakeFromRequest(body, executor = pool, patientId = null) {
     return { error: 'One or more selected medications are unavailable.', status: 400 };
   }
   for (const rule of rules) {
+    // A manual schedule is only a patient-owned reminder record. Its times are
+    // not a clinical recommendation and must not be blocked by formulary,
+    // prescription-direction, spacing, or dose-limit validation.
+    if (isManualSchedule) {
+      rule.standard_frequency = rule.label_frequency || 'QD';
+      rule.food_instruction = FOOD_LABELS[rule.label_food_instruction] || FOOD_LABELS.NONE;
+      rule.clinical_rule_status = 'PATIENT_MANUAL';
+      rule.schedule_basis = 'PATIENT_MANUAL';
+      rule.max_daily_doses = null;
+      rule.min_interval_hours = null;
+      continue;
+    }
     if (String(rule.rx_class || '').toUpperCase() === 'RX') {
       const approved = await loadApprovedPrescriptionDirections(patientId, [rule], executor);
       if (!approved.has(String(rule.drug_id))) {
@@ -783,7 +895,7 @@ async function upsertMedicationIntakes(
   return { medicationIds, createdMedicationIds };
 }
 
-router.get('/search', async (req, res) => {
+router.get('/search', medicineSearchLimit, async (req, res) => {
   const query = String(req.query.q || '')
     .trim()
     .toLowerCase()
@@ -953,6 +1065,7 @@ router.post('/save-reminders', async (req, res) => {
       'SELECT COALESCE(MAX(schedule_version),0)+1 AS version FROM medication_schedules WHERE patient_id=?',
       [req.user.sub]
     );
+    const scheduleSavedAt = new Date();
     const persistedIds = [...medicationIds.values()];
     if (persistedIds.length) {
       const desired = new Set();
@@ -960,7 +1073,9 @@ router.post('/save-reminders', async (req, res) => {
         for (const medicine of group.medicines) {
           const rule = generated.rules.find((item) => item.drug_id === medicine.drug_id);
           for (const date of treatmentDateKeys(rule.start_date, rule.end_date)) {
-            desired.add(`${medicationIds.get(medicine.drug_id)}:${date} ${group.time}:00`);
+            if (isFutureReminderSlot(date, group.time, scheduleSavedAt)) {
+              desired.add(`${medicationIds.get(medicine.drug_id)}:${date} ${group.time}:00`);
+            }
           }
         }
       }
@@ -1022,6 +1137,9 @@ router.post('/save-reminders', async (req, res) => {
       for (const medicine of group.medicines) {
         const rule = rulesByDrug.get(medicine.drug_id);
         for (const treatmentDate of treatmentDateKeys(rule.start_date, rule.end_date)) {
+          if (!isFutureReminderSlot(treatmentDate, group.time, scheduleSavedAt)) {
+            continue;
+          }
           const [[retained]] = await conn.execute(
             "SELECT id FROM medication_schedules WHERE patient_id=? AND medication_id=? AND scheduled_time=CONCAT(?, ' ', ?, ':00') LIMIT 1",
             [req.user.sub, medicationIds.get(medicine.drug_id), treatmentDate, group.time]

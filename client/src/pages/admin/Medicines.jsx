@@ -4,6 +4,7 @@ import {
   ChevronLeft,
   ChevronRight,
   CircleAlert,
+  Eye,
   Filter,
   Info,
   PackageCheck,
@@ -11,11 +12,14 @@ import {
   Pencil,
   Pill,
   Plus,
+  Power,
   RefreshCw,
+  RotateCcw,
   Save,
   Search,
   ShieldCheck,
   Trash2,
+  Archive,
   X,
 } from 'lucide-react';
 import { api } from '../../api.js';
@@ -43,8 +47,10 @@ export default function Medicines() {
   const [query, setQuery] = useState('');
   const [stockFilter, setStockFilter] = useState('all');
   const [typeFilter, setTypeFilter] = useState('all');
+  const [catalogFilter, setCatalogFilter] = useState('all');
   const [page, setPage] = useState(1);
   const [drawer, setDrawer] = useState(null);
+  const [detail, setDetail] = useState(null);
   const [form, setForm] = useState(EMPTY_FORM);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -70,7 +76,7 @@ export default function Medicines() {
   }, [load]);
   useEffect(() => {
     setPage(1);
-  }, [query, stockFilter, typeFilter]);
+  }, [query, stockFilter, typeFilter, catalogFilter]);
 
   const counts = useMemo(
     () =>
@@ -101,9 +107,10 @@ export default function Medicines() {
       const matchesStock =
         stockFilter === 'all' || stockState(medicine.stock_quantity).key === stockFilter;
       const matchesType = typeFilter === 'all' || medicine.rx_class === typeFilter;
-      return matchesText && matchesStock && matchesType;
+      const matchesCatalog = catalogFilter === 'all' || (medicine.admin_status || 'ACTIVE') === catalogFilter;
+      return matchesText && matchesStock && matchesType && matchesCatalog;
     });
-  }, [meds, query, stockFilter, typeFilter]);
+  }, [meds, query, stockFilter, typeFilter, catalogFilter]);
 
   const pages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const visible = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
@@ -125,6 +132,29 @@ export default function Medicines() {
       id: medicine.id,
     });
     setError('');
+  }
+  async function openView(medicine) {
+    setError('');
+    try {
+      const response = await api(`/api/admin/medicines/${medicine.id}`);
+      setDetail(response.data);
+    } catch (requestError) {
+      setError(requestError.message || 'Unable to load medication details.');
+    }
+  }
+
+  async function changeLifecycle(medicine, action) {
+    setSaving(true);
+    setError('');
+    try {
+      await api(`/api/admin/medicines/${medicine.id}/${action}`, { method: 'POST' });
+      setNotice(`${medicine.generic_name} was ${action === 'archive' ? 'archived' : action === 'restore' ? 'restored' : `${action}d`}.`);
+      await load();
+    } catch (requestError) {
+      setError(requestError.message || 'This medication could not be updated.');
+    } finally {
+      setSaving(false);
+    }
   }
   function updateField(event) {
     const { name, value } = event.target;
@@ -183,18 +213,6 @@ export default function Medicines() {
 
   return (
     <section className={`admin-medicine-workspace${drawer ? ' has-drawer' : ''}`}>
-      <header className="admin-medicine-heading">
-        <div>
-          <span>MEDICINE INVENTORY</span>
-          <h2>Manage medications</h2>
-          <p>Maintain the medicine formulary, descriptions, classification, and available stock.</p>
-        </div>
-        <button onClick={openAdd} type="button">
-          <Plus size={18} />
-          Add medicine
-        </button>
-      </header>
-
       {error && (
         <div className="admin-medicine-message is-error" role="alert">
           <CircleAlert size={18} />
@@ -252,6 +270,15 @@ export default function Medicines() {
                 <option value="all">All types</option>
                 <option value="OTC">OTC</option>
                 <option value="RX">Prescription</option>
+              </select>
+            </label>
+            <label>
+              <PackageCheck size={15} />
+              <select value={catalogFilter} onChange={(event) => setCatalogFilter(event.target.value)} aria-label="Filter by catalog status">
+                <option value="all">All catalog statuses</option>
+                <option value="ACTIVE">Active</option>
+                <option value="INACTIVE">Inactive</option>
+                <option value="ARCHIVED">Archived</option>
               </select>
             </label>
             <button
@@ -361,9 +388,13 @@ export default function Medicines() {
                               )}
                               {status.label}
                             </span>
+                            <small className="medicine-catalog-status">{String(medicine.admin_status || 'ACTIVE').toLowerCase()}</small>
                           </td>
                           <td>
                             <div className="medicine-actions">
+                              <button onClick={() => openView(medicine)} type="button" title="View medicine">
+                                <Eye size={16} />
+                              </button>
                               <button
                                 onClick={() => openEdit(medicine)}
                                 type="button"
@@ -371,6 +402,14 @@ export default function Medicines() {
                               >
                                 <Pencil size={16} />
                               </button>
+                              {medicine.admin_status === 'ARCHIVED' ? (
+                                <button onClick={() => changeLifecycle(medicine, 'restore')} type="button" title="Restore medicine"><RotateCcw size={16} /></button>
+                              ) : (
+                                <>
+                                  <button onClick={() => changeLifecycle(medicine, medicine.admin_status === 'ACTIVE' ? 'deactivate' : 'activate')} type="button" title={medicine.admin_status === 'ACTIVE' ? 'Deactivate medicine' : 'Activate medicine'}><Power size={16} /></button>
+                                  <button onClick={() => changeLifecycle(medicine, 'archive')} type="button" title="Archive medicine"><Archive size={16} /></button>
+                                </>
+                              )}
                               <button
                                 className="danger"
                                 onClick={() => setDeleteTarget(medicine)}
@@ -391,10 +430,6 @@ export default function Medicines() {
                           <Boxes size={34} />
                           <strong>No medicines found</strong>
                           <p>Adjust the filters or add a new medicine.</p>
-                          <button onClick={openAdd} type="button">
-                            <Plus size={16} />
-                            Add medicine
-                          </button>
                         </div>
                       </td>
                     </tr>
@@ -558,6 +593,17 @@ export default function Medicines() {
           </aside>
         )}
       </div>
+
+      {detail && (
+        <div className="admin-medicine-confirm-backdrop" onMouseDown={(event) => event.target === event.currentTarget && setDetail(null)}>
+          <section className="admin-medicine-confirm admin-medicine-detail" aria-modal="true" aria-labelledby="medicine-detail-title" role="dialog">
+            <header><div><small>MEDICATION INFORMATION</small><h3 id="medicine-detail-title">{detail.medicine.generic_name}</h3></div><button aria-label="Close details" onClick={() => setDetail(null)} type="button"><X size={18} /></button></header>
+            <dl><div><dt>Strength</dt><dd>{detail.medicine.common_strength || 'Not specified'}</dd></div><div><dt>Dosage form</dt><dd>{detail.medicine.dosage_form || 'Not specified'}</dd></div><div><dt>Classification</dt><dd>{detail.medicine.rx_class}</dd></div><div><dt>Catalog status</dt><dd>{detail.medicine.admin_status}</dd></div><div><dt>Availability</dt><dd>{detail.medicine.availability ? 'Available' : 'Unavailable'}</dd></div><div><dt>Stock</dt><dd>{detail.medicine.stock_quantity} units</dd></div></dl>
+            <p className="admin-medicine-detail-description">{detail.medicine.short_description || 'No description available.'}</p>
+            <h4>Recent management history</h4><ul>{detail.history?.length ? detail.history.slice(0, 6).map((event) => <li key={event.id}><strong>{String(event.action).replaceAll('_', ' ')}</strong><span>{new Date(event.created_at).toLocaleString()}</span></li>) : <li>No recorded management changes.</li>}</ul>
+          </section>
+        </div>
+      )}
 
       {deleteTarget && (
         <div className="admin-medicine-confirm-backdrop">

@@ -1,10 +1,12 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import '../../styles/medication-corrections.css';
 import { medicineIssues } from '../../lib/medicationGuidance.js';
 import { scheduleFailure } from '../../lib/scheduleFailure.js';
 import { useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
+  ArrowRight,
   CalendarClock,
   Check,
   CheckCircle2,
@@ -94,11 +96,38 @@ function frequencyDetails(code) {
   const [frequencyType, count, intervalHours = null] = rules[code] || [null, null, null];
   return { frequencyType, count, intervalHours };
 }
+function reminderTimesForFrequency(code, firstTime = '08:00') {
+  const { count, intervalHours } = frequencyDetails(code);
+  if (!Number.isInteger(count) || count < 1) return [firstTime];
+
+  const [hour = 8, minute = 0] = String(firstTime).split(':').map(Number);
+  const firstMinute = (Number(hour) * 60 + Number(minute)) % (24 * 60);
+  const spacingMinutes = (intervalHours || 24 / count) * 60;
+  return Array.from({ length: count }, (_, index) => {
+    const total = Math.round((firstMinute + index * spacingMinutes) % (24 * 60));
+    return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
+  });
+}
 function today(offset = 0) {
   const date = new Date();
   date.setDate(date.getDate() + offset);
   const tz = date.getTimezoneOffset() * 60_000;
   return new Date(date.getTime() - tz).toISOString().slice(0, 10);
+}
+function nextSuggestedStartDate(startDate, times = [], now = new Date()) {
+  const currentDate = today();
+  const requestedDate = startDate || currentDate;
+  if (requestedDate > currentDate) return requestedDate;
+  if (requestedDate < currentDate) return currentDate;
+
+  const hasUpcomingTime = times.some((value) => {
+    const [hours, minutes] = String(value || '').split(':').map(Number);
+    if (!Number.isInteger(hours) || !Number.isInteger(minutes)) return false;
+    const candidate = new Date(now);
+    candidate.setHours(hours, minutes, 0, 0);
+    return candidate.getTime() > now.getTime();
+  });
+  return hasUpcomingTime ? currentDate : today(1);
 }
 function timeLabel(value) {
   return new Date(`2000-01-01T${value}:00`).toLocaleTimeString([], {
@@ -157,6 +186,23 @@ function endDateFor(start, duration, selectedEnd) {
   return new Date(date.getTime() - tz).toISOString().slice(0, 10);
 }
 
+// A medicine can be present both in the saved draft list and as the active
+// editor value after navigating back. A valid catalog selection is enough to
+// retain it here; the detail form validates its required fields before setup
+// can proceed. This prevents an active medicine from being dropped solely
+// because a stale draft omitted a derived field.
+function normalizeDraftMedicines(medicines = []) {
+  const unique = new Map();
+  for (const medicine of medicines) {
+    const drugId = String(medicine?.id || '').trim();
+    const name = String(medicine?.generic_name || medicine?.medicine_name || '').trim();
+    if (!drugId || !name) continue;
+    unique.delete(drugId);
+    unique.set(drugId, medicine);
+  }
+  return [...unique.values()];
+}
+
 export default function AutomatedAddMedication() {
   const navigate = useNavigate();
   const { language } = useLanguage();
@@ -164,21 +210,25 @@ export default function AutomatedAddMedication() {
   const initial = useMemo(readDraft, []);
   const restoredPhase = String(initial.phase || 'questions').startsWith('suggested-')
     ? 'schedule-choice'
-    : initial.phase === 'manual-dose'
+    : ['manual-first', 'manual-instructions'].includes(initial.phase)
+      ? 'manual-dates'
+      : initial.phase === 'manual-dose'
       ? 'manual-times'
       : initial.phase || 'questions';
-  const [step, setStep] = useState(Math.min(initial.step || 1, 8));
+  // Only the medicine, form, and strength are needed to set a reminder.
+  // Old saved drafts are returned to the final supported question.
+  const [step, setStep] = useState(Math.min(initial.step || 1, 3));
   const [durationPage, setDurationPage] = useState(Boolean(initial.durationPage));
   const [phase, setPhase] = useState(restoredPhase);
   const [query, setQuery] = useState(initial.query || '');
   const [results, setResults] = useState([]);
   const [medicine, setMedicine] = useState(initial.medicine || null);
   const [medicineList, setMedicineList] = useState(initial.medicineList || []);
+  const [addingAnotherMedicine, setAddingAnotherMedicine] = useState(false);
   const [detailBackup, setDetailBackup] = useState(null);
   const [searching, setSearching] = useState(false);
   const [working, setWorking] = useState(false);
   const [error, setError] = useState('');
-  const [generationFailure, setGenerationFailure] = useState(null);
   const [scheduleIssue, setScheduleIssue] = useState(null);
   const [correction, setCorrection] = useState(null);
   const [showIssues, setShowIssues] = useState(false);
@@ -187,6 +237,7 @@ export default function AutomatedAddMedication() {
   const [source, setSource] = useState(initial.source || '');
   const [manualTimes, setManualTimes] = useState(initial.manualTimes || ['08:00']);
   const [editingMedicine, setEditingMedicine] = useState(initial.editingMedicine || null);
+  const [returnToReview, setReturnToReview] = useState(Boolean(initial.returnToReview));
   const [medicineDates, setMedicineDates] = useState(initial.medicineDates || {});
   const [confirmed, setConfirmed] = useState(false);
   const [referenceConfirmed, setReferenceConfirmed] = useState(false);
@@ -208,6 +259,7 @@ export default function AutomatedAddMedication() {
       source,
       manualTimes,
       editingMedicine,
+      returnToReview,
       medicineDates,
     });
     sessionStorage.setItem(DRAFT_KEY, serializedDraft);
@@ -224,6 +276,7 @@ export default function AutomatedAddMedication() {
     saved,
     schedule,
     source,
+    returnToReview,
     step,
   ]);
   useEffect(() => {
@@ -262,6 +315,14 @@ export default function AutomatedAddMedication() {
     );
     return () => clearTimeout(timer);
   }, [navigate, phase]);
+  useEffect(() => {
+    if (!confirmation) return undefined;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [confirmation]);
 
   const update = (changes) => {
     if ('start_date' in changes || 'end_date' in changes || 'duration' in changes) {
@@ -277,14 +338,18 @@ export default function AutomatedAddMedication() {
     setMedicine((current) => ({ ...current, ...changes }));
     setError('');
   };
+  // Retained for editing a legacy draft, but never shown in the streamlined
+  // setup flow.
   const brands = brandsFor(medicine);
   const uses = usesFor(medicine);
-  const hasBrandPage = Boolean(brands.length || medicine?.release_type);
   const selectedEndDate = endDateFor(medicine?.start_date, medicine?.duration, medicine?.end_date);
   const allMedicines = useMemo(() => {
-    if (!medicine) return medicineList;
+    if (!medicine) return normalizeDraftMedicines(medicineList);
     const key = String(medicine._draftKey || medicine.id);
-    return [...medicineList.filter((item) => String(item._draftKey || item.id) !== key), medicine];
+    return normalizeDraftMedicines([
+      ...medicineList.filter((item) => String(item._draftKey || item.id) !== key),
+      medicine,
+    ]);
   }, [medicine, medicineList]);
   const intakes = useMemo(
     () =>
@@ -351,6 +416,16 @@ export default function AutomatedAddMedication() {
     setQuery('');
     setResults([]);
     setError('');
+    // A new setup must not silently reuse medicines from an abandoned browser
+    // draft. The only way to build a multi-medicine schedule is the explicit
+    // “Add another medicine” action from the review page.
+    if (!addingAnotherMedicine) {
+      setMedicineList([]);
+      setMedicineDates({});
+      setSchedule(null);
+      setSource('');
+    }
+    setAddingAnotherMedicine(false);
     setStep(2);
   }
   function speechSearch() {
@@ -376,6 +451,23 @@ export default function AutomatedAddMedication() {
       );
     recognition.start();
   }
+  function discardSetupAndLeave() {
+    const hasUnfinishedSetup =
+      Boolean(medicine || query || medicineList.length || schedule?.schedule?.length);
+    if (
+      hasUnfinishedSetup &&
+      !window.confirm(
+        tr(
+          'Go back and restart this schedule? Your unfinished medicine and reminder times will be removed.',
+          'Bumalik at magsimulang muli? Aalisin ang hindi pa tapos na gamot at oras ng paalala.'
+        )
+      )
+    )
+      return;
+    sessionStorage.removeItem(DRAFT_KEY);
+    localStorage.removeItem(DRAFT_KEY);
+    navigate('/patient/medications');
+  }
   function back() {
     setError('');
     if (phase === 'success') return;
@@ -385,59 +477,44 @@ export default function AutomatedAddMedication() {
       return;
     }
     if (phase === 'review') {
-      setPhase('schedule-choice');
-      return;
-    }
-    if (phase === 'suggested-unavailable') {
+      if (returnToReview) {
+        setPhase('manual-times');
+        return;
+      }
       setPhase('schedule-choice');
       return;
     }
     if (phase === 'schedule-choice') {
+      // Strength is the final required medicine-detail step in the simplified
+      // senior flow. Returning from the method chooser reopens that step.
       setPhase('questions');
       setStep(3);
       setDurationPage(false);
+      setSource('');
       return;
     }
-    const manualQuestions = ['manual-first', 'manual-food', 'manual-supply', 'manual-instructions'];
+    const manualQuestions = ['manual-frequency', 'manual-dates'];
     if (manualQuestions.includes(phase)) {
       const index = manualQuestions.indexOf(phase);
       if (index) setPhase(manualQuestions[index - 1]);
       else {
-        setPhase('questions');
-        setStep(8);
-        setDurationPage(true);
+        setPhase('schedule-choice');
       }
       return;
     }
     if (phase === 'manual-times') {
-      setPhase(schedule?.schedule?.length ? 'review' : 'manual-instructions');
+      setPhase(schedule?.schedule?.length ? 'review' : 'manual-dates');
       return;
     }
     if (durationPage) {
       setDurationPage(false);
       return;
     }
-    const firstManualDetailStep = hasBrandPage ? 4 : 5;
-    if (source === 'manual' && step === firstManualDetailStep) {
-      setPhase('schedule-choice');
-      return;
-    }
     if (step > 1) {
-      const target = step - 1;
-      setStep(target === 4 && !hasBrandPage ? 3 : target);
+      setStep(step - 1);
       return;
     }
-    if (
-      (medicine || query) &&
-      !window.confirm(
-        tr(
-          'Leave this setup? Your unfinished answers will stay on this device.',
-          'Umalis sa setup? Mananatili sa device ang mga sagot mo.'
-        )
-      )
-    )
-      return;
-    navigate('/patient/medications');
+    discardSetupAndLeave();
   }
   function next() {
     setError('');
@@ -497,23 +574,23 @@ export default function AutomatedAddMedication() {
     if (working) return;
     setWorking(true);
     setError('');
-    setGenerationFailure(null);
     setSource('suggested');
     try {
-      const safetyProfile = await api('/api/patient/safety-profile');
-      if (safetyProfile.data.missing_for_safety_check?.length) {
-        setError(
-          tr(
-            'Complete the missing safety details once so PharMate can check this suggestion.',
-            'Kumpletuhin nang isang beses ang kulang na safety details para masuri ng PharMate ang mungkahi.'
-          )
-        );
-        setPhase('safety-needed');
+      if (!intakes.length) {
+        setMedicine(null);
+        setQuery('');
+        setStep(1);
+        setDurationPage(false);
+        setPhase('questions');
+        setError(tr('Select a medicine before creating a schedule.', 'Pumili muna ng gamot bago gumawa ng iskedyul.'));
         return;
       }
       const adaptiveRequest = { medications: intakes };
       const response = await api('/api/medications/generate-schedule', {
         method: 'POST',
+        // Use approved catalog/prescription directions when they exist. The
+        // reminder-only mode requires a patient-entered frequency and caused
+        // otherwise eligible medicines to stop at “Tell PharMate how often”.
         body: { ...adaptiveRequest, schedule_mode: 'SUGGESTED' },
       });
       if (response.data?.can_save === false) {
@@ -528,17 +605,46 @@ export default function AutomatedAddMedication() {
         ),
         ...(response.data.prn_trackers || []).map((item) => [String(item.drug_id), item]),
       ]);
-      const suggestedMedicines = allMedicines.map((item) => ({
-        ...item,
-        frequency_code: governedDirections.get(String(item.id))?.frequency || item.frequency_code,
-        label_direction:
-          governedDirections.get(String(item.id))?.label_direction ||
-          governedDirections.get(String(item.id))?.directions ||
-          item.label_direction,
-        start_date: item.start_date || today(),
-        duration: item.duration || 'ONGOING',
-        dose_amount: item.dose_amount || 1,
-      }));
+      const suggestedTimesByMedicine = new Map();
+      for (const slot of response.data.schedule || []) {
+        for (const scheduled of slot.medicines || []) {
+          const key = String(scheduled.drug_id);
+          suggestedTimesByMedicine.set(key, [
+            ...(suggestedTimesByMedicine.get(key) || []),
+            slot.time,
+          ]);
+        }
+      }
+      // The proposal is shown before it is saved, so make its first displayed
+      // day match the next reminder the server can create. A time that has
+      // already passed today starts tomorrow instead of appearing as a dose
+      // that would immediately become missed.
+      const generatedAt = new Date();
+      const suggestedMedicines = allMedicines.map((item) => {
+        const start_date = nextSuggestedStartDate(
+          item.start_date || today(),
+          suggestedTimesByMedicine.get(String(item.id)) || [],
+          generatedAt
+        );
+        const requestedEndDate = endDateFor(item.start_date, item.duration, item.end_date);
+        return {
+          ...item,
+          frequency_code: governedDirections.get(String(item.id))?.frequency || item.frequency_code,
+          label_direction:
+            governedDirections.get(String(item.id))?.label_direction ||
+            governedDirections.get(String(item.id))?.directions ||
+            item.label_direction,
+          start_date,
+          // A single-day treatment chosen for today still gets one usable
+          // future reminder when today's proposed time is already elapsed.
+          end_date:
+            item.duration === 'END_DATE' && requestedEndDate && requestedEndDate < start_date
+              ? start_date
+              : item.end_date,
+          duration: item.duration || 'ONGOING',
+          dose_amount: item.dose_amount || 1,
+        };
+      });
       const current = suggestedMedicines.find((item) => item._draftKey === medicine._draftKey);
       const dateMap = {};
       for (const item of suggestedMedicines)
@@ -556,6 +662,11 @@ export default function AutomatedAddMedication() {
       setPhase('review');
     } catch (requestError) {
       const failure = scheduleFailure(requestError);
+      const safetyProfileRequired =
+        requestError.body?.missing_safety_profile_fields?.length > 0 ||
+        requestError.body?.reason_codes?.some((code) =>
+          ['SAFETY_PROFILE_REQUIRED', 'SAFETY_PROFILE_INCOMPLETE'].includes(code)
+        );
       // Select the actual blocked medicine so correction and counseling actions
       // refer to the same record as the server error, not the last edited one.
       const blockedMedicine = allMedicines.find(
@@ -565,9 +676,21 @@ export default function AutomatedAddMedication() {
         setMedicineList(allMedicines);
         setMedicine(blockedMedicine);
       }
-      setGenerationFailure(failure);
       setError(failure.message);
-      setPhase('suggested-unavailable');
+      // Keep routine setup failures in the form flow. The old full-page
+      // Schedule Review warning made stale or malformed client drafts look
+      // like a clinical scheduling failure.
+      if (/select at least one medication/i.test(failure.message)) {
+        setMedicine(null);
+        setQuery('');
+        setStep(1);
+        setDurationPage(false);
+        setPhase('questions');
+      } else if (safetyProfileRequired) {
+        setPhase('safety-needed');
+      } else {
+        setPhase('schedule-choice');
+      }
     } finally {
       setWorking(false);
     }
@@ -587,25 +710,46 @@ export default function AutomatedAddMedication() {
     setConfirmed(false);
     setError('');
     setDurationPage(false);
-    setStep(hasBrandPage ? 4 : 5);
-    setPhase('questions');
+    setMedicine((current) => ({
+      ...current,
+      dose_amount: Number(current?.dose_amount) > 0 ? current.dose_amount : 1,
+      food_instruction: current?.food_instruction || 'NONE',
+    }));
+    setPhase('manual-frequency');
   }
   function startManualTimeQuestions() {
     const dateMap = { ...medicineDates };
-    for (const item of allMedicines)
-      dateMap[String(item.id)] = treatmentDates(
-        item.start_date,
-        endDateFor(item.start_date, item.duration, item.end_date)
-      );
+    for (const item of allMedicines) {
+      const key = String(item.id);
+      dateMap[key] = dateMap[key]?.length
+        ? dateMap[key]
+        : treatmentDates(item.start_date, endDateFor(item.start_date, item.duration, item.end_date));
+    }
     setMedicineList(allMedicines);
     setMedicineDates(dateMap);
     setEditingMedicine({ drug_id: intake.drug_id, name: intake.medicine_name });
-    setManualTimes([medicine.first_dose_time || '08:00']);
+    setReturnToReview(false);
+    setManualTimes(reminderTimesForFrequency(medicine.frequency_code, medicine.first_dose_time));
     setSchedule((current) => current || { schedule: [] });
     setSource('manual');
     setConfirmed(false);
     setError('');
     setPhase('manual-times');
+  }
+  function updateManualTreatmentDates(changes) {
+    const nextMedicine = { ...medicine, ...changes };
+    const nextEndDate = endDateFor(
+      nextMedicine.start_date,
+      nextMedicine.duration,
+      nextMedicine.end_date
+    );
+    const key = String(nextMedicine.id);
+    setMedicineDates((current) => ({
+      ...current,
+      [key]: treatmentDates(nextMedicine.start_date, nextEndDate),
+    }));
+    setMedicine((current) => ({ ...current, ...changes }));
+    setError('');
   }
   function manualRows() {
     return [...new Set(manualTimes)].sort().map((time, index) => ({
@@ -636,6 +780,7 @@ export default function AutomatedAddMedication() {
       .map((slot) => slot.time);
     if (selected) setMedicine(selected);
     setEditingMedicine(item || { drug_id: intake.drug_id, name: intake.medicine_name });
+    setReturnToReview(true);
     setManualTimes(
       times.length
         ? [...new Set(times)].sort()
@@ -684,6 +829,7 @@ export default function AutomatedAddMedication() {
       ),
       () => {
         setMedicineList(allMedicines);
+        setAddingAnotherMedicine(true);
         setMedicine(null);
         setQuery('');
         setResults([]);
@@ -747,18 +893,22 @@ export default function AutomatedAddMedication() {
     setError('');
     const frequency = frequencyDetails(medicine.frequency_code);
     try {
-      await api('/api/medications/validate-schedule', {
-        method: 'POST',
-        body: {
-          frequencyType: frequency.frequencyType,
-          scheduleMode: source === 'manual' ? 'MANUAL' : 'SUGGESTED',
-          frequencyCode: medicine.frequency_code,
-          intervalHours: frequency.intervalHours,
-          scheduleTimes: manualRows().map((row) => row.time),
-          startDate: medicine.start_date,
-          endDate: selectedEndDate || null,
-        },
-      });
+      // A manual schedule is the patient's chosen reminder layout. Do not
+      // apply suggested-schedule frequency or spacing rules while they edit it.
+      if (source !== 'manual') {
+        await api('/api/medications/validate-schedule', {
+          method: 'POST',
+          body: {
+            frequencyType: frequency.frequencyType,
+            scheduleMode: 'SUGGESTED',
+            frequencyCode: medicine.frequency_code,
+            intervalHours: frequency.intervalHours,
+            scheduleTimes: manualRows().map((row) => row.time),
+            startDate: medicine.start_date,
+            endDate: selectedEndDate || null,
+          },
+        });
+      }
     } catch (requestError) {
       setScheduleIssue(requestError.body?.code || null);
       setError(requestError.body?.message || requestError.body?.error || requestError.message);
@@ -868,7 +1018,10 @@ export default function AutomatedAddMedication() {
       } else {
         const savedIntake = await api('/api/medications/save-intake', {
           method: 'POST',
-          body: request,
+          // A manual schedule is a patient-controlled reminder plan. Mark it
+          // explicitly so the server does not apply suggested-schedule or
+          // prescription-direction rules to the patient's chosen times.
+          body: { ...request, schedule_mode: 'MANUAL' },
         });
         const medicationIds = savedIntake.data.medication_ids;
         const medicationIdByDrug = new Map(
@@ -957,30 +1110,32 @@ export default function AutomatedAddMedication() {
     tr('What is the name of your medicine?', 'Ano ang pangalan ng iyong gamot?'),
     tr('What form is your medicine?', 'Anong uri ang iyong gamot?'),
     tr('What strength is shown on the label?', 'Anong lakas ang nakasulat sa label?'),
-    tr('Does the label show a brand or special type?', 'May brand o espesyal na uri ba sa label?'),
-    tr('What are you taking this medicine for?', 'Para saan mo iniinom ang gamot na ito?'),
-    tr('How often do you take this medicine?', 'Gaano kadalas mo iniinom ang gamot na ito?'),
-    tr(
-      `How many ${unitFor(medicine?.patient_form || medicine?.dosage_form, 2)} do you take at one time?`,
-      'Gaano karaming gamot ang iniinom mo sa isang inuman?'
-    ),
-    durationPage
-      ? tr('How long will you take it?', 'Gaano katagal mo ito iinumin?')
-      : tr('When will you start taking it?', 'Kailan mo ito sisimulang inumin?'),
   ][step - 1];
 
   return (
     <main className="pm-auto-medication-page pm-wizard">
-      <header className="pm-auto-medication-header pm-wizard__header">
-        <button aria-label={tr('Back', 'Bumalik')} onClick={back} type="button">
+      <header
+        className={`pm-auto-medication-header pm-wizard__header${
+          phase === 'schedule-choice' ? ' pm-wizard__header--schedule-choice' : ''
+        }`}
+      >
+        <button
+          aria-label={tr('Back', 'Bumalik')}
+          onClick={back}
+          type="button"
+        >
           <ArrowLeft />
         </button>
         <div>
-          <h1>{tr('Medication Setup', 'Pag-set Up ng Gamot')}</h1>
+          <h1>
+            {phase === 'schedule-choice'
+              ? tr('Medication Schedule', 'Iskedyul ng Gamot')
+              : tr('Medication Setup', 'Pag-set Up ng Gamot')}
+          </h1>
           {phase !== 'questions' && (
             <p>
               {phase === 'schedule-choice'
-                ? tr('Choose a scheduling method', 'Pumili ng paraan ng pag-iskedyul')
+                ? tr('Choose how you’d like to set your reminder times.', 'Piliin kung paano mo itatakda ang oras ng paalala.')
                 : source === 'manual'
                   ? tr('Manual schedule', 'Manwal na iskedyul')
                   : tr('PharMate suggested schedule', 'Mungkahing iskedyul ng PharMate')}
@@ -998,7 +1153,7 @@ export default function AutomatedAddMedication() {
           </button>
         </aside>
       )}
-      {currentIssues.length > 0 && phase !== 'questions' && (
+      {currentIssues.length > 0 && !['questions', 'schedule-choice'].includes(phase) && (
         <aside className="pm-guidance-note" role="alert">
           <strong>Please review these details</strong>
           {currentIssues.map((issue) => (
@@ -1014,13 +1169,13 @@ export default function AutomatedAddMedication() {
       {phase === 'questions' && (
         <div
           aria-label={tr('Medication setup progress', 'Progreso ng pag-set up ng gamot')}
-          aria-valuemax="8"
+          aria-valuemax="3"
           aria-valuemin="1"
           aria-valuenow={step}
           className="pm-wizard__progress"
           role="progressbar"
         >
-          <span style={{ width: `${step * (100 / 8)}%` }} />
+          <span style={{ width: `${step * (100 / 3)}%` }} />
         </div>
       )}
 
@@ -1176,9 +1331,14 @@ export default function AutomatedAddMedication() {
                 className="pm-wizard__primary"
                 onClick={() => {
                   if (!medicine?.strength_value) return next();
+                  // Keep the intake short for seniors: the automatic engine
+                  // derives a reviewable suggestion from the medicine and its
+                  // saved routine, while manual setup asks for chosen times.
+                  setError('');
+                  setShowIssues(false);
                   setMedicineList(allMedicines);
                   setConfirmed(false);
-                  setError('');
+                  setDurationPage(false);
                   setPhase('schedule-choice');
                 }}
                 type="button"
@@ -1455,12 +1615,11 @@ export default function AutomatedAddMedication() {
                 ))}
               </div>
               {medicine?.duration === 'END_DATE' && (
-                <input
-                  className="pm-wizard__date"
-                  min={medicine.start_date}
-                  onChange={(event) => update({ end_date: event.target.value })}
-                  type="date"
-                  value={medicine?.end_date || ''}
+                <TreatmentEndDateCalendar
+                  endDate={medicine?.end_date || ''}
+                  onChange={(end_date) => update({ end_date })}
+                  startDate={medicine.start_date}
+                  tr={tr}
                 />
               )}
               <button className="pm-wizard__primary" onClick={next} type="button">
@@ -1482,123 +1641,56 @@ export default function AutomatedAddMedication() {
 
       {phase === 'schedule-choice' && (
         <WizardPage
-          className="pm-wizard__schedule-choice"
-          title={tr(
-            'How would you like to create your schedule?',
-            'Paano mo gustong gawin ang iyong iskedyul?'
-          )}
+          className="pm-wizard__schedule-choice pm-wizard__schedule-choice--redesign"
+          title={null}
         >
-          <p>
-            {tr('Choose how to set your reminders.', 'Piliin kung paano itatakda ang paalala.')}
-          </p>
           <article className="pm-wizard__method suggested">
-            <ShieldCheck />
+            <span className="pm-wizard__method-icon" aria-hidden="true"><CalendarClock /></span>
             <div>
-              <h3>{tr('Use PharMate Suggested Schedule', 'Gamitin ang Mungkahi ng PharMate')}</h3>
+              <h3>
+                {tr(
+                  <>Use Suggested<br />Schedule</>,
+                  <>Gamitin ang<br />Mungkahing Iskedyul</>
+                )}
+              </h3>
               <p>
                 {tr(
-                  'Review suggested reminder times before saving.',
-                  'Suriin ang mungkahing oras bago i-save.'
+                  'PharMate suggests reminder times based on your medication.',
+                  'Magmumungkahi ang PharMate ng oras batay sa iyong gamot.'
                 )}
               </p>
             </div>
             <button disabled={working} onClick={() => generate()} type="button">
-              {working ? <LoaderCircle className="spin" /> : <CalendarClock />}
-              {tr('Use Suggested Schedule', 'Gamitin ang Mungkahi')}
+              {working ? <LoaderCircle className="spin" /> : null}
+              {tr('Review Suggested Times', 'Suriin ang Mungkahing Oras')} <ArrowRight />
             </button>
           </article>
           <article className="pm-wizard__method manual">
-            <Edit3 />
+            <span className="pm-wizard__method-icon" aria-hidden="true"><Clock3 /></span>
             <div>
-              <h3>{tr('Create My Own Schedule', 'Gumawa ng Sarili Kong Iskedyul')}</h3>
+              <h3>
+                {tr(
+                  <>Create My Own<br />Schedule</>,
+                  <>Gumawa ng Sarili<br />Kong Iskedyul</>
+                )}
+              </h3>
               <p>
                 {tr(
-                  'Answer a few questions and choose your own times.',
-                  'Sagutin ang ilang tanong at piliin ang iyong oras.'
+                  'Choose the days and times that work for you.',
+                  'Piliin ang mga araw at oras na angkop sa iyo.'
                 )}
               </p>
             </div>
             <button disabled={working} onClick={startManualQuestions} type="button">
-              <Clock3 />
-              {tr('Create Manually', 'Gumawa nang Manwal')}
+              {tr('Set Schedule', 'Itakda ang Iskedyul')} <ArrowRight />
             </button>
           </article>
           {error && (
-            <GenerationError
-              error={error}
-              onAsk={() => navigate('/patient/ask')}
-              onCheck={() => {
-                setPhase('questions');
-                setStep(3);
-                setDurationPage(false);
-              }}
-              onEdit={startManualQuestions}
-              tr={tr}
-            />
-          )}
-        </WizardPage>
-      )}
-
-      {phase === 'suggested-unavailable' && (
-        <WizardPage
-          className="pm-wizard__suggested-unavailable"
-          title={
-            generationFailure?.retryable
-              ? tr('Unable to load your schedule', 'Hindi ma-load ang iskedyul')
-              : tr('Your schedule needs attention', 'Kailangang suriin ang iyong iskedyul')
-          }
-        >
-          <div className="pm-wizard__generation-error" role="alert">
-            <Info />
-            <div>
-              <h3>
-                {generationFailure?.medicineName || tr('Schedule review', 'Pagsusuri ng iskedyul')}
-              </h3>
-              {allMedicines.length > 1 && (
-                <p>
-                  {tr('This request includes:', 'Kasama sa kahilingang ito:')}{' '}
-                  {allMedicines.map((item) => item.generic_name).join(', ')}.
-                </p>
-              )}
-              <p>
-                {generationFailure?.message ||
-                  error ||
-                  tr(
-                    'Please try again to check the saved medicine details. Your information has been kept.',
-                    'Subukan muli upang masuri ang naka-save na detalye ng gamot. Napanatili ang iyong impormasyon.'
-                  )}
-              </p>
-              {(generationFailure?.retryable || !generationFailure) && (
-                <button disabled={working} onClick={generate} type="button">
-                  {working ? tr('Checking…', 'Sinusuri…') : tr('Try again', 'Subukan muli')}
-                </button>
-              )}
-              {!generationFailure?.retryable && generationFailure && (
-                <>
-                  {generationFailure.code !== 'APPROVED_PRESCRIPTION_REQUIRED' && (
-                    <button disabled={working} onClick={startManualQuestions} type="button">
-                      {tr('Review medicine directions', 'Suriin ang tagubilin sa gamot')}
-                    </button>
-                  )}
-                  {generationFailure.code === 'APPROVED_PRESCRIPTION_REQUIRED' && (
-                    <button
-                      disabled={working}
-                      onClick={() => navigate('/patient/medications/prescription')}
-                      type="button"
-                    >
-                      {tr('Upload prescription', 'Mag-upload ng reseta')}
-                    </button>
-                  )}
-                  <button disabled={working} onClick={askPharmacist} type="button">
-                    {tr('Ask a pharmacist', 'Magtanong sa parmasyutiko')}
-                  </button>
-                </>
-              )}
-              <button disabled={working} onClick={() => setPhase('schedule-choice')} type="button">
-                {tr('Choose Another Method', 'Pumili ng Ibang Paraan')}
-              </button>
+            <div className="pm-wizard__error" role="alert">
+              <Info />
+              {error}
             </div>
-          </div>
+          )}
         </WizardPage>
       )}
 
@@ -1660,65 +1752,97 @@ export default function AutomatedAddMedication() {
               value={medicine.first_dose_time}
             />
           </div>
-          <BottomNext onClick={() => setPhase('manual-food')} tr={tr} />
+          <BottomNext onClick={() => setPhase('manual-instructions')} tr={tr} />
         </WizardPage>
       )}
-      {phase === 'manual-food' && (
-        <WizardPage
-          title={tr(
-            'What does the label say about food?',
-            'Ano ang nakasulat sa label tungkol sa pagkain?'
-          )}
-        >
+      {phase === 'manual-frequency' && (
+        <WizardPage title={tr('How often do you take this medicine?', 'Gaano kadalas mo iniinom ang gamot na ito?')}>
+          <p>{tr('Choose the hours or frequency written on your medicine label.', 'Piliin ang oras o dalas na nakasulat sa label ng gamot.')}</p>
           <div className="pm-wizard__choices">
-            {FOOD.map(([value, en, fil]) => (
+            {FREQUENCIES.map(([code, en, fil], index) => (
               <button
-                className={medicine.food_instruction === value ? 'selected' : ''}
-                key={value}
-                onClick={() => update({ food_instruction: value })}
+                className={medicine?.frequency_choice === index ? 'selected' : ''}
+                key={`${code}-${en}`}
+                onClick={() => update({ frequency_code: code, frequency_choice: index, custom_frequency: ['OTHER', 'UNKNOWN'].includes(code) ? (language === 'fil' ? fil : en) : '' })}
                 type="button"
               >
+                <Clock3 />
                 <strong>{language === 'fil' ? fil : en}</strong>
-                {medicine.food_instruction === value && <Check />}
+                {medicine?.frequency_choice === index && <Check />}
               </button>
             ))}
           </div>
-          <BottomNext onClick={() => setPhase('manual-supply')} tr={tr} />
+          <BottomNext
+            onClick={() => {
+              if (!medicine?.frequency_code) {
+                setError(tr('Choose how often you take this medicine.', 'Piliin kung gaano kadalas iniinom ang gamot.'));
+                return;
+              }
+              const key = String(medicine.id);
+              setMedicineDates((current) => ({
+                ...current,
+                [key]: treatmentDates(medicine.start_date, selectedEndDate),
+              }));
+              setPhase('manual-dates');
+            }}
+            tr={tr}
+          />
         </WizardPage>
       )}
-      {phase === 'manual-supply' && (
-        <WizardPage
-          title={tr('Would you like refill reminders?', 'Gusto mo ba ng paalala sa refill?')}
-        >
-          <div className="pm-wizard__choices">
-            <button
-              className={medicine.refill_reminders ? 'selected' : ''}
-              onClick={() => update({ refill_reminders: true })}
-              type="button"
-            >
-              <strong>{tr('Yes, remind me', 'Oo, paalalahanan ako')}</strong>
-            </button>
-            <button
-              className={!medicine.refill_reminders ? 'selected' : ''}
-              onClick={() => update({ refill_reminders: false, quantity_on_hand: 0 })}
-              type="button"
-            >
-              <strong>{tr('No refill reminder', 'Walang paalala sa refill')}</strong>
-            </button>
-          </div>
-          {medicine.refill_reminders && (
-            <label className="pm-wizard__field">
-              <span>{tr('How many do you have now?', 'Ilan ang mayroon ka ngayon?')}</span>
+      {phase === 'manual-dates' && (
+        <WizardPage title={tr('Which dates should have reminders?', 'Aling mga petsa ang may paalala?')}>
+          <p>{tr('Your reminder dates are generated from this start and end date. You can still select specific days below.', 'Awtomatikong ginagawa ang mga petsa ng paalala mula sa simula at huling petsa. Maaari ka pa ring pumili ng partikular na araw sa ibaba.')}</p>
+          <div className="pm-wizard__manual-date-range">
+            <label>
+              <span>{tr('Start date', 'Petsa ng simula')}</span>
               <input
-                inputMode="numeric"
-                min="0"
-                onChange={(event) => update({ quantity_on_hand: event.target.value })}
-                type="number"
-                value={medicine.quantity_on_hand}
+                min={today()}
+                onChange={(event) =>
+                  updateManualTreatmentDates({ start_date: event.target.value })
+                }
+                type="date"
+                value={medicine?.start_date || today()}
               />
             </label>
-          )}
-          <BottomNext onClick={() => setPhase('manual-instructions')} tr={tr} />
+            <label>
+              <span>{tr('End date', 'Petsa ng pagtatapos')}</span>
+              <select
+                onChange={(event) => {
+                  const duration = event.target.value;
+                  updateManualTreatmentDates({
+                    duration,
+                    end_date:
+                      duration === 'END_DATE'
+                        ? medicine?.end_date || medicine?.start_date || today()
+                        : '',
+                  });
+                }}
+                value={medicine?.duration || 'ONGOING'}
+              >
+                <option value="ONGOING">{tr('Ongoing (no end date)', 'Tuloy-tuloy (walang huling petsa)')}</option>
+                <option value="7">{tr('After 7 days', 'Pagkatapos ng 7 araw')}</option>
+                <option value="14">{tr('After 14 days', 'Pagkatapos ng 14 araw')}</option>
+                <option value="30">{tr('After 30 days', 'Pagkatapos ng 30 araw')}</option>
+                <option value="END_DATE">{tr('Choose a date', 'Pumili ng petsa')}</option>
+              </select>
+              {medicine?.duration === 'END_DATE' && (
+                <input
+                  min={medicine?.start_date || today()}
+                  onChange={(event) => updateManualTreatmentDates({ end_date: event.target.value })}
+                  type="date"
+                  value={medicine?.end_date || medicine?.start_date || today()}
+                />
+              )}
+            </label>
+          </div>
+          <MedicineDayEditor
+            allowAnyDate={!selectedEndDate}
+            allDates={treatmentDates(medicine.start_date, selectedEndDate)}
+            onChange={(dates) => setMedicineDates((current) => ({ ...current, [String(medicine.id)]: dates }))}
+            selectedDates={medicineDates[String(medicine.id)] || [medicine.start_date]}
+            tr={tr}
+          />
+          <BottomNext onClick={startManualTimeQuestions} tr={tr} />
         </WizardPage>
       )}
       {phase === 'manual-instructions' && (
@@ -1806,32 +1930,15 @@ export default function AutomatedAddMedication() {
               'Piliin ang mga petsa at oras ng paalala sa ibaba.'
             )}
           </p>
-          <div
-            id="pm-edit-dates"
-            tabIndex={-1}
-            className="pm-correction-target"
-            aria-invalid={scheduleIssue === 'INVALID_DATE_RANGE'}
-            aria-describedby={
-              scheduleIssue === 'INVALID_DATE_RANGE' ? 'pm-schedule-error' : undefined
+          <MedicineDayEditor
+            allowAnyDate={!selectedEndDate}
+            allDates={treatmentDates(medicine.start_date, selectedEndDate)}
+            onChange={(dates) =>
+              setMedicineDates((current) => ({ ...current, [String(medicine.id)]: dates }))
             }
-          >
-            <MedicineDayEditor
-              allDates={treatmentDates(medicine.start_date, selectedEndDate)}
-              onChange={(dates) =>
-                setMedicineDates((current) => ({
-                  ...current,
-                  [String(editingMedicine?.drug_id || editingMedicine?.name || intake.drug_id)]:
-                    dates,
-                }))
-              }
-              selectedDates={
-                medicineDates[
-                  String(editingMedicine?.drug_id || editingMedicine?.name || intake.drug_id)
-                ] || treatmentDates(medicine.start_date, selectedEndDate)
-              }
-              tr={tr}
-            />
-          </div>
+            selectedDates={medicineDates[String(medicine.id)] || [medicine.start_date]}
+            tr={tr}
+          />
           <section
             id="pm-edit-times"
             tabIndex={-1}
@@ -2062,62 +2169,43 @@ export default function AutomatedAddMedication() {
               </div>
             </aside>
           )}
-          {source === 'suggested' && (
-            <aside className="pm-wizard__warning">
-              <Info />
-              <span>
-                {tr(
-                  schedule?.disclaimer ||
-                    'PharMate checks recorded rules and creates reminder times only. It does not guarantee that a medicine or schedule is medically safe or replace a licensed clinician or pharmacist.',
-                  'Sinusuri lamang ng PharMate ang mga naitalang tuntunin at gumagawa ng oras ng paalala. Hindi nito ginagarantiya na medikal na ligtas ang gamot o iskedyul at hindi nito pinapalitan ang lisensyadong clinician o parmasyutiko.'
-                )}
-              </span>
-            </aside>
-          )}
           {schedule?.prn_trackers?.length > 0 && (
-            <aside className="pm-wizard__warning">
+            <aside className="pm-wizard__warning pm-wizard__prn-guide">
               <Info />
               <div>
                 <strong>
                   {tr(
-                    'As-needed tracker — no recurring alarms',
-                    'Tracker kapag kailangan — walang paulit-ulit na alarm'
+                    'Take only when needed',
+                    'Inumin lamang kapag kailangan'
                   )}
                 </strong>
                 {schedule.prn_trackers.map((tracker) => (
-                  <span key={tracker.drug_id}>
-                    {tracker.name}: {tracker.directions}.{' '}
-                    {tracker.min_interval_hours
-                      ? tr(
-                          `Wait at least ${tracker.min_interval_hours} hours between doses.`,
-                          `Maghintay ng hindi bababa sa ${tracker.min_interval_hours} oras sa pagitan ng dose.`
-                        )
-                      : tr(
-                          'PharMate will not calculate the next safe dose.',
-                          'Hindi kakalkulahin ng PharMate ang susunod na ligtas na dose.'
-                        )}
-                  </span>
+                  <div className="pm-wizard__prn-item" key={tracker.drug_id}>
+                    <b>{tracker.name}</b>
+                    <span>
+                      {tracker.directions ||
+                        tr('Use as directed on the label.', 'Gamitin ayon sa label.')}
+                    </span>
+                    <span>
+                      {tracker.min_interval_hours
+                        ? tr(
+                            `Wait at least ${tracker.min_interval_hours} hours before another dose.`,
+                            `Maghintay nang hindi bababa sa ${tracker.min_interval_hours} oras bago ang susunod na dose.`
+                          )
+                        : tr(
+                            'Follow the time instructions on the label.',
+                            'Sundin ang oras na nakasaad sa label.'
+                          )}
+                    </span>
+                  </div>
                 ))}
+                <small>
+                  {tr(
+                    'No daily alarm will be set for this medicine.',
+                    'Walang araw-araw na alarm para sa gamot na ito.'
+                  )}
+                </small>
               </div>
-            </aside>
-          )}
-          {schedule?.warnings
-            ?.filter((item) => item.severity === 'warning')
-            .map((item) => (
-              <aside className="pm-wizard__warning" key={`${item.code}-${item.drug_id || ''}`}>
-                <Info />
-                <span>{item.message}</span>
-              </aside>
-            ))}
-          {source === 'manual' && (
-            <aside className="pm-wizard__warning">
-              <Info />
-              <span>
-                {tr(
-                  'Created by you. Check that your selected times match the medicine label or prescription. Ask your pharmacist if you are unsure.',
-                  'Ikaw ang gumawa nito. Tiyaking tugma ang napiling oras sa label o reseta. Magtanong sa parmasyutiko kung hindi sigurado.'
-                )}
-              </span>
             </aside>
           )}
           <MedicineScheduleEditors
@@ -2132,31 +2220,6 @@ export default function AutomatedAddMedication() {
             source={source}
             tr={tr}
           />
-          <button className="pm-wizard__secondary" onClick={askPharmacist} type="button">
-            <ShieldCheck />
-            {tr('Ask a Pharmacist', 'Magtanong sa Parmasyutiko')}
-          </button>
-          <button
-            className="pm-wizard__add-medicine-review"
-            onClick={addAnotherMedicine}
-            type="button"
-          >
-            <Plus />
-            {tr('Add another medicine', 'Magdagdag ng isa pang gamot')}
-          </button>
-          <div className="pm-wizard__review-actions">
-            <button
-              onClick={() => {
-                setConfirmed(false);
-                setError('');
-                setPhase('schedule-choice');
-              }}
-              type="button"
-            >
-              <CalendarClock />
-              {tr('Change Scheduling Method', 'Palitan ang Paraan ng Pag-iskedyul')}
-            </button>
-          </div>
           {(schedule?.schedule?.length > 0 || schedule?.prn_trackers?.length > 0) && (
             <>
               {needsLabelConfirmation && (
@@ -2211,9 +2274,33 @@ export default function AutomatedAddMedication() {
               </button>
             </>
           )}
-          <button className="pm-wizard__secondary" onClick={back} type="button">
-            {tr('Go Back', 'Bumalik')}
-          </button>
+          <details className="pm-wizard__review-more">
+            <summary>{tr('Need help or changes?', 'Kailangan ng tulong o pagbabago?')}</summary>
+            <div>
+              <button onClick={askPharmacist} type="button">
+                <ShieldCheck />
+                {tr('Ask a Pharmacist', 'Magtanong sa Parmasyutiko')}
+              </button>
+              <button onClick={addAnotherMedicine} type="button">
+                <Plus />
+                {tr('Add another medicine', 'Magdagdag ng isa pang gamot')}
+              </button>
+              <button
+                onClick={() => {
+                  setConfirmed(false);
+                  setError('');
+                  setPhase('schedule-choice');
+                }}
+                type="button"
+              >
+                <CalendarClock />
+                {tr('Change scheduling method', 'Palitan ang paraan ng pag-iskedyul')}
+              </button>
+              <button onClick={discardSetupAndLeave} type="button">
+                {tr('Go back', 'Bumalik')}
+              </button>
+            </div>
+          </details>
         </WizardPage>
       )}
       {phase === 'success' && (
@@ -2242,16 +2329,16 @@ export default function AutomatedAddMedication() {
           </button>
         </WizardPage>
       )}
-      {confirmation && (
+      {confirmation && createPortal(
         <div className="pm-confirm-backdrop" role="presentation">
           <section
             aria-labelledby="pm-confirm-title"
             aria-modal="true"
-            className="pm-confirm-dialog"
+            className={`pm-confirm-dialog${/delete|burahin/i.test(confirmation.title) ? ' pm-confirm-dialog--delete' : ''}`}
             role="alertdialog"
           >
             <span className="pm-confirm-dialog__icon">
-              <Info />
+              {/delete|burahin/i.test(confirmation.title) ? <Trash2 /> : <Info />}
             </span>
             <h2 id="pm-confirm-title">{confirmation.title}</h2>
             <p>{confirmation.message}</p>
@@ -2264,7 +2351,8 @@ export default function AutomatedAddMedication() {
               </button>
             </div>
           </section>
-        </div>
+        </div>,
+        document.body
       )}
     </main>
   );
@@ -2273,9 +2361,20 @@ export default function AutomatedAddMedication() {
 function WizardPage({ title, children, className = '' }) {
   return (
     <section className={`pm-wizard__card ${className}`.trim()}>
-      <h2>{title}</h2>
+      {title && <h2>{title}</h2>}
       {children}
     </section>
+  );
+}
+function GenerationError({ error, onCheck, tr }) {
+  return (
+    <div className="pm-wizard__error" role="alert">
+      <Info />
+      <span>{error}</span>
+      <button onClick={onCheck} type="button">
+        {tr('Check medicine details', 'Suriin ang detalye ng gamot')}
+      </button>
+    </div>
   );
 }
 function BottomNext({ onClick, tr }) {
@@ -2303,6 +2402,13 @@ export function FriendlyTimePicker({ onChange, tr, value }) {
   const hour24 = Number(hourText);
   const period = hour24 >= 12 ? 'PM' : 'AM';
   const hour12 = hour24 % 12 || 12;
+  const pickerId = useId();
+  const [typedHour, setTypedHour] = useState(String(hour12).padStart(2, '0'));
+  const [typedMinute, setTypedMinute] = useState(String(minute).padStart(2, '0'));
+  useEffect(() => {
+    setTypedHour(String(hour12).padStart(2, '0'));
+    setTypedMinute(String(minute).padStart(2, '0'));
+  }, [hour12, minute]);
   const minuteOptions = [
     ...new Set([
       ...Array.from({ length: 12 }, (_, index) => String(index * 5).padStart(2, '0')),
@@ -2310,42 +2416,58 @@ export function FriendlyTimePicker({ onChange, tr, value }) {
     ]),
   ].sort();
   function updateTime(nextHour = hour12, nextMinute = minute, nextPeriod = period) {
-    let next24 = Number(nextHour) % 12;
+    const safeHour = Math.min(12, Math.max(1, Number(nextHour) || hour12));
+    const safeMinute = Math.min(59, Math.max(0, Number(nextMinute) || 0));
+    let next24 = safeHour % 12;
     if (nextPeriod === 'PM') next24 += 12;
-    onChange(`${String(next24).padStart(2, '0')}:${nextMinute}`);
+    onChange(`${String(next24).padStart(2, '0')}:${String(safeMinute).padStart(2, '0')}`);
   }
   return (
     <div className="pm-friendly-time-picker" aria-label={tr('Reminder time', 'Oras ng paalala')}>
       <span>
         <Clock3 />
       </span>
-      <select
+      <input
         aria-label={tr('Hour', 'Oras')}
-        onChange={(event) => updateTime(event.target.value)}
-        value={hour12}
-      >
+        inputMode="numeric"
+        list={`${pickerId}-hours`}
+        max="12"
+        min="1"
+        onBlur={() => updateTime(typedHour, typedMinute)}
+        onChange={(event) => setTypedHour(event.target.value.replace(/\D/g, '').slice(0, 2))}
+        type="text"
+        value={typedHour}
+      />
+      <datalist id={`${pickerId}-hours`}>
         {Array.from({ length: 12 }, (_, index) => index + 1).map((hour) => (
           <option key={hour} value={hour}>
             {String(hour).padStart(2, '0')}
           </option>
         ))}
-      </select>
+      </datalist>
       <b>:</b>
-      <select
+      <input
         aria-label={tr('Minute', 'Minuto')}
-        onChange={(event) => updateTime(hour12, event.target.value)}
-        value={minute}
-      >
+        inputMode="numeric"
+        list={`${pickerId}-minutes`}
+        max="59"
+        min="0"
+        onBlur={() => updateTime(typedHour, typedMinute)}
+        onChange={(event) => setTypedMinute(event.target.value.replace(/\D/g, '').slice(0, 2))}
+        type="text"
+        value={typedMinute}
+      />
+      <datalist id={`${pickerId}-minutes`}>
         {minuteOptions.map((item) => (
           <option key={item} value={item}>
             {item}
           </option>
         ))}
-      </select>
+      </datalist>
       <select
         aria-label={tr('AM or PM', 'AM o PM')}
         className="period"
-        onChange={(event) => updateTime(hour12, minute, event.target.value)}
+        onChange={(event) => updateTime(typedHour, typedMinute, event.target.value)}
         value={period}
       >
         <option>AM</option>
@@ -2354,22 +2476,78 @@ export function FriendlyTimePicker({ onChange, tr, value }) {
     </div>
   );
 }
-function MedicineDayEditor({ allDates, onChange, selectedDates, tr }) {
+function MedicineDayEditor({ allowAnyDate = false, allDates, onChange, selectedDates, tr }) {
   const selected = new Set(selectedDates);
-  const firstDate = allDates[0] ? new Date(`${allDates[0]}T00:00:00`) : new Date();
-  const lastDate = allDates.length ? new Date(`${allDates.at(-1)}T00:00:00`) : firstDate;
-  const monthLabel =
-    firstDate.getMonth() === lastDate.getMonth() &&
-    firstDate.getFullYear() === lastDate.getFullYear()
-      ? firstDate.toLocaleDateString([], { month: 'long', year: 'numeric' })
-      : `${firstDate.toLocaleDateString([], { month: 'short' })} – ${lastDate.toLocaleDateString([], { month: 'short', year: 'numeric' })}`;
-  const blanks = Array.from({ length: firstDate.getDay() }, (_, index) => index);
+  const todayKey = today();
+  const configuredFirstDate = allDates[0] || todayKey;
+  const firstAllowedDate = configuredFirstDate < todayKey ? todayKey : configuredFirstDate;
+  const firstDate = new Date(`${firstAllowedDate}T00:00:00`);
+  const configuredLastDate = allDates.length ? new Date(`${allDates.at(-1)}T00:00:00`) : firstDate;
+  const lastDate = allowAnyDate
+    ? new Date(Math.max(configuredLastDate.getTime(), firstDate.getTime() + 365 * 24 * 60 * 60 * 1000))
+    : configuredLastDate;
+  const [visibleMonth, setVisibleMonth] = useState(
+    () => new Date(firstDate.getFullYear(), firstDate.getMonth(), 1)
+  );
+  useEffect(() => {
+    setVisibleMonth(new Date(firstDate.getFullYear(), firstDate.getMonth(), 1));
+  }, [allDates[0]]);
+  const monthStart = new Date(visibleMonth.getFullYear(), visibleMonth.getMonth(), 1);
+  const daysInMonth = new Date(visibleMonth.getFullYear(), visibleMonth.getMonth() + 1, 0).getDate();
+  const blanks = Array.from({ length: monthStart.getDay() }, (_, index) => index);
+  const canMoveBack =
+    monthStart.getFullYear() > firstDate.getFullYear() ||
+    (monthStart.getFullYear() === firstDate.getFullYear() && monthStart.getMonth() > firstDate.getMonth());
+  const canMoveForward =
+    monthStart.getFullYear() < lastDate.getFullYear() ||
+    (monthStart.getFullYear() === lastDate.getFullYear() && monthStart.getMonth() < lastDate.getMonth());
+  const monthOptions = [];
+  for (
+    let cursor = new Date(firstDate.getFullYear(), firstDate.getMonth(), 1);
+    cursor <= lastDate;
+    cursor = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1)
+  ) {
+    monthOptions.push(new Date(cursor));
+  }
+  const dateKey = (date) =>
+    `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
   return (
     <section className="pm-wizard__day-editor pm-wizard__date-picker">
       <header>
         <div>
           <h3>{tr('Choose dates', 'Pumili ng mga petsa')}</h3>
-          <strong>{monthLabel}</strong>
+          <div className="pm-date-picker__month-control">
+            <button
+              aria-label={tr('Previous month', 'Nakaraang buwan')}
+              disabled={!canMoveBack}
+              onClick={() => setVisibleMonth((current) => new Date(current.getFullYear(), current.getMonth() - 1, 1))}
+              type="button"
+            >
+              ‹
+            </button>
+            <select
+              aria-label={tr('Choose month', 'Pumili ng buwan')}
+              onChange={(event) => {
+                const [year, month] = event.target.value.split('-').map(Number);
+                setVisibleMonth(new Date(year, month - 1, 1));
+              }}
+              value={`${visibleMonth.getFullYear()}-${String(visibleMonth.getMonth() + 1).padStart(2, '0')}`}
+            >
+              {monthOptions.map((month) => (
+                <option key={month.toISOString()} value={`${month.getFullYear()}-${String(month.getMonth() + 1).padStart(2, '0')}`}>
+                  {month.toLocaleDateString([], { month: 'long', year: 'numeric' })}
+                </option>
+              ))}
+            </select>
+            <button
+              aria-label={tr('Next month', 'Susunod na buwan')}
+              disabled={!canMoveForward}
+              onClick={() => setVisibleMonth((current) => new Date(current.getFullYear(), current.getMonth() + 1, 1))}
+              type="button"
+            >
+              ›
+            </button>
+          </div>
         </div>
         <small>
           {tr(`${selectedDates.length} selected`, `${selectedDates.length} ang napili`)}
@@ -2384,22 +2562,110 @@ function MedicineDayEditor({ allDates, onChange, selectedDates, tr }) {
         {blanks.map((blank) => (
           <i aria-hidden="true" key={`blank-${blank}`} />
         ))}
-        {allDates.map((date) => {
-          const parsed = new Date(`${date}T00:00:00`);
+        {Array.from({ length: daysInMonth }, (_, index) => index + 1).map((day) => {
+          const parsed = new Date(visibleMonth.getFullYear(), visibleMonth.getMonth(), day);
+          const date = dateKey(parsed);
+          const available =
+            date >= todayKey &&
+            (allowAnyDate || (date >= firstAllowedDate && date <= allDates.at(-1)));
           return (
-            <label className={selected.has(date) ? 'selected' : ''} key={date}>
-              <input
-                checked={selected.has(date)}
-                onChange={() => {
+            <button
+              aria-label={`${parsed.toLocaleDateString([], { month: 'long', day: 'numeric', year: 'numeric' })}${selected.has(date) ? `, ${tr('selected', 'napili')}` : ''}`}
+              aria-pressed={selected.has(date)}
+              className={`${selected.has(date) ? 'selected' : ''} ${available ? '' : 'unavailable'}`.trim()}
+              disabled={!available}
+              key={date}
+              onClick={() => {
                   const next = selected.has(date)
                     ? selectedDates.filter((item) => item !== date)
                     : [...selectedDates, date].sort();
                   if (next.length) onChange(next);
-                }}
-                type="checkbox"
-              />
-              <strong>{parsed.getDate()}</strong>
-            </label>
+              }}
+              type="button"
+            >
+              <strong>{day}</strong>
+            </button>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+function TreatmentEndDateCalendar({ endDate, onChange, startDate, tr }) {
+  const [visibleMonth, setVisibleMonth] = useState(() => {
+    const source = endDate || startDate || today();
+    const parsed = new Date(`${source}T00:00:00`);
+    return new Date(parsed.getFullYear(), parsed.getMonth(), 1);
+  });
+  const first = new Date(visibleMonth.getFullYear(), visibleMonth.getMonth(), 1);
+  const lastDay = new Date(visibleMonth.getFullYear(), visibleMonth.getMonth() + 1, 0).getDate();
+  const monthLabel = first.toLocaleDateString([], { month: 'long', year: 'numeric' });
+  const keyFor = (date) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+  const canGoBack =
+    first.getFullYear() > new Date(`${startDate}T00:00:00`).getFullYear() ||
+    (first.getFullYear() === new Date(`${startDate}T00:00:00`).getFullYear() &&
+      first.getMonth() > new Date(`${startDate}T00:00:00`).getMonth());
+  const selectedCount = endDate ? treatmentDates(startDate, endDate).length : 0;
+  return (
+    <section className="pm-wizard__date-picker pm-treatment-calendar">
+      <header>
+        <div>
+          <h3>{tr('Choose end date', 'Piliin ang huling petsa')}</h3>
+          <strong>{monthLabel}</strong>
+        </div>
+        <small>
+          {selectedCount
+            ? tr(`${selectedCount} days`, `${selectedCount} araw`)
+            : tr('Select a day', 'Pumili ng araw')}
+        </small>
+      </header>
+      <div className="pm-treatment-calendar__nav">
+        <button
+          aria-label={tr('Previous month', 'Nakaraang buwan')}
+          disabled={!canGoBack}
+          onClick={() => setVisibleMonth(new Date(first.getFullYear(), first.getMonth() - 1, 1))}
+          type="button"
+        >
+          <ChevronLeft />
+        </button>
+        <span>{tr('Tap the last day', 'Pindutin ang huling araw')}</span>
+        <button
+          aria-label={tr('Next month', 'Susunod na buwan')}
+          onClick={() => setVisibleMonth(new Date(first.getFullYear(), first.getMonth() + 1, 1))}
+          type="button"
+        >
+          <ChevronRight />
+        </button>
+      </div>
+      <div className="pm-date-picker__weekdays">
+        {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((day, index) => (
+          <span key={`${day}-${index}`}>{day}</span>
+        ))}
+      </div>
+      <div className="pm-date-picker__days">
+        {Array.from({ length: first.getDay() }, (_, index) => (
+          <i aria-hidden="true" key={`blank-${index}`} />
+        ))}
+        {Array.from({ length: lastDay }, (_, index) => {
+          const date = new Date(first.getFullYear(), first.getMonth(), index + 1);
+          const value = keyFor(date);
+          const disabled = value < startDate;
+          return (
+            <button
+              aria-pressed={value === endDate}
+              className={value === endDate ? 'selected' : ''}
+              disabled={disabled}
+              key={value}
+              onClick={() => onChange(value)}
+              type="button"
+            >
+              {index + 1}
+            </button>
           );
         })}
       </div>
@@ -2915,6 +3181,12 @@ function ScheduleTimeline({
                   <small>
                     {item.strength || intake?.custom_strength} · {intake?.dosage_instruction}
                   </small>
+                  {item.food_instruction &&
+                    !/^(no food instruction|follow your medicine label)/i.test(
+                      item.food_instruction
+                    ) && (
+                    <small>{item.food_instruction}</small>
+                  )}
                 </div>
               </div>
             </article>
@@ -2931,38 +3203,12 @@ function ScheduleTimeline({
           <summary>{tr('Why these times?', 'Bakit ganito ang mga oras?')}</summary>
           <p>
             {tr(
-              'PharMate used the frequency and instructions you entered.',
-              'Ginamit ng PharMate ang dalas at mga tagubiling inilagay mo.'
+              'Based on the schedule you selected and your daily routine.',
+              'Batay sa napili mong iskedyul at araw-araw mong routine.'
             )}
           </p>
         </details>
       )}
     </section>
-  );
-}
-function GenerationError({ error, onCheck, onEdit, onAsk, tr }) {
-  return (
-    <div className="pm-wizard__generation-error" role="alert">
-      <Info />
-      <div>
-        <h3>{tr('We need more information', 'Kailangan namin ng dagdag na impormasyon')}</h3>
-        <p>
-          {tr(
-            'PharMate could not create a suggested schedule from the available medicine instructions. Check the medicine label or prescription, create the schedule yourself, or ask your pharmacist.',
-            'Hindi makagawa ang PharMate ng mungkahing iskedyul mula sa available na tagubilin. Suriin ang label o reseta, gumawa ng sariling iskedyul, o magtanong sa parmasyutiko.'
-          )}
-        </p>
-        {error && <small>{error}</small>}
-        <button onClick={onCheck} type="button">
-          {tr('Check Medicine Details', 'Suriin ang Detalye ng Gamot')}
-        </button>
-        <button onClick={onEdit} type="button">
-          {tr('Create Manual Schedule', 'Gumawa ng Manwal na Iskedyul')}
-        </button>
-        <button onClick={onAsk} type="button">
-          {tr('Ask a Pharmacist', 'Magtanong sa Parmasyutiko')}
-        </button>
-      </div>
-    </div>
   );
 }

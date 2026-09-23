@@ -34,6 +34,7 @@ export default function Alerts() {
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [selectedAlert, setSelectedAlert] = useState(null);
   const load = useCallback(async () => {
     setLoading(true);
     try {
@@ -70,6 +71,7 @@ export default function Alerts() {
     ['Warnings', data.counts.warning || 0, CircleAlert, 'amber'],
     ['Information', data.counts.info || 0, CheckCircle2, 'green'],
   ];
+  const SelectedIcon = selectedAlert ? TYPES[selectedAlert.type]?.[1] || BellRing : BellRing;
   return (
     <section className="admin-alert-workspace">
       <header className="admin-alert-heading">
@@ -167,7 +169,7 @@ export default function Alerts() {
                     <p>{alert.description}</p>
                     <small>{new Date(alert.created_at).toLocaleString()}</small>
                   </div>
-                  <button onClick={() => navigate(alert.navigate_to)} type="button">
+                  <button onClick={() => setSelectedAlert(alert)} type="button">
                     Review <ArrowRight size={16} />
                   </button>
                 </article>
@@ -182,6 +184,70 @@ export default function Alerts() {
           )}
         </div>
       </div>
+      {selectedAlert && (
+        <div
+          className="admin-alert-detail-backdrop"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setSelectedAlert(null);
+          }}
+        >
+          <section
+            aria-labelledby="admin-alert-detail-title"
+            aria-modal="true"
+            className="admin-alert-detail"
+            role="dialog"
+          >
+            <button
+              aria-label="Close alert details"
+              className="admin-alert-detail__close"
+              onClick={() => setSelectedAlert(null)}
+              type="button"
+            >
+              <X size={20} />
+            </button>
+            <span className={`alert-icon is-${selectedAlert.severity}`}>
+              <SelectedIcon size={22} />
+            </span>
+            <span className={`severity is-${selectedAlert.severity}`}>{selectedAlert.severity}</span>
+            <h2 id="admin-alert-detail-title">{selectedAlert.title}</h2>
+            <p>{selectedAlert.description}</p>
+            <dl>
+              <div>
+                <dt>Status</dt>
+                <dd>{String(selectedAlert.status || 'open').replaceAll('_', ' ')}</dd>
+              </div>
+              <div>
+                <dt>Created</dt>
+                <dd>{new Date(selectedAlert.created_at).toLocaleString()}</dd>
+              </div>
+              {selectedAlert.patient_code && (
+                <div>
+                  <dt>Patient reference</dt>
+                  <dd>{selectedAlert.patient_code}</dd>
+                </div>
+              )}
+            </dl>
+            {selectedAlert.navigate_to !== '/admin/alerts' ? (
+              <button
+                className="admin-alert-detail__action"
+                onClick={() => {
+                  navigate(selectedAlert.navigate_to);
+                  setSelectedAlert(null);
+                }}
+                type="button"
+              >
+                Open related workspace <ArrowRight size={17} />
+              </button>
+            ) : (
+              <p className="admin-alert-detail__note">
+                This alert is being monitored here. Prescription and adherence follow-ups are
+                handled by the pharmacist team to protect clinical records.
+              </p>
+            )}
+          </section>
+        </div>
+      )}
     </section>
   );
 }

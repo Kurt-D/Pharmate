@@ -66,7 +66,7 @@
 }
 
 .cg-portal .cg-scroll-area > main > header h1 {
-  color: #2878df;
+  color: #578EF5;
   letter-spacing: -0.025em;
 }
 
@@ -103,7 +103,7 @@
 }
 
 .cg-portal .cg-bottomnav__item.is-active {
-  color: #2878df !important;
+  color: #578EF5 !important;
 }
 
 .cg-portal .cg-bottomnav__item.is-active::before {
@@ -113,7 +113,7 @@
   width: 28px;
   height: 3px;
   border-radius: 0 0 999px 999px;
-  background: #4c8ce4;
+  background: #578EF5;
 }
 
 @media (max-width: 430px) {
@@ -131,8 +131,7 @@
 
 /* Recare-inspired organization with PharMate branding. */
 .cg-portal .cg-shell {
-  background:
-    radial-gradient(circle at 96% 4%, rgba(76, 140, 228, 0.12), transparent 180px), #f5f8fd;
+  background: #f5f8fd;
 }
 
 .cg-portal .cg-scroll-area > main {
@@ -156,7 +155,7 @@
   position: absolute;
   inset: 0 auto 0 0;
   width: 5px;
-  background: #4c8ce4;
+  background: #578EF5;
 }
 
 .cg-portal .cg-home-hero::after {
@@ -167,12 +166,12 @@
   width: 125px;
   height: 125px;
   border-radius: 50%;
-  background: rgba(145, 208, 108, 0.13);
+  background: rgba(23, 105, 245, 0.13);
   pointer-events: none;
 }
 
 .cg-portal .cg-home-hero h1 {
-  color: #2878df !important;
+  color: #578EF5 !important;
   font-size: 1.65rem;
 }
 
@@ -187,7 +186,7 @@
   border: 1px solid #bcd6f8;
   border-radius: 1rem;
   background: #eaf3ff;
-  color: #2878df;
+  color: #578EF5;
   box-shadow: 0 7px 16px rgba(42, 103, 184, 0.12);
 }
 
@@ -204,9 +203,9 @@
 }
 
 .cg-portal .cg-live-status.is-live {
-  border-color: #bfe3b1;
-  background: #f0faeb;
-  color: #28751d;
+  border-color: #bcd9ff;
+  background: #edf5ff;
+  color: #578EF5;
 }
 .cg-portal .cg-live-status.is-preview {
   border-color: #f2da89;
@@ -225,7 +224,7 @@
 
 .cg-portal .cg-patient-switcher {
   position: relative;
-  background: linear-gradient(135deg, #fff 0%, #f7fbff 100%) !important;
+  background: #fff;
 }
 
 .cg-portal .cg-patient-switcher select {
@@ -251,7 +250,7 @@
   right: 1rem;
   height: 3px;
   border-radius: 0 0 999px 999px;
-  background: linear-gradient(90deg, #4c8ce4 0 72%, #91d06c 72% 100%);
+  background: #578EF5;
 }
 
 .cg-portal .cg-timeline-card > div:last-child > article,
@@ -273,11 +272,11 @@
   width: 4px;
   height: 3rem;
   border-radius: 999px;
-  background: #91d06c;
+  background: #578EF5;
 }
 
 .cg-portal .cg-page-header h1 {
-  color: #2878df !important;
+  color: #578EF5 !important;
 }
 
 .cg-portal .cg-smart-reminders {
@@ -321,7 +320,7 @@
 
 .cg-portal .cg-bottomnav__item.is-active svg {
   background: #eaf3ff;
-  color: #2878df;
+  color: #578EF5;
 }
 
 .cg-portal .cg-bottomnav__item.is-active::before {
@@ -356,24 +355,56 @@
 
 /* Reference-inspired caregiver home: bright header, floating selector and compact modules. */
 .cg-portal .cg-home-hero {
-  min-height: 160px;
-  padding: 1.35rem 1.25rem 2.65rem;
-  border: 0;
-  border-radius: 0 0 2rem 2rem;
-  background: #4c8ce4;
+  min-height: 220px;
+  padding: 1.35rem 1.25rem 3.15rem;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 1rem 1rem 1.7rem 1.7rem;
+  background: linear-gradient(135deg, #2d78f5 0%, #1769e8 100%);
   color: #fff;
-  box-shadow: 0 16px 30px rgba(42, 103, 184, 0.22);
+  box-shadow: none;
 }
 
 .cg-portal .cg-home-hero::before {
   display: none;
 }
 .cg-portal .cg-home-hero::after {
-  right: -34px;
-  top: -48px;
-  width: 170px;
-  height: 170px;
-  background: rgba(145, 208, 108, 0.2);
+  right: -30px;
+  top: 74px;
+  width: 138px;
+  height: 138px;
+  background: rgba(18, 79, 197, 0.32);
+}
+.cg-portal .cg-home-hero > * {
+  position: relative;
+  z-index: 1;
+}
+.cg-portal .cg-home-hero__identity {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  min-width: 0;
+  align-items: center;
+}
+.cg-portal .cg-home-hero__identity h1 {
+  max-width: calc(100vw - 8.8rem);
+  overflow-wrap: anywhere;
+  font-size: 1.55rem;
+  line-height: 1.2;
+}
+.cg-portal .cg-home-hero__patient-code {
+  display: block;
+  margin-top: 0.18rem;
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 0.7rem;
+  font-weight: 750;
+  letter-spacing: 0.07em;
+}
+.cg-portal .cg-home-hero__identity p {
+  opacity: 0.72;
+  font-size: 0.62rem !important;
+  font-weight: 800 !important;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
 }
 .cg-portal .cg-home-hero h1 {
   color: #fff !important;
@@ -385,6 +416,8 @@
 }
 .cg-portal .cg-home-hero > p {
   max-width: 290px;
+  margin-top: 1.15rem !important;
+  font-size: 0.88rem !important;
   opacity: 0.9;
 }
 .cg-portal .cg-home-hero__mark {
@@ -397,18 +430,95 @@
   border-color: rgba(255, 255, 255, 0.38) !important;
   background: rgba(255, 255, 255, 0.16) !important;
   color: #fff !important;
+  margin-top: 0.9rem;
+  padding: 0.45rem 0.75rem;
+  font-size: 0.72rem;
 }
 
 .cg-portal .cg-patient-switcher {
   z-index: 2;
-  margin: -2.4rem 0 0;
+  margin: -2.7rem 0 0;
   border: 1px solid #d7e3f1 !important;
   background: #fff !important;
-  box-shadow: 0 16px 32px rgba(45, 75, 116, 0.14) !important;
+  box-shadow: none !important;
 }
+.cg-portal .cg-patient-switcher label > span:first-child {
+  color: #578EF5 !important;
+  font-size: 0.63rem;
+  letter-spacing: 0.08em;
+}
+.cg-portal .cg-schedule-snapshot {
+  display: grid;
+  gap: 0.8rem;
+  padding: 1rem;
+  border: 1px solid #d7e3f1;
+  border-radius: 1.2rem;
+  background: #fff;
+}
+.cg-portal .cg-schedule-snapshot > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+.cg-portal .cg-schedule-snapshot header small {
+  color: #578EF5;
+  font-size: 0.62rem;
+  font-weight: 850;
+  letter-spacing: 0.09em;
+}
+.cg-portal .cg-schedule-snapshot h2 {
+  margin: 0.2rem 0 0;
+  color: #1b3155;
+  font-size: 1rem;
+}
+.cg-portal .cg-schedule-snapshot > header > strong {
+  display: grid;
+  min-width: 2.8rem;
+  min-height: 2.25rem;
+  place-items: center;
+  border-radius: 0.7rem;
+  background: #eef4ff;
+  color: #578EF5;
+  font-size: 0.82rem;
+}
+.cg-portal .cg-schedule-snapshot__timeline {
+  display: grid;
+  gap: 0.55rem;
+}
+.cg-portal .cg-schedule-snapshot__timeline article {
+  display: grid;
+  grid-template-columns: 1.55rem 3.7rem minmax(0, 1fr);
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 3.15rem;
+  padding: 0.5rem;
+  border: 1px solid #e3ebf5;
+  border-radius: 0.8rem;
+  background: #fbfdff;
+}
+.cg-portal .cg-schedule-snapshot__timeline article > span {
+  display: grid;
+  width: 1.45rem;
+  height: 1.45rem;
+  place-items: center;
+  border: 2px solid #a9c7f8;
+  border-radius: 50%;
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 900;
+}
+.cg-portal .cg-schedule-snapshot__timeline article.is-complete > span { border-color: #27ad5f; background: #27ad5f; }
+.cg-portal .cg-schedule-snapshot__timeline article.is-missed > span { border-color: #e56b6b; background: #e56b6b; }
+.cg-portal .cg-schedule-snapshot__timeline time { color: #5a6d87; font-size: 0.68rem; font-weight: 800; }
+.cg-portal .cg-schedule-snapshot__timeline strong,
+.cg-portal .cg-schedule-snapshot__timeline small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cg-portal .cg-schedule-snapshot__timeline strong { color: #243958; font-size: 0.74rem; }
+.cg-portal .cg-schedule-snapshot__timeline small { margin-top: 0.1rem; color: #718198; font-size: 0.62rem; }
+.cg-portal .cg-schedule-snapshot__empty { margin: 0; padding: 0.85rem; border-radius: 0.75rem; background: #f5f8fc; color: #687991; font-size: 0.74rem; text-align: center; }
 
 .cg-portal .cg-adherence-card {
-  background: linear-gradient(145deg, #fff 0%, #f7fbff 100%) !important;
+  background: #fff;
 }
 .cg-portal .cg-checklist-icon {
   display: grid;
@@ -417,7 +527,7 @@
   place-items: center;
   border-radius: 0.85rem;
   background: #eaf3ff;
-  color: #2878df;
+  color: #578EF5;
 }
 .cg-portal .cg-timeline-card {
   background: #fff !important;
@@ -433,59 +543,69 @@
 
 .cg-portal .cg-pharmacy-support {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: 0.8rem;
-  padding: 1rem;
-  border: 1px solid #cde4c3;
-  border-radius: 1.3rem;
-  background: linear-gradient(135deg, #f6fcf2, #fff);
-  box-shadow: 0 10px 24px rgba(55, 111, 42, 0.07);
+  gap: 0.9rem;
+  overflow: hidden;
+  padding: 1.15rem 1rem 1rem;
+  border: 0;
+  border-radius: 1.55rem;
+  background: #578ef5;
+  color: #fff;
+  text-align: center;
 }
-.cg-portal .cg-pharmacy-support > span {
+.cg-portal .cg-pharmacy-support__art {
+  position: relative;
   display: grid;
-  width: 2.8rem;
-  height: 2.8rem;
+  height: 8.5rem;
   place-items: center;
-  border-radius: 0.9rem;
-  background: #91d06c;
-  color: #1b4d08;
+  overflow: hidden;
 }
-.cg-portal .cg-pharmacy-support small {
-  color: #347722;
-  font-size: 0.57rem;
-  font-weight: 800;
-  letter-spacing: 0.07em;
+.cg-portal .cg-pharmacy-support__art::before,
+.cg-portal .cg-pharmacy-support__art::after,
+.cg-portal .cg-pharmacy-support__art i {
+  position: absolute;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.18);
+  content: '';
 }
-.cg-portal .cg-pharmacy-support h2 {
-  margin: 0.15rem 0 0;
-  color: #1e2e4a;
-  font-size: 0.8rem;
-  line-height: 1.35;
+.cg-portal .cg-pharmacy-support__art::before { width: 8rem; height: 8rem; }
+.cg-portal .cg-pharmacy-support__art::after { left: -3rem; bottom: -3.8rem; width: 7.8rem; height: 7.8rem; }
+.cg-portal .cg-pharmacy-support__art i:first-child { right: -2.8rem; top: -3rem; width: 7.4rem; height: 7.4rem; }
+.cg-portal .cg-pharmacy-support__art i:nth-child(2) { right: 14%; bottom: 8%; width: 1rem; height: 1rem; background: rgba(255,255,255,.42); }
+.cg-portal .cg-pharmacy-support__art img {
+  position: relative;
+  z-index: 1;
+  width: 8.8rem;
+  height: 8.8rem;
+  object-fit: contain;
 }
 .cg-portal .cg-pharmacy-support p {
-  margin: 0.25rem 0 0;
-  color: #60708a;
-  font-size: 0.64rem;
-  line-height: 1.45;
-}
-.cg-portal .cg-pharmacy-support button {
-  grid-column: 1/-1;
   display: flex;
-  min-height: 46px;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
   gap: 0.4rem;
-  border: 1px solid #bcd8af;
-  border-radius: 0.8rem;
+  margin: 0.25rem 0 0;
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 0.7rem;
+  font-weight: 600;
+  line-height: 1.45;
+  text-align: left;
+}
+.cg-portal .cg-pharmacy-support button {
+  display: flex;
+  min-height: 3.5rem;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 0.9rem;
   background: #fff;
-  color: #2f7620;
+  color: #578ef5;
   font: inherit;
-  font-size: 0.68rem;
+  font-size: 0.9rem;
   font-weight: 800;
   cursor: pointer;
 }
 .cg-portal .cg-pharmacy-support button:hover {
-  background: #f1faed;
+  background: #f2f7ff;
 }
 
 .cg-portal .pm-a11y-dark-mode .cg-home-hero {
@@ -497,4 +617,36 @@
 }
 .cg-portal .pm-a11y-dark-mode .cg-pharmacy-support h2 {
   color: #eef2f7;
+}
+
+/* PharMate caregiver palette. Keep all primary caregiver states on the
+   patient-app blue rather than mixing several unrelated blue shades. */
+.cg-portal .cg-home-hero {
+  background: linear-gradient(135deg, #578EF5 0%, #578EF5 100%);
+}
+.cg-portal .cg-patient-switcher label > span:first-child,
+.cg-portal .cg-bottomnav__item.is-active,
+.cg-portal .cg-bottomnav__item.is-active svg,
+.cg-portal .cg-page-header h1,
+.cg-portal .cg-scroll-area > main > header h1 {
+  color: #578EF5 !important;
+}
+.cg-portal .cg-bottomnav__item.is-active::after,
+.cg-portal .cg-page-header::before,
+.cg-portal .cg-live-status.is-live,
+.cg-portal .cg-live-status.is-preview {
+  background-color: #578EF5 !important;
+}
+
+/* The primary-blue hero always needs white foreground text for contrast. */
+.cg-portal .cg-home-hero h1,
+.cg-portal .cg-home-hero h1.cg-home-hero__patient-name,
+.cg-portal .cg-home-hero__identity p,
+.cg-portal .cg-home-hero__patient-code,
+.cg-portal .cg-home-hero > p,
+.cg-portal .cg-home-hero .cg-live-status {
+  color: #fff !important;
+}
+.cg-portal .cg-home-hero__patient-code {
+  color: rgba(255, 255, 255, 0.82) !important;
 }

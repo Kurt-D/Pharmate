@@ -19,6 +19,21 @@ import { PushNotifications } from '@capacitor/push-notifications';
 
 const isNative = Capacitor.isNativePlatform();
 
+function preferredSpeechVoice(voices, accessibility) {
+  const languagePattern =
+    accessibility.speechLanguage === 'fil' ? /^(fil|tl)(-|_)/i : /^en(-|_)/i;
+  const languageVoices = voices.filter((voice) => languagePattern.test(voice.lang));
+  const choices = languageVoices.length ? languageVoices : voices;
+  const selected = accessibility.speechVoice || 'female-1';
+  const wantsMale = selected.startsWith('male');
+  const genderPattern = wantsMale
+    ? /\bmale\b|david|mark|james|daniel|george|ryan|guy|alex/i
+    : /\bfemale\b|zira|samantha|aria|jenny|susan|hazel|serena|ava|maria/i;
+  const matching = choices.filter((voice) => genderPattern.test(voice.name));
+  const voiceIndex = selected.endsWith('-2') ? 1 : 0;
+  return matching[voiceIndex] || matching[0] || choices[voiceIndex] || choices[0] || null;
+}
+
 /** Deterministic 31-bit int id from a schedule UUID (LocalNotifications need int ids). */
 function notifId(scheduleId) {
   let h = 0;
@@ -47,27 +62,46 @@ export function speak(text, { onStart, onEnd, onError } = {}) {
       onError?.();
       return false;
     }
-    const u = new SpeechSynthesisUtterance(text);
+    // Message templates and medicine names can meet at a word boundary. Normalize
+    // repeated words before they reach the speech engine (for example, "your your").
+    const spokenText = String(text)
+      .replace(/\b(your|the|a|an)\s+\1\b/gi, '$1')
+      .replace(/\s{2,}/g, ' ')
+      .trim();
+    const u = new SpeechSynthesisUtterance(spokenText);
     // A measured pace, neutral pitch, and full volume make medicine prompts
     // easier to understand for older adults without sounding robotic.
-    u.rate = accessibility.speechRate === 'normal' ? 1 : 0.75;
+    u.rate =
+      accessibility.speechRate === 'veryFast'
+        ? 1.4
+        : accessibility.speechRate === 'fast'
+        ? 1.2
+        : accessibility.speechRate === 'normal'
+          ? 1
+          : 0.75;
     u.pitch = 0.95;
     u.volume = 1;
     u.lang = accessibility.speechLanguage === 'fil' ? 'fil-PH' : 'en-US';
-    const preferredVoice = window.speechSynthesis
-      .getVoices()
-      .find(
-        (voice) =>
-          new RegExp(`^${accessibility.speechLanguage === 'fil' ? 'fil' : 'en'}(-|_)`, 'i').test(
-            voice.lang
-          ) && /female|zira|samantha|aria/i.test(voice.name)
-      );
-    if (preferredVoice) u.voice = preferredVoice;
     u.onstart = () => onStart?.();
     u.onend = () => onEnd?.();
     u.onerror = () => onError?.();
-    window.speechSynthesis.cancel(); // never stack utterances
-    window.speechSynthesis.speak(u);
+    const play = () => {
+      const preferredVoice = preferredSpeechVoice(
+        window.speechSynthesis.getVoices(),
+        accessibility
+      );
+      if (preferredVoice) u.voice = preferredVoice;
+      window.speechSynthesis.cancel(); // never stack utterances
+      window.speechSynthesis.speak(u);
+    };
+    // Some browsers load the installed voices a moment after the page. Waiting
+    // briefly means Filipino prompts can use the actual Filipino device voice
+    // instead of being spoken immediately by the English fallback voice.
+    if (window.speechSynthesis.getVoices().length === 0) {
+      window.setTimeout(play, 180);
+    } else {
+      play();
+    }
     return true;
   } catch {
     onError?.();

@@ -40,6 +40,7 @@ export async function openThread(
     pharmacistId = null,
     drugName = null,
     medicationDraftKey = null,
+    usePriorityToken = false,
   } = {}
 ) {
   const conn = await pool.getConnection();
@@ -58,12 +59,32 @@ export async function openThread(
       }
     }
 
-    // Priority is the patient's verified chronic-condition flag (PART 2), a
-    // boolean derived from prescription validation — never a severity tier.
+    // This is transparent decision support, not automated diagnosis: verified
+    // care need outranks a service token; equal tiers are FIFO in the queue.
     const [[patient]] = await conn.execute('SELECT priority_flag FROM patients WHERE id = ?', [
       patientId,
     ]);
-    const priority = patient?.priority_flag ? 'high' : 'normal';
+    let priorityTier = patient?.priority_flag ? 'care' : 'standard';
+    let priorityReason = patient?.priority_flag ? 'Verified care priority' : null;
+    let priorityTokens = null;
+    if (usePriorityToken && priorityTier === 'standard') {
+      const [[streak]] = await conn.execute(
+        'SELECT priority_tokens FROM patient_streaks WHERE patient_id=? FOR UPDATE',
+        [patientId]
+      );
+      if (!streak || Number(streak.priority_tokens) < 1) {
+        await conn.rollback();
+        return { error: 'priority_token_unavailable' };
+      }
+      await conn.execute(
+        'UPDATE patient_streaks SET priority_tokens=priority_tokens-1, updated_at=NOW(3) WHERE patient_id=?',
+        [patientId]
+      );
+      priorityTier = 'token';
+      priorityReason = 'Patient used one earned Priority Token';
+      priorityTokens = Number(streak.priority_tokens) - 1;
+    }
+    const priority = priorityTier === 'standard' ? 'normal' : 'high';
 
     if (pharmacistId) {
       const [[pharmacist]] = await conn.execute(
@@ -79,15 +100,15 @@ export async function openThread(
     const id = uuidv4();
     await conn.execute(
       `INSERT INTO inquiry_threads
-       (id, patient_id, branch_id, requested_pharmacist_id, status, priority, subject,
+       (id, patient_id, branch_id, requested_pharmacist_id, status, priority, priority_tier, priority_reason, subject,
         medication_draft_key,consent_policy_version,consent_accepted_at)
-     VALUES (?, ?, ?, ?, 'open', ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, 'open', ?, ?, ?, ?, ?, ?, ?)`,
       [
         id,
         patientId,
         branchId,
         pharmacistId,
-        priority,
+        priority, priorityTier, priorityReason,
         subject,
         medicationDraftKey,
         consent.policy_version,
@@ -95,7 +116,7 @@ export async function openThread(
       ]
     );
     await conn.commit();
-    return { thread_id: id, priority, validation_status: 'awaiting_pharmacist' };
+    return { thread_id: id, priority, priority_tier: priorityTier, priority_tokens: priorityTokens, validation_status: 'awaiting_pharmacist' };
   } catch (error) {
     await conn.rollback();
     throw error;
@@ -145,6 +166,36 @@ export async function acceptInquiry(threadId, pharmacistId) {
   }
 }
 
+/** Pharmacist-only escalation for an exceptional safety concern; never automated. */
+export async function markInquiryUrgent(threadId, pharmacistId, reason) {
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const [[thread]] = await conn.execute(
+      `SELECT id,patient_id,status,branch_id,pharmacist_id,requested_pharmacist_id
+       FROM inquiry_threads WHERE id=? FOR UPDATE`,
+      [threadId]
+    );
+    if (!thread || thread.status !== 'open' || !(await eligiblePharmacist(thread, pharmacistId, conn))) {
+      await conn.rollback();
+      return { error: 'not_found' };
+    }
+    await conn.execute(
+      `UPDATE inquiry_threads
+       SET priority='high',priority_tier='urgent',priority_reason=?,priority_set_by=?,priority_set_at=NOW(3)
+       WHERE id=?`,
+      [reason, pharmacistId, threadId]
+    );
+    await conn.commit();
+    return { id: threadId, patient_id: thread.patient_id, priority: 'high', priority_tier: 'urgent', priority_reason: reason };
+  } catch (error) {
+    await conn.rollback();
+    throw error;
+  } finally {
+    conn.release();
+  }
+}
+
 /** Append a message. Only the thread's patient (or the assigned pharmacist) may post. */
 export async function postMessage(threadId, senderRole, senderId, message) {
   if (!['patient', 'pharmacist'].includes(senderRole)) return { error: 'not_found' };
@@ -152,7 +203,7 @@ export async function postMessage(threadId, senderRole, senderId, message) {
   try {
     await conn.beginTransaction();
     const [[thread]] = await conn.execute(
-      `SELECT patient_id, branch_id, pharmacist_id, requested_pharmacist_id, status FROM inquiry_threads
+      `SELECT patient_id, branch_id, pharmacist_id, requested_pharmacist_id, status, patient_completed_at, pharmacist_completed_at FROM inquiry_threads
        WHERE id = ? FOR UPDATE`,
       [threadId]
     );
@@ -172,7 +223,7 @@ export async function postMessage(threadId, senderRole, senderId, message) {
         ]);
       }
     }
-    if (thread.status !== 'open') {
+    if (thread.status !== 'open' || thread.patient_completed_at || thread.pharmacist_completed_at) {
       await conn.rollback();
       return { error: 'closed' };
     }
@@ -251,7 +302,8 @@ export async function closeThread(threadId, closerRole, closerId) {
   try {
     await conn.beginTransaction();
     const [[thread]] = await conn.execute(
-      `SELECT patient_id, pharmacist_id FROM inquiry_threads WHERE id = ? FOR UPDATE`,
+      `SELECT patient_id, pharmacist_id, status, patient_completed_at, pharmacist_completed_at
+       FROM inquiry_threads WHERE id = ? FOR UPDATE`,
       [threadId]
     );
     const ownsThread =
@@ -263,24 +315,37 @@ export async function closeThread(threadId, closerRole, closerId) {
       await conn.rollback();
       return { error: 'not_found' };
     }
-    await conn.execute(
-      "UPDATE inquiry_threads SET status = 'closed', closed_at = NOW(3) WHERE id = ?",
-      [threadId]
-    );
+    if (thread.status === 'closed') {
+      await conn.commit();
+      return { closed: true, idempotent: true };
+    }
+    const completionColumn = closerRole === 'patient' ? 'patient_completed_at' : 'pharmacist_completed_at';
+    await conn.execute(`UPDATE inquiry_threads SET ${completionColumn} = COALESCE(${completionColumn}, NOW(3)) WHERE id = ?`, [threadId]);
+    const patientCompleted = Boolean(thread.patient_completed_at) || closerRole === 'patient';
+    const pharmacistCompleted = Boolean(thread.pharmacist_completed_at) || closerRole === 'pharmacist';
+    const closed = patientCompleted && pharmacistCompleted;
+    if (closed) {
+      await conn.execute("UPDATE inquiry_threads SET status = 'closed', closed_at = NOW(3) WHERE id = ?", [threadId]);
+    }
     await conn.commit();
+    return {
+      closed,
+      awaiting: closed ? null : closerRole === 'patient' ? 'pharmacist' : 'patient',
+      patient_completed_at: patientCompleted,
+      pharmacist_completed_at: pharmacistCompleted,
+    };
   } catch (err) {
     await conn.rollback();
     throw err;
   } finally {
     conn.release();
   }
-  return { closed: true };
 }
 
 /** A patient's own threads. */
 export async function patientThreads(patientId) {
   const [rows] = await pool.execute(
-    `SELECT t.id,t.status,t.priority,t.subject,t.opened_at,t.closed_at,
+    `SELECT t.id,t.status,t.priority,t.priority_tier,t.subject,t.opened_at,t.closed_at,t.patient_completed_at,t.pharmacist_completed_at,
             t.branch_id,COALESCE(t.pharmacist_id,t.requested_pharmacist_id) AS pharmacist_id,
             CASE WHEN t.pharmacist_id IS NULL THEN 'awaiting_pharmacist' ELSE 'accepted' END AS validation_status,
             ph.full_name AS pharmacist_name
@@ -294,7 +359,7 @@ export async function patientThreads(patientId) {
 /** Open requests and the assigned pharmacist's completed consultation history. */
 export async function pharmacistQueue(pharmacistId) {
   const [rows] = await pool.execute(
-    `SELECT t.id, t.status, t.priority, t.subject, t.opened_at, t.closed_at, p.patient_code,
+    `SELECT t.id, t.status, t.priority, t.priority_tier, t.priority_reason, t.subject, t.opened_at, t.closed_at, t.patient_completed_at, t.pharmacist_completed_at, p.patient_code,
             CASE WHEN t.pharmacist_id IS NULL THEN 'awaiting_validation' ELSE 'accepted' END AS validation_status,
             (SELECT COUNT(*) FROM inquiry_messages m WHERE m.thread_id = t.id) AS message_count
      FROM inquiry_threads t
@@ -306,7 +371,8 @@ export async function pharmacistQueue(pharmacistId) {
                 (t.requested_pharmacist_id IS NULL OR t.requested_pharmacist_id = ?)
                 AND (t.branch_id IS NULL OR t.branch_id = viewer.branch_id))))
         OR (t.status = 'closed' AND t.pharmacist_id = ?)
-     ORDER BY (t.status = 'open') DESC, (t.priority = 'high') DESC,
+     ORDER BY (t.status = 'open') DESC,
+              FIELD(t.priority_tier, 'urgent', 'care', 'token', 'standard'),
               CASE WHEN t.status = 'open' THEN t.opened_at END ASC,
               t.closed_at DESC`,
     [pharmacistId, pharmacistId, pharmacistId, pharmacistId]

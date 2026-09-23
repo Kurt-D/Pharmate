@@ -28,9 +28,9 @@ function TrendChart({ data }) {
     .join(' ');
   return (
     <svg viewBox={`0 0 ${w} ${h}`} style={{ width: '100%', height: 140 }}>
-      <path d={path} fill="none" stroke="#2563eb" strokeWidth="2" />
+      <path d={path} fill="none" stroke="#578EF5" strokeWidth="2" />
       {coords.map((c, i) => (
-        <circle key={i} cx={c[0]} cy={c[1]} r="3" fill="#2563eb" />
+        <circle key={i} cx={c[0]} cy={c[1]} r="3" fill="#578EF5" />
       ))}
     </svg>
   );

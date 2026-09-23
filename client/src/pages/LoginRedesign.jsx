@@ -2,15 +2,16 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { GoogleLogin } from '@react-oauth/google';
 import pharmateLogo from '../assets/pharmate-logo.png';
+import authIllustration from '../assets/pharmate-auth-illustration-cutout.png';
+import splashLogo from '../assets/pharmate-splash-logo.png';
 import CaptchaChallenge from '../components/CaptchaChallenge.jsx';
+import { api } from '../api.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import { apiUrl } from '../config.js';
 import { homeForRole } from '../config/roleRoutes.js';
 import '../styles/auth.css';
 
-const MAX_FAILED_ATTEMPTS = 5;
 const DEFAULT_COOLDOWN_SECONDS = 60;
-const COOLDOWN_STORAGE_KEY = 'pm_login_cooldown_until';
 const GOOGLE_CLIENT_ID = (import.meta.env.VITE_GOOGLE_CLIENT_ID || '').trim();
 
 const PASSWORD_CHECKS = [
@@ -79,11 +80,6 @@ function PinInput({ value, onChange, disabled }) {
   );
 }
 
-function getStoredCooldown() {
-  const stored = Number(sessionStorage.getItem(COOLDOWN_STORAGE_KEY));
-  return Number.isFinite(stored) && stored > Date.now() ? stored : 0;
-}
-
 function retryAfterSeconds(value) {
   if (!value) return 0;
   const seconds = Number(value);
@@ -103,10 +99,11 @@ export default function LoginRedesign() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const { login } = useAuth();
-  const tokenFromEmail = params.get('token') || '';
   const rememberedEmail = localStorage.getItem('pm_remember_email') || '';
 
-  const [mode, setMode] = useState(tokenFromEmail ? 'recovery' : 'login');
+  const [mode, setMode] = useState(() =>
+    params.get('view') === 'signin' || params.has('reset') || params.has('reason') ? 'login' : 'splash'
+  );
   const [email, setEmail] = useState(rememberedEmail);
   const [password, setPassword] = useState('');
   const [remember, setRemember] = useState(Boolean(rememberedEmail));
@@ -122,16 +119,16 @@ export default function LoginRedesign() {
         : ''
   );
   const [loading, setLoading] = useState(false);
-  const [failedAttempts, setFailedAttempts] = useState(0);
-  const [cooldownUntil, setCooldownUntil] = useState(getStoredCooldown);
+  const [cooldownUntil, setCooldownUntil] = useState(0);
   const [cooldownSeconds, setCooldownSeconds] = useState(() =>
-    Math.max(0, Math.ceil((getStoredCooldown() - Date.now()) / 1000))
+    0
   );
+  const [challengeRequired, setChallengeRequired] = useState(false);
 
-  const [recoveryStep, setRecoveryStep] = useState(tokenFromEmail ? 3 : 1);
+  const [recoveryStep, setRecoveryStep] = useState(1);
   const [recoveryEmail, setRecoveryEmail] = useState(rememberedEmail);
   const [pin, setPin] = useState('');
-  const [resetToken, setResetToken] = useState(tokenFromEmail);
+  const [resetToken, setResetToken] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showNewPassword, setShowNewPassword] = useState(false);
@@ -140,6 +137,24 @@ export default function LoginRedesign() {
   const [mfa, setMfa] = useState(null);
   const [mfaCode, setMfaCode] = useState('');
 
+  async function continueAfterAuthentication(data) {
+    const role = data.role || data.user.role;
+    if (role !== 'patient') {
+      navigate(homeForRole(role), { replace: true });
+      return;
+    }
+
+    try {
+      const { data: safetyProfile } = await api('/api/patient/safety-profile');
+      navigate(safetyProfile.profile_completed ? '/patient/today' : '/patient/onboarding', {
+        replace: true,
+      });
+    } catch {
+      // Do not send a patient to the home screen when the completion state is unavailable.
+      navigate('/patient/onboarding', { replace: true });
+    }
+  }
+
   const passwordScore = useMemo(
     () => PASSWORD_CHECKS.filter((check) => check.test(newPassword)).length,
     [newPassword]
@@ -147,6 +162,17 @@ export default function LoginRedesign() {
   const strengthLabel = ['Too short', 'Weak', 'Fair', 'Good', 'Strong'][passwordScore];
   const loginLocked = cooldownSeconds > 0;
   const captchaComplete = Boolean(captcha.captchaToken || captcha.captchaAnswer);
+  const loginCaptchaVisible = password.length > 0;
+
+  useEffect(() => {
+    if (mode !== 'splash') return undefined;
+    const timer = window.setTimeout(() => setMode('choice'), 1600);
+    return () => window.clearTimeout(timer);
+  }, [mode]);
+
+  useEffect(() => {
+    if (!loginCaptchaVisible) setCaptcha({ captchaToken: '', captchaAnswer: '' });
+  }, [loginCaptchaVisible]);
 
   useEffect(() => {
     if (!cooldownUntil) return undefined;
@@ -156,9 +182,7 @@ export default function LoginRedesign() {
       setCooldownSeconds(remaining);
 
       if (remaining === 0) {
-        sessionStorage.removeItem(COOLDOWN_STORAGE_KEY);
         setCooldownUntil(0);
-        setFailedAttempts(0);
       }
     }
 
@@ -179,7 +203,6 @@ export default function LoginRedesign() {
   function startCooldown(seconds = DEFAULT_COOLDOWN_SECONDS) {
     const safeSeconds = Math.max(1, Math.ceil(seconds));
     const until = Date.now() + safeSeconds * 1000;
-    sessionStorage.setItem(COOLDOWN_STORAGE_KEY, String(until));
     setCooldownSeconds(safeSeconds);
     setCooldownUntil(until);
     setPassword('');
@@ -211,9 +234,9 @@ export default function LoginRedesign() {
       const cleanEmail = loginEmail.trim();
       const response = await fetch(apiUrl('/api/auth/login'), {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ email: cleanEmail, password: loginPassword, ...captcha }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: cleanEmail, password: loginPassword, staySignedIn: shouldRemember, ...captcha }),
       });
       const data = await response.json().catch(() => ({}));
 
@@ -230,6 +253,14 @@ export default function LoginRedesign() {
         return;
       }
 
+      if (data.code === 'HUMAN_VERIFICATION_REQUIRED' || data.challengeRequired === true) {
+        setChallengeRequired(true);
+        setCaptcha({ captchaToken: '', captchaAnswer: '' });
+        captchaRef.current?.reset();
+        setError(data.error || 'Please complete the security check to continue.');
+        return;
+      }
+
       if (!response.ok) {
         setCaptcha({ captchaToken: '', captchaAnswer: '' });
         captchaRef.current?.reset();
@@ -242,16 +273,6 @@ export default function LoginRedesign() {
           return;
         }
 
-        if (response.status === 401) {
-          const nextAttempt = failedAttempts + 1;
-          setFailedAttempts(nextAttempt);
-          if (nextAttempt >= MAX_FAILED_ATTEMPTS) {
-            setError('');
-            startCooldown();
-            return;
-          }
-        }
-
         setError(data.error || 'We could not sign you in. Check your details and try again.');
         return;
       }
@@ -259,11 +280,8 @@ export default function LoginRedesign() {
       if (shouldRemember) localStorage.setItem('pm_remember_email', cleanEmail);
       else localStorage.removeItem('pm_remember_email');
 
-      sessionStorage.removeItem(COOLDOWN_STORAGE_KEY);
-      setFailedAttempts(0);
-
-      login(data.user, data.accessToken, data.refreshToken);
-      navigate(homeForRole(data.role || data.user.role), { replace: true });
+      login(data.user, data.accessToken, data.csrfToken);
+      await continueAfterAuthentication(data);
     } catch {
       setError('PharMate cannot reach the server right now. Please check your connection.');
       setCaptcha({ captchaToken: '', captchaAnswer: '' });
@@ -282,6 +300,7 @@ export default function LoginRedesign() {
       const tokenField = mfa.setup ? 'setupToken' : 'mfaToken';
       const response = await fetch(apiUrl(path), {
         method: 'POST',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ [tokenField]: mfa.token, code: mfaCode }),
       });
@@ -290,8 +309,8 @@ export default function LoginRedesign() {
         setError(data.error || 'The authenticator code could not be verified.');
         return;
       }
-      login(data.user, data.accessToken, data.refreshToken);
-      navigate(homeForRole(data.role || data.user.role), { replace: true });
+      login(data.user, data.accessToken, data.csrfToken);
+      await continueAfterAuthentication(data);
     } catch {
       setError('PharMate cannot reach the server right now. Please check your connection.');
     } finally {
@@ -326,8 +345,8 @@ export default function LoginRedesign() {
         );
         return;
       }
-      login(data.user, data.accessToken, data.refreshToken);
-      navigate(homeForRole(data.role || data.user.role), { replace: true });
+      login(data.user, data.accessToken, data.csrfToken);
+      await continueAfterAuthentication(data);
     } catch {
       setError('PharMate cannot reach the server right now. Please check your connection.');
     } finally {
@@ -419,21 +438,69 @@ export default function LoginRedesign() {
     }
   }
 
+  if (mode === 'splash') {
+    return (
+      <main className="auth-splash" aria-label="PharMate is loading">
+        <section className="auth-splash__screen">
+          <div className="auth-splash__glow auth-splash__glow--one" aria-hidden="true" />
+          <div className="auth-splash__glow auth-splash__glow--two" aria-hidden="true" />
+          <div className="auth-splash__brand">
+            <img src={splashLogo} alt="PharMate" />
+            <strong>PharMate</strong>
+          </div>
+          <span className="auth-splash__loader" aria-label="Loading" />
+          <small>Your health, our priority.</small>
+        </section>
+      </main>
+    );
+  }
+
+  if (mode === 'choice') {
+    return (
+      <main className="auth-page auth-page--onboarding">
+        <section className="auth-shell auth-shell--choice" aria-labelledby="account-choice-title">
+          <img className="auth-choice__art" src={authIllustration} alt="Pharmacist helping a patient" />
+          <header className="auth-choice__heading">
+            <h1 id="account-choice-title">Welcome to PharMate</h1>
+            <p>Simple, secure pharmacy care for you and the people you love.</p>
+          </header>
+          <div className="auth-choice__actions">
+            <button className="auth-primary" type="button" onClick={() => navigate('/signup')}>
+              Create an account
+              <svg className="auth-choice__arrow" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M5 12h13M13 6l6 6-6 6" />
+              </svg>
+            </button>
+            <button className="auth-choice__signin" type="button" onClick={() => setMode('login')}>
+              Sign in
+            </button>
+          </div>
+        </section>
+      </main>
+    );
+  }
+
   return (
     <main className="auth-page">
       <div className="auth-orb auth-orb--one" aria-hidden="true" />
       <div className="auth-orb auth-orb--two" aria-hidden="true" />
+      <section className={`auth-shell${mode === 'login' ? ' auth-shell--login' : ''}`} aria-labelledby="auth-title">
+        <div className="auth-content">
+          <div className="auth-logo" aria-label="PharMate">
+            <img src={pharmateLogo} alt="PharMate" />
+          </div>
 
-      <section className="auth-shell" aria-labelledby="auth-title">
-        <div className="auth-logo" aria-label="PharMate">
-          <img src={pharmateLogo} alt="PharMate" />
-        </div>
-
-        {mode === 'login' ? (
+          {mode === 'login' ? (
           <>
-            <header className="auth-heading">
-              <h1 id="auth-title">Welcome Back!</h1>
-              <p>Sign in to your PharMate account.</p>
+            <header className="auth-app-hero">
+              <button className="auth-app-hero__back" type="button" onClick={() => setMode('choice')} aria-label="Back">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5m7-7-7 7 7 7" /></svg>
+              </button>
+              <div className="auth-app-hero__brand">
+                <img src={splashLogo} alt="" />
+                <h1 id="auth-title">Sign in</h1>
+                <p>Sign in to continue</p>
+              </div>
             </header>
 
             <div className="auth-feedback" aria-live="assertive">
@@ -505,8 +572,9 @@ export default function LoginRedesign() {
                   type="email"
                   value={email}
                   onChange={(event) => setEmail(event.target.value)}
-                  placeholder="Enter your email address"
+                  placeholder="e.g. juan.delacruz@email.com"
                   autoComplete="email"
+                  maxLength={254}
                   disabled={loginLocked || loading || Boolean(mfa)}
                   required
                 />
@@ -519,8 +587,9 @@ export default function LoginRedesign() {
                     type={showPassword ? 'text' : 'password'}
                     value={password}
                     onChange={(event) => setPassword(event.target.value)}
-                    placeholder="Enter your password"
+                    placeholder="Enter your account password"
                     autoComplete="current-password"
+                    maxLength={72}
                     disabled={loginLocked || loading || Boolean(mfa)}
                     required
                   />
@@ -546,7 +615,7 @@ export default function LoginRedesign() {
                     checked={remember}
                     onChange={(event) => setRemember(event.target.checked)}
                   />
-                  <span>Remember me</span>
+                  <span>Stay signed in on this device</span>
                 </label>
                 <button
                   type="button"
@@ -557,16 +626,22 @@ export default function LoginRedesign() {
                 </button>
               </div>
 
-              <CaptchaChallenge
-                ref={captchaRef}
-                action="login"
-                onChange={setCaptcha}
-                onError={setError}
-              />
+              {challengeRequired && loginCaptchaVisible && (
+                <section className="auth-login-security-check" aria-labelledby="login-security-check-title">
+                  <h2 id="login-security-check-title">Security check</h2>
+                  <p>Please complete this quick security check to continue.</p>
+                <CaptchaChallenge
+                  ref={captchaRef}
+                  action="login"
+                  onChange={setCaptcha}
+                  onError={setError}
+                />
+                </section>
+              )}
 
               <button
                 className="auth-primary"
-                disabled={loading || loginLocked || Boolean(mfa) || !captchaComplete}
+                disabled={loading || loginLocked || Boolean(mfa) || (challengeRequired && !captchaComplete)}
               >
                 {loading ? <span className="auth-spinner" aria-hidden="true" /> : null}
                 {loading ? 'Signing in…' : 'Login'}
@@ -583,7 +658,7 @@ export default function LoginRedesign() {
                   shape="rectangular"
                   text="continue_with"
                   theme="outline"
-                  width="360"
+                  width="300"
                 />
               ) : (
                 <button className="auth-google-disabled" disabled type="button">
@@ -616,7 +691,7 @@ export default function LoginRedesign() {
                   <p>
                     {recoveryStep === 1 && 'Enter the email connected to your PharMate account.'}
                     {recoveryStep === 2 && `We sent a recovery PIN to ${recoveryEmail}.`}
-                    {recoveryStep === 3 && 'Choose a strong password you have not used before.'}
+                    {recoveryStep === 3 && 'Choose a strong, unique password for your account.'}
                   </p>
                 </header>
 
@@ -770,7 +845,8 @@ export default function LoginRedesign() {
               </div>
             )}
           </div>
-        )}
+          )}
+        </div>
       </section>
     </main>
   );

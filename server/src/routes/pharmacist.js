@@ -5,11 +5,14 @@ import { pool } from '../db/connection.js';
 import { getSharedScheduleReview } from '../services/medicationSchedule.js';
 import { requireAuth } from '../middleware/auth.js';
 import { requireRole } from '../middleware/role.js';
+import { rateLimit } from '../middleware/rateLimit.js';
 import { canonicalName, searchDrugs } from '../services/formulary.js';
 import {
   approvePrescriptionForSchedule,
   claimValidation,
+  completedValidations,
   decideValidation,
+  editCompletedValidation,
   pendingValidations,
   photoFilePath,
   releaseValidation,
@@ -22,10 +25,11 @@ import {
   postMessage,
   getMessages,
   closeThread,
+  markInquiryUrgent,
 } from '../services/inquiry.js';
 import { orderQueue, updateOrderStatus } from '../services/orders.js';
 import { createPatientNotification } from '../services/patientNotifications.js';
-import { recordAudit } from '../services/audit.js';
+import { auditStaffRequest, recordAudit } from '../services/audit.js';
 import { inquiryChanged, orderChanged, prescriptionChanged } from '../services/domainEvents.js';
 import { publishRole } from '../services/realtimeEvents.js';
 import { checkClinicalRule, verificationSummary } from '../services/clinicalRuleVerification.js';
@@ -45,8 +49,35 @@ import {
 } from '../services/counseling.js';
 
 const router = Router();
+const pharmacistKey = (req) => `${req.user?.sub || 'anonymous'}:${req.ip || 'unknown'}`;
+const pharmacistInquiryLimit = rateLimit({
+  scope: 'pharmacist-inquiry-post', windowMs: 15 * 60 * 1000, max: 60,
+  keyGenerator: pharmacistKey, message: 'Please wait a few minutes before sending more messages.',
+});
+const pharmacistOrderActionLimit = rateLimit({
+  scope: 'pharmacist-order-status', windowMs: 15 * 60 * 1000, max: 60,
+  keyGenerator: pharmacistKey, message: 'Too many order changes. Please wait a few minutes and try again.',
+});
+const pharmacistMedicineSearchLimit = rateLimit({
+  scope: 'pharmacist-medicine-search', windowMs: 60 * 1000, max: 120,
+  keyGenerator: pharmacistKey, message: 'Please pause briefly before searching again.',
+});
+router.use(requireAuth, requireRole('pharmacist'), auditStaffRequest('pharmacist'));
 
-router.use(requireAuth, requireRole('pharmacist'));
+// The pharmacist roster is an operational care list, not a list of every
+// account ever created during setup.  A record is visible only when its account
+// is active, it has an active medicine to monitor, and it is not the internal
+// development patient used to seed the local environment.
+const PHARMACIST_PATIENT_SCOPE = `
+  FROM patients p
+  JOIN users u ON u.id = p.id
+  WHERE u.role = 'patient'
+    AND u.is_active = 1
+    AND LOWER(u.email) <> 'patient@dev.pharmate'
+    AND EXISTS (
+      SELECT 1 FROM medications roster_med
+      WHERE roster_med.patient_id = p.id AND roster_med.status = 'active'
+    )`;
 
 function rejectUnlicensedReview(res, credential) {
   return res.status(403).json({
@@ -57,6 +88,60 @@ function rejectUnlicensedReview(res, credential) {
 
 router.get('/credential', async (req, res) => {
   res.json(publicCredential(await pharmacistCredential(req.user.sub)));
+});
+
+router.get('/history', async (req, res) => {
+  const credential = await pharmacistCredential(req.user.sub);
+  if (!credential.credential_valid) return rejectUnlicensedReview(res, credential);
+  const page = Math.max(1, Number.parseInt(req.query.page, 10) || 1);
+  const limit = Math.max(10, Math.min(Number.parseInt(req.query.limit, 10) || 25, 100));
+  const category = String(req.query.category || '').trim().toUpperCase();
+  const status = String(req.query.status || '').trim().toLowerCase();
+  const search = String(req.query.search || '').trim().slice(0, 100);
+  const patterns = { PRESCRIPTION_REVIEW: '%PRESCRIPTION%', CONSULTATION: '%INQUIRY%', ORDER_REVIEW: '%ORDER%', FOLLOW_UP: '%FOLLOW%' };
+  if (category && !patterns[category]) return res.status(400).json({ error: 'Invalid history category.' });
+  if (status && !['success', 'failure'].includes(status)) return res.status(400).json({ error: 'Invalid history status.' });
+  const clauses = ["actor_user_id=?", "actor_role='pharmacist'", "action<>'PHARMACIST_API_ACCESS'"]; const values = [req.user.sub];
+  if (category) { clauses.push('action LIKE ?'); values.push(patterns[category]); }
+  if (status) { clauses.push('outcome=?'); values.push(status); }
+  if (search) { clauses.push('(action LIKE ? OR entity_id LIKE ? OR entity_type LIKE ?)'); values.push(`%${search}%`, `%${search}%`, `%${search}%`); }
+  const where = `WHERE ${clauses.join(' AND ')}`;
+  const [rows] = await pool.execute(`SELECT id,action,entity_type,entity_id,outcome,metadata_json,created_at FROM audit_events ${where} ORDER BY created_at DESC LIMIT ? OFFSET ?`, [...values, limit, (page - 1) * limit]);
+  const [[count]] = await pool.execute(`SELECT COUNT(*) AS total FROM audit_events ${where}`, values);
+  const activityType = (action) => action.includes('PRESCRIPTION') ? 'Prescription review' : action.includes('INQUIRY') ? 'Consultation' : action.includes('ORDER') ? 'Order review' : 'Professional activity';
+  res.json({ data: rows.map((row) => ({ id: row.id, occurredAt: row.created_at, activityType: activityType(row.action), reference: row.entity_id, resourceType: row.entity_type, outcome: row.outcome, details: row.metadata_json && typeof row.metadata_json === 'object' ? row.metadata_json : null })), pagination: { page, limit, total: Number(count.total), totalPages: Math.ceil(Number(count.total) / limit) } });
+});
+
+router.get('/preferences', async (req, res) => {
+  await pool.execute('INSERT IGNORE INTO pharmacist_preferences (pharmacist_id) VALUES (?)', [req.user.sub]);
+  const [[preferences]] = await pool.execute(
+    `SELECT urgent_alerts_enabled AS urgentAlerts, daily_summary_enabled AS dailySummary,
+            compact_queue_enabled AS compactQueue
+       FROM pharmacist_preferences WHERE pharmacist_id=?`,
+    [req.user.sub]
+  );
+  res.json(preferences);
+});
+
+router.put('/preferences', async (req, res) => {
+  const allowed = ['urgentAlerts', 'dailySummary', 'compactQueue'];
+  const entries = Object.entries(req.body || {}).filter(([key]) => allowed.includes(key));
+  if (!entries.length) return res.status(400).json({ error: 'At least one preference is required.' });
+  if (entries.some(([, value]) => typeof value !== 'boolean')) {
+    return res.status(400).json({ error: 'Preferences must be boolean values.' });
+  }
+  await pool.execute('INSERT IGNORE INTO pharmacist_preferences (pharmacist_id) VALUES (?)', [req.user.sub]);
+  const fields = { urgentAlerts: 'urgent_alerts_enabled', dailySummary: 'daily_summary_enabled', compactQueue: 'compact_queue_enabled' };
+  await pool.execute(
+    `UPDATE pharmacist_preferences SET ${entries.map(([key]) => `${fields[key]}=?`).join(', ')} WHERE pharmacist_id=?`,
+    [...entries.map(([, value]) => value ? 1 : 0), req.user.sub]
+  );
+  const [[preferences]] = await pool.execute(
+    `SELECT urgent_alerts_enabled AS urgentAlerts, daily_summary_enabled AS dailySummary,
+            compact_queue_enabled AS compactQueue FROM pharmacist_preferences WHERE pharmacist_id=?`,
+    [req.user.sub]
+  );
+  res.json(preferences);
 });
 
 router.get('/appointments', async (req, res) => {
@@ -153,9 +238,7 @@ async function prescriptionPatientId(photoId) {
   return row?.patient_id || null;
 }
 
-// ── GET /api/pharmacist/summary ───────────────────────────────────────────────
-// Dashboard counts for the pharmacist's work queues. Aggregates only — no PII.
-router.get('/summary', async (_req, res) => {
+async function pharmacistDashboardSummary() {
   const [[validations]] = await pool.execute(
     "SELECT COUNT(*) AS c FROM prescription_photos WHERE status = 'pending'"
   );
@@ -171,18 +254,101 @@ router.get('/summary', async (_req, res) => {
   const [[deliveries]] = await pool.execute(
     "SELECT COUNT(*) AS c FROM delivery_requests WHERE status IN ('pending','processing','out_for_delivery')"
   );
-  const [[followups]] = await pool.execute(
-    "SELECT COUNT(*) AS c FROM caregiver_alerts WHERE channel = 'pharmacist' AND status = 'unseen'"
+  const followups = await pharmacistFollowups();
+  const [[patients]] = await pool.execute(
+    `SELECT COUNT(*) AS c ${PHARMACIST_PATIENT_SCOPE}`
   );
-  const [[patients]] = await pool.execute('SELECT COUNT(*) AS c FROM patients');
 
-  res.json({
+  return {
     pending_validations: validations.c,
     pending_curation: curation.c,
     open_inquiries: inquiries.c,
     open_orders: refills.c + deliveries.c,
-    followups: followups.c,
+    followups: followups.length,
     patients: patients.c,
+  };
+}
+
+function dashboardAgenda({ validations, inquiries, followups, appointments }) {
+  const items = [
+    ...validations.slice(0, 2).map((item) => ({
+      id: `validation:${item.id}`,
+      type: 'validation',
+      route: '/pharmacist/validation',
+      patient_code: item.patient_code,
+      title: `Review ${item.drug_name_raw || 'prescription'}`,
+      detail: 'Prescription validation queue',
+      occurred_at: item.created_at,
+    })),
+    ...inquiries.filter((item) => item.status === 'open').slice(0, 2).map((item) => ({
+      id: `inquiry:${item.id}`,
+      type: 'inquiry',
+      route: '/pharmacist/inquiries',
+      patient_code: item.patient_code,
+      title: item.subject || 'Medication inquiry',
+      detail: item.validation_status === 'awaiting_validation'
+        ? 'Awaiting pharmacist acceptance'
+        : 'Reply to medication question',
+      occurred_at: item.opened_at,
+    })),
+    ...followups.slice(0, 2).map((item) => ({
+      id: `followup:${item.id}`,
+      type: 'followup',
+      route: '/pharmacist/alerts',
+      patient_code: item.patient_code,
+      title: item.drug_name ? `Follow up: ${item.drug_name}` : 'Adherence follow-up',
+      detail: item.scheduled_time ? `Missed scheduled dose at ${item.scheduled_time}` : 'Check adherence reminder',
+      occurred_at: item.created_at,
+    })),
+    ...appointments
+      .filter((item) => ['REQUESTED', 'CONFIRMED'].includes(item.status))
+      .slice(0, 2)
+      .map((item) => ({
+        id: `appointment:${item.id}`,
+        type: 'appointment',
+        route: '/pharmacist/appointments',
+        patient_code: item.patient_code,
+        title: item.status === 'REQUESTED' ? 'Counseling appointment request' : 'Confirmed counseling appointment',
+        detail: item.scheduled_start_at ? `Scheduled ${new Date(item.scheduled_start_at).toLocaleString('en-PH', { dateStyle: 'medium', timeStyle: 'short' })}` : 'Open appointment details',
+        occurred_at: item.scheduled_start_at || item.created_at,
+      })),
+  ];
+
+  return items.slice(0, 6);
+}
+
+// ── GET /api/pharmacist/summary ───────────────────────────────────────────────
+// Dashboard counts for the pharmacist's work queues. Aggregates only — no PII.
+router.get('/summary', async (_req, res) => {
+  res.json(await pharmacistDashboardSummary());
+});
+
+// ── GET /api/pharmacist/dashboard ─────────────────────────────────────────────
+// The overview's live data feed. Queue records remain pseudonymous and each
+// entry includes the route that owns the underlying action.
+router.get('/dashboard', async (req, res) => {
+  const [summary, validations, inquiries, followups, appointments] = await Promise.all([
+    pharmacistDashboardSummary(),
+    pendingValidations(req.user.sub),
+    pharmacistQueue(req.user.sub),
+    pharmacistFollowups(),
+    pharmacistAppointments(req.user.sub),
+  ]);
+
+  res.json({
+    generated_at: new Date().toISOString(),
+    summary,
+    agenda: dashboardAgenda({ validations, inquiries, followups, appointments }),
+    appointments: appointments
+      .filter((item) => ['REQUESTED', 'CONFIRMED'].includes(item.status))
+      .slice(0, 7)
+      .map((item) => ({
+        id: item.id,
+        status: item.status,
+        patient_code: item.patient_code,
+        scheduled_start_at: item.scheduled_start_at,
+        duration_minutes: item.duration_minutes,
+      })),
   });
 });
 
@@ -226,9 +392,10 @@ router.post('/followups/:id/resolve', async (req, res) => {
 router.get('/patients/:code/schedule', async (req, res) => {
   // Same pharmacist-roster access boundary as /patients; never accept a raw
   // patient id from another portal or grant caregiver editing permissions.
-  const [[patient]] = await pool.execute('SELECT id FROM patients WHERE patient_code=?', [
-    req.params.code,
-  ]);
+  const [[patient]] = await pool.execute(
+    `SELECT p.id ${PHARMACIST_PATIENT_SCOPE} AND p.patient_code=?`,
+    [req.params.code]
+  );
   if (!patient) return res.status(404).json({ error: 'Patient not found' });
   res.json(await getSharedScheduleReview(patient.id, { date: req.query.date }));
 });
@@ -237,13 +404,25 @@ router.get('/patients', async (_req, res) => {
   const [rows] = await pool.execute(
     `SELECT p.patient_code,
             p.priority_flag,
-            COUNT(DISTINCT CASE WHEN m.status = 'active' THEN m.id END) AS active_meds,
-            COUNT(ms.id) AS scheduled,
-            SUM(ms.status IN ('taken','taken_late')) AS taken
-     FROM patients p
-     LEFT JOIN medications m ON m.patient_id = p.id
-     LEFT JOIN medication_schedules ms ON ms.patient_id = p.id
-     GROUP BY p.id, p.patient_code, p.priority_flag
+            (SELECT COUNT(*) FROM medications m
+             WHERE m.patient_id=p.id AND m.status='active') AS active_meds,
+            (SELECT COUNT(*) FROM medication_schedules ms
+             WHERE ms.patient_id=p.id AND ms.is_confirmed=1
+               AND ms.scheduled_time >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL 6 DAY)
+               AND ms.scheduled_time <= UTC_TIMESTAMP()) AS scheduled,
+            (SELECT COUNT(*) FROM medication_schedules ms
+             WHERE ms.patient_id=p.id AND ms.is_confirmed=1
+               AND ms.scheduled_time >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL 6 DAY)
+               AND ms.scheduled_time <= UTC_TIMESTAMP()
+               AND ms.status IN ('taken','taken_late')) AS taken,
+            (SELECT COUNT(*) FROM medication_schedules ms
+             WHERE ms.patient_id=p.id AND ms.is_confirmed=1
+               AND DATE(CONVERT_TZ(ms.scheduled_time, '+00:00', '+08:00'))=
+                   DATE(CONVERT_TZ(UTC_TIMESTAMP(), '+00:00', '+08:00'))
+               AND ms.status='missed') AS missed_today,
+            (SELECT MAX(ms.scheduled_time) FROM medication_schedules ms
+             WHERE ms.patient_id=p.id AND ms.is_confirmed=1) AS last_schedule_at
+     ${PHARMACIST_PATIENT_SCOPE}
      ORDER BY p.priority_flag DESC, p.patient_code`
   );
   res.json(
@@ -251,11 +430,77 @@ router.get('/patients', async (_req, res) => {
       patient_code: r.patient_code,
       priority: !!r.priority_flag,
       active_meds: Number(r.active_meds ?? 0),
+      active_schedule: Number(r.active_meds ?? 0) > 0,
+      missed_today: Number(r.missed_today ?? 0),
+      last_schedule_at: r.last_schedule_at || null,
       adherence_pct: r.scheduled
         ? Math.round((Number(r.taken ?? 0) / Number(r.scheduled)) * 100)
         : null,
     }))
   );
+});
+
+// Privacy-safe live roster detail. The pharmacist portal deliberately works with
+// patient codes rather than a name, phone number, email, or diagnosis.
+router.get('/patients/:code/activity', async (req, res) => {
+  const [[patient]] = await pool.execute(
+    `SELECT p.id, p.patient_code, p.priority_flag ${PHARMACIST_PATIENT_SCOPE} AND p.patient_code=?`,
+    [req.params.code]
+  );
+  if (!patient) return res.status(404).json({ error: 'Patient not found' });
+
+  const [[[summary]], [medicines], [missed], [upcoming]] = await Promise.all([
+    pool.execute(
+      `SELECT COUNT(*) AS scheduled,
+              SUM(status IN ('taken','taken_late')) AS completed,
+              SUM(status='missed') AS missed
+       FROM medication_schedules
+       WHERE patient_id=? AND is_confirmed=1
+         AND scheduled_time >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL 6 DAY)
+         AND scheduled_time <= UTC_TIMESTAMP()`,
+      [patient.id]
+    ),
+    pool.execute(
+      `SELECT COALESCE(dr.generic_name,m.drug_name_raw) AS medicine
+       FROM medications m
+       LEFT JOIN drug_reference dr ON dr.id=m.drug_id
+       WHERE m.patient_id=? AND m.status='active'
+       ORDER BY m.updated_at DESC LIMIT 20`,
+      [patient.id]
+    ),
+    pool.execute(
+      `SELECT ms.id AS schedule_id, COALESCE(dr.generic_name,m.drug_name_raw) AS medicine,
+              ms.scheduled_time
+       FROM medication_schedules ms
+       JOIN medications m ON m.id=ms.medication_id
+       LEFT JOIN drug_reference dr ON dr.id=m.drug_id
+       WHERE ms.patient_id=? AND ms.is_confirmed=1 AND ms.status='missed'
+       ORDER BY ms.scheduled_time DESC LIMIT 10`,
+      [patient.id]
+    ),
+    pool.execute(
+      `SELECT ms.id AS schedule_id, COALESCE(dr.generic_name,m.drug_name_raw) AS medicine,
+              ms.scheduled_time, ms.status
+       FROM medication_schedules ms
+       JOIN medications m ON m.id=ms.medication_id
+       LEFT JOIN drug_reference dr ON dr.id=m.drug_id
+       WHERE ms.patient_id=? AND ms.is_confirmed=1
+         AND ms.status IN ('scheduled','snoozed') AND ms.scheduled_time >= UTC_TIMESTAMP()
+       ORDER BY ms.scheduled_time ASC LIMIT 10`,
+      [patient.id]
+    ),
+  ]);
+  const scheduled = Number(summary.scheduled ?? 0);
+  const completed = Number(summary.completed ?? 0);
+  res.json({
+    patient_code: patient.patient_code,
+    priority: Boolean(patient.priority_flag),
+    adherence_pct: scheduled ? Math.round((completed / scheduled) * 100) : null,
+    active_medicines: medicines.map((row) => row.medicine),
+    missed_doses: missed,
+    upcoming_doses: upcoming,
+    updated_at: new Date().toISOString(),
+  });
 });
 
 // ── GET /api/pharmacist/adherence ────────────────────────────────────────────
@@ -270,10 +515,14 @@ router.get('/adherence', async (_req, res) => {
             SUM(ms.status = 'taken_late') AS taken_late,
             SUM(ms.status = 'missed') AS missed
      FROM patients p
+     JOIN users u ON u.id = p.id
      LEFT JOIN medication_schedules ms
        ON ms.patient_id = p.id
       AND ms.scheduled_time >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)
       AND ms.scheduled_time <= NOW(3)
+     WHERE u.role = 'patient'
+       AND u.is_active = 1
+       AND LOWER(u.email) <> 'patient@dev.pharmate'
      GROUP BY p.id, p.patient_code
      HAVING scheduled > 0
      ORDER BY missed DESC, patient_code`
@@ -376,6 +625,16 @@ router.post('/inquiries/:id/accept', async (req, res) => {
   res.json(result);
 });
 
+router.post('/inquiries/:id/mark-urgent', async (req, res) => {
+  const reason = String(req.body?.reason || '').trim().slice(0, 255);
+  if (reason.length < 8) return res.status(400).json({ error: 'Provide a brief clinical-safety reason.' });
+  const result = await markInquiryUrgent(req.params.id, req.user.sub, reason);
+  if (result.error) return res.status(404).json({ error: 'Inquiry is not available to you.' });
+  await recordAudit({ actor: { id: req.user.sub, role: 'pharmacist' }, action: 'INQUIRY_MARKED_URGENT', entityType: 'inquiry', entityId: result.id, patientId: result.patient_id, metadata: { priority_tier: 'urgent', reason } });
+  await inquiryChanged({ patientId: result.patient_id, threadId: result.id, action: 'priority_escalated' });
+  res.json(result);
+});
+
 router.get('/inquiries/:id/messages', async (req, res) => {
   const result = await getMessages(req.params.id, 'pharmacist', req.user.sub);
   if (result.error === 'not_found') return res.status(404).json({ error: 'Thread not found' });
@@ -384,7 +643,44 @@ router.get('/inquiries/:id/messages', async (req, res) => {
   res.json(result.messages);
 });
 
-router.post('/inquiries/:id/reply', async (req, res) => {
+router.get('/inquiries/:id/note', async (req, res) => {
+  const [[thread]] = await pool.execute(
+    'SELECT id FROM inquiry_threads WHERE id=? AND pharmacist_id=?',
+    [req.params.id, req.user.sub]
+  );
+  if (!thread) return res.status(404).json({ error: 'Assigned inquiry not found' });
+  const [[note]] = await pool.execute(
+    'SELECT note,updated_at FROM inquiry_pharmacist_notes WHERE thread_id=? AND pharmacist_id=?',
+    [req.params.id, req.user.sub]
+  );
+  res.json({ note: note?.note || '', updated_at: note?.updated_at || null });
+});
+
+router.put('/inquiries/:id/note', async (req, res) => {
+  const note = String(req.body?.note || '').trim().slice(0, 4000);
+  const [[thread]] = await pool.execute(
+    'SELECT patient_id FROM inquiry_threads WHERE id=? AND pharmacist_id=?',
+    [req.params.id, req.user.sub]
+  );
+  if (!thread) return res.status(404).json({ error: 'Assigned inquiry not found' });
+  await pool.execute(
+    `INSERT INTO inquiry_pharmacist_notes (id,thread_id,pharmacist_id,note)
+     VALUES (?,?,?,?)
+     ON DUPLICATE KEY UPDATE note=VALUES(note),updated_at=NOW(3)`,
+    [uuidv4(), req.params.id, req.user.sub, note]
+  );
+  await recordAudit({
+    actor: { id: req.user.sub, role: 'pharmacist' },
+    action: 'INQUIRY_PRIVATE_NOTE_SAVED',
+    entityType: 'inquiry',
+    entityId: req.params.id,
+    patientId: thread.patient_id,
+    metadata: { characters: note.length },
+  });
+  res.json({ saved: true, note });
+});
+
+router.post('/inquiries/:id/reply', pharmacistInquiryLimit, async (req, res) => {
   const message = String(req.body?.message ?? '').trim();
   if (!message) return res.status(400).json({ error: 'message is required' });
   const result = await postMessage(req.params.id, 'pharmacist', req.user.sub, message);
@@ -420,11 +716,16 @@ router.post('/inquiries/:id/close', async (req, res) => {
     await inquiryChanged({
       patientId,
       threadId: req.params.id,
-      action: 'closed',
+      action: result.closed ? 'closed' : 'pharmacist_completed',
       recipientRole: 'patient',
     });
   }
-  res.json({ message: 'Inquiry completed and saved to consultation history', ...result });
+  res.json({
+    message: result.closed
+      ? 'Inquiry completed and saved to consultation history'
+      : 'Completion confirmed. Waiting for the patient to complete the conversation.',
+    ...result,
+  });
 });
 
 // ── Refill & delivery queue (Tier 2b) — patient_code only, status only ────────
@@ -445,7 +746,7 @@ router.get('/orders/:kind/:id/prescription', async (req, res) => {
   return res.sendFile(path.join(UPLOADS_DIR, path.basename(record.stored_filename)));
 });
 
-router.post('/orders/:kind/:id/status', async (req, res) => {
+router.post('/orders/:kind/:id/status', pharmacistOrderActionLimit, async (req, res) => {
   const { kind, id } = req.params;
   if (kind !== 'refill' && kind !== 'delivery') {
     return res.status(400).json({ error: 'kind must be refill or delivery' });
@@ -479,6 +780,20 @@ router.get('/validations', async (req, res) => {
   res.json(await pendingValidations(req.user.sub));
 });
 
+// Completed reviews stay available to their reviewing pharmacist as a
+// pseudonymous audit-friendly history, separate from the live queue.
+router.get('/validations/history-list', async (req, res) => {
+  res.json(await completedValidations(req.user.sub));
+});
+
+router.patch('/validations/:id/history', async (req, res) => {
+  const result = await editCompletedValidation(req.user.sub, req.params.id, req.body || {});
+  if (result.error === 'not_found') return res.status(404).json({ error: 'Review history item not found' });
+  if (result.error === 'bad_status') return res.status(400).json({ error: 'Choose an approved, rejected, or clearer-photo outcome' });
+  if (result.error === 'reason_too_long') return res.status(400).json({ error: 'Reason must not exceed 500 characters' });
+  res.json(result);
+});
+
 function claimError(res, result) {
   if (result.error === 'not_found') return res.status(404).json({ error: 'Validation not found' });
   if (result.error === 'already_decided') {
@@ -505,17 +820,15 @@ router.get('/validations/:id/history', async (req, res) => {
   res.json({ history });
 });
 
+// The image is approved first. The pharmacist then enters the actual prescription
+// order, which is the only information published to the patient.
 router.post('/validations/:id/approve-prescription', async (req, res) => {
   const credential = await pharmacistCredential(req.user.sub);
   if (!credential.credential_valid) return rejectUnlicensedReview(res, credential);
   const result = await approvePrescriptionForSchedule(req.user.sub, req.params.id);
   if (result.error === 'not_found') return res.status(404).json({ error: 'Validation not found' });
-  if (result.error === 'already_decided') {
-    return res.status(409).json({ error: 'This prescription has already been decided' });
-  }
-  if (result.error === 'wrong_stage') {
-    return res.status(409).json({ error: 'Prescription is already awaiting schedule review' });
-  }
+  if (result.error === 'already_decided') return res.status(409).json({ error: 'This prescription has already been decided' });
+  if (result.error === 'wrong_stage') return res.status(409).json({ error: 'This prescription is already ready for order entry' });
   res.json(result);
 });
 
@@ -608,14 +921,45 @@ router.get('/validations/:id/photo', async (req, res) => {
 // are no scheduling controls. Approval flips the medication to `active`, which
 // the patient then schedules and confirms separately (ENG §6).
 router.post('/validate', async (req, res) => {
-  const { photo_id, action, reason } = req.body;
+  const { photo_id, action, reason, prescription } = req.body;
   if (!photo_id) return res.status(400).json({ error: 'photo_id is required' });
+
+  let approvedPrescription = null;
+  if (action === 'approve') {
+    const medicine_name = typeof prescription?.medicine_name === 'string' ? prescription.medicine_name.trim() : '';
+    const quantity = Number(prescription?.quantity);
+    if (!medicine_name || medicine_name.length > 150 || !Number.isInteger(quantity) || quantity < 1) {
+      return res.status(400).json({
+        error: 'Enter the prescribed medicine name and a whole-number quantity before approving.',
+      });
+    }
+    approvedPrescription = {
+      medicine_name,
+      quantity,
+      strength: typeof prescription?.strength === 'string' ? prescription.strength.trim().slice(0, 80) : '',
+      strength_unit:
+        typeof prescription?.strength_unit === 'string'
+          ? prescription.strength_unit.trim().slice(0, 24)
+          : '',
+      dosage_form:
+        typeof prescription?.dosage_form === 'string'
+          ? prescription.dosage_form.trim().slice(0, 80)
+          : '',
+      directions:
+        typeof prescription?.directions === 'string'
+          ? prescription.directions.trim().slice(0, 500)
+          : '',
+    };
+  }
 
   const credential = await pharmacistCredential(req.user.sub);
   if (!credential.credential_valid) return rejectUnlicensedReview(res, credential);
 
   const patientId = await prescriptionPatientId(photo_id);
-  const result = await decideValidation(req.user.sub, photo_id, action, reason, { credential });
+  const result = await decideValidation(req.user.sub, photo_id, action, reason, {
+    credential,
+    prescription: approvedPrescription,
+  });
   if (result.error === 'bad_action') {
     return res
       .status(400)
@@ -669,7 +1013,7 @@ router.post('/validate', async (req, res) => {
 
 // ── GET /api/pharmacist/drugs?q= ──────────────────────────────────────────────
 // Shared medicine catalog used by the pharmacist Drug Database screen.
-router.get('/drugs', async (req, res) => {
+router.get('/drugs', pharmacistMedicineSearchLimit, async (req, res) => {
   const results = await searchDrugs(req.query.q, req.query.limit || 500, {
     rxClass: req.query.rx_class,
     category: req.query.category,

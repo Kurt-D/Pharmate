@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../../api.js';
-import PrescriptionShop from './PrescriptionShop.jsx';
+import PrescriptionShop, { ADDRESS_OPTIONS } from './PrescriptionShop.jsx';
 
-const PRODUCTS = [
+const FALLBACK_PRODUCTS = [
   {
     id: 'biogesic',
     brand: 'Biogesic',
@@ -133,10 +134,10 @@ const PRODUCTS = [
     warning: 'Do not swallow or use on large wounds without medical advice.',
   },
 ];
-const CATEGORIES = ['All', 'Pain Relief', 'Cold & Flu', 'Vitamins', 'First Aid'];
 
 function Icon({ name, size = 22 }) {
   const paths = {
+    back: <path d="M19 12H5m6-6-6 6 6 6" />,
     search: (
       <>
         <circle cx="11" cy="11" r="7" />
@@ -192,6 +193,17 @@ function Icon({ name, size = 22 }) {
         <path d="M12 11v5M12 8h.01" />
       </>
     ),
+    mic: (
+      <>
+        <rect x="9" y="3" width="6" height="11" rx="3" />
+        <path d="M5 11a7 7 0 0 0 14 0M12 18v3M9 21h6" />
+      </>
+    ),
+    bell: (
+      <>
+        <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" />
+      </>
+    ),
   };
   return (
     <svg
@@ -210,29 +222,125 @@ function Icon({ name, size = 22 }) {
   );
 }
 const money = (value) => `₱${Number(value).toFixed(2)}`;
+const SHOP_DRAFT_KEY = 'pm_patient_shop_draft';
+
+function readShopDraft() {
+  try {
+    return JSON.parse(sessionStorage.getItem(SHOP_DRAFT_KEY) || '{}') || {};
+  } catch {
+    return {};
+  }
+}
+
+function formalMedicineName(value) {
+  return String(value || '')
+    .trim()
+    .split(/(\s+|[-/])/)
+    .map((part) =>
+      /^(\s+|[-/])$/.test(part) || /^[A-Z0-9]{2,}$/.test(part)
+        ? part
+        : `${part.charAt(0).toUpperCase()}${part.slice(1).toLowerCase()}`
+    )
+    .join('');
+}
+
+function mockPrice(seed) {
+  const value = [...String(seed || 'medicine')].reduce(
+    (total, character) => total + character.charCodeAt(0),
+    0
+  );
+  return 45 + (value % 9) * 12;
+}
+
+function catalogBrands(value) {
+  if (Array.isArray(value)) return value.filter(Boolean);
+  try {
+    const parsed = JSON.parse(value || '[]');
+    return Array.isArray(parsed) ? parsed.filter(Boolean) : [];
+  } catch {
+    return [];
+  }
+}
+
+function catalogProduct(drug) {
+  const rawGeneric = String(drug.generic_name || '').trim();
+  const fallback = FALLBACK_PRODUCTS.find(
+    (product) => product.generic.toLowerCase() === rawGeneric.toLowerCase()
+  );
+  const brands = catalogBrands(drug.brand_names_json);
+  const category = drug.therapeutic_category || drug.category || fallback?.category || 'OTC Medicine';
+  const generic = formalMedicineName(rawGeneric);
+  const strip = fallback?.strip ?? mockPrice(rawGeneric);
+  return {
+    id: `catalog-${drug.id}`,
+    drugId: drug.id,
+    brand: formalMedicineName(brands[0] || fallback?.brand || generic),
+    generic,
+    strength: drug.common_strength || fallback?.strength || '',
+    category,
+    maker: fallback?.maker || 'PharMate medicine catalog',
+    ingredient: generic,
+    // Demo-only pricing until a partner pharmacy supplies a live price list.
+    strip,
+    box: fallback?.box ?? Math.round(strip * 4.5),
+    limit: fallback?.limit ?? 5,
+    pack: fallback?.pack || `${drug.dosage_form || 'medicine'} pack`,
+    guide: drug.administration_instruction || fallback?.guide || 'Follow the product label.',
+    timing: drug.meal_instruction || fallback?.timing || 'Follow the product label.',
+    warning: drug.guidance_dont || fallback?.warning || 'Use only as directed on the product label.',
+    inStock: Boolean(drug.availability) && Number(drug.stock_quantity) > 0,
+  };
+}
 
 export default function Shop() {
   const navigate = useNavigate();
-  const [mode, setMode] = useState('otc');
-  const [search, setSearch] = useState('');
-  const [category, setCategory] = useState('All');
-  const [cart, setCart] = useState({});
+  const location = useLocation();
+  const [searchParams] = useSearchParams();
+  const [initialDraft] = useState(readShopDraft);
+  const [mode, setMode] = useState(() =>
+    searchParams.get('mode') === 'rx' ? 'rx' : initialDraft.mode === 'rx' ? 'rx' : 'otc'
+  );
+  const [modeTransition, setModeTransition] = useState('');
+  const [search, setSearch] = useState(initialDraft.search || '');
+  const [category, setCategory] = useState(initialDraft.category || 'All');
+  const [cart, setCart] = useState(initialDraft.cart || {});
   const [detail, setDetail] = useState(null);
-  const [detailPack, setDetailPack] = useState('strip');
-  const [detailQuantity, setDetailQuantity] = useState(1);
-  const [checkout, setCheckout] = useState(false);
-  const [step, setStep] = useState(1);
+  const [detailPack, setDetailPack] = useState(initialDraft.detailPack || 'strip');
+  const [detailQuantity, setDetailQuantity] = useState(initialDraft.detailQuantity || 1);
+  const [checkout, setCheckout] = useState(
+    () => location.pathname === '/patient/orders/checkout' || Boolean(initialDraft.checkout)
+  );
+  const [step, setStep] = useState([0, 1, 2].includes(initialDraft.step) ? initialDraft.step : 0);
   const [profile, setProfile] = useState({ address: '', contact_num: '' });
   const [branches, setBranches] = useState([]);
-  const [fulfillment, setFulfillment] = useState('delivery');
-  const [address, setAddress] = useState('');
-  const [contact, setContact] = useState('');
-  const [branchId, setBranchId] = useState('');
-  const [payment, setPayment] = useState('cod');
-  const [discount, setDiscount] = useState(false);
-  const [discountId, setDiscountId] = useState('');
+  const [fulfillment, setFulfillment] = useState(initialDraft.fulfillment || 'delivery');
+  const [address, setAddress] = useState(initialDraft.address || '');
+  const [contact, setContact] = useState(initialDraft.contact || '');
+  const [recipientName, setRecipientName] = useState(initialDraft.recipientName || '');
+  const [region, setRegion] = useState(initialDraft.region || '');
+  const [province, setProvince] = useState(initialDraft.province || '');
+  const [city, setCity] = useState(initialDraft.city || '');
+  const [barangay, setBarangay] = useState(initialDraft.barangay || '');
+  const [postalCode, setPostalCode] = useState(initialDraft.postalCode || '');
+  const [streetName, setStreetName] = useState(initialDraft.streetName || '');
+  const [building, setBuilding] = useState(initialDraft.building || '');
+  const [houseNumber, setHouseNumber] = useState(initialDraft.houseNumber || '');
+  const [branchId, setBranchId] = useState(initialDraft.branchId || '');
+  // PharMate accepts cash only: cash on delivery or cash at branch pickup.
+  const payment = fulfillment === 'delivery' ? 'cash_on_delivery' : 'cash_on_pickup';
+  const discount = false;
+  const discountId = '';
   const [error, setError] = useState('');
   const [placing, setPlacing] = useState(false);
+  const [catalog, setCatalog] = useState(null);
+  const [restockAlerts, setRestockAlerts] = useState(() => new Set());
+  const [voiceSearchListening, setVoiceSearchListening] = useState(false);
+  const [voiceSearchMessage, setVoiceSearchMessage] = useState('');
+  const [cartMessage, setCartMessage] = useState('');
+  const [lastAddedProduct, setLastAddedProduct] = useState(null);
+  const voiceRecognition = useRef(null);
+  const modeTimer = useRef(null);
+  const cartMessageTimer = useRef(null);
   useEffect(() => {
     Promise.all([
       api('/api/patient/profile')
@@ -241,17 +349,131 @@ export default function Shop() {
       api('/api/directory/branches')
         .then((r) => r.data)
         .catch(() => []),
-    ]).then(([patient, branchList]) => {
+      api('/api/patient/shop/otc')
+        .then((r) => (Array.isArray(r.data) ? r.data : []))
+        .catch(() => null),
+    ]).then(([patient, branchList, otcCatalog]) => {
       setProfile(patient);
-      setAddress(patient.address || '');
-      setContact(patient.contact_num || '');
+      setAddress((current) => current || patient.address || '');
+      setContact((current) => current || patient.contact_num || '');
       setBranches(branchList);
-      setBranchId(branchList[0]?.id || '');
+      setBranchId((current) => current || branchList[0]?.id || '');
+      setCatalog(otcCatalog);
     });
   }, []);
+  useEffect(() => {
+    if (searchParams.get('checkout') !== '1') return;
+    setStep(1);
+    setCheckout(true);
+    navigate('/patient/orders/checkout', { replace: true });
+  }, [navigate, searchParams]);
+  useEffect(() => {
+    if (location.pathname !== '/patient/orders/checkout') setCheckout(false);
+  }, [location.pathname]);
+  useEffect(
+    () => () => {
+      voiceRecognition.current?.abort?.();
+    },
+    []
+  );
+  useEffect(() => () => {
+    clearTimeout(modeTimer.current);
+    clearTimeout(cartMessageTimer.current);
+  }, []);
+
+  function startVoiceSearch() {
+    const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!Recognition) {
+      setVoiceSearchMessage('Voice search is not available in this browser.');
+      return;
+    }
+    voiceRecognition.current?.abort?.();
+    const recognition = new Recognition();
+    let speechLanguage = 'en-PH';
+    try {
+      speechLanguage =
+        JSON.parse(localStorage.getItem('pm_senior_accessibility') || '{}').speechLanguage === 'fil'
+          ? 'fil-PH'
+          : 'en-PH';
+    } catch {
+      /* English Philippines remains a useful fallback. */
+    }
+    recognition.lang = speechLanguage;
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+    recognition.onstart = () => {
+      setVoiceSearchListening(true);
+      setVoiceSearchMessage('Listening… say the medicine name.');
+    };
+    recognition.onresult = (event) => {
+      const medicineName = event.results?.[0]?.[0]?.transcript?.trim();
+      if (!medicineName) return;
+      setSearch(medicineName);
+      setVoiceSearchMessage(`Searching for “${medicineName}”.`);
+    };
+    recognition.onerror = () => {
+      setVoiceSearchMessage('I could not hear that. Please try again or type the medicine name.');
+    };
+    recognition.onend = () => setVoiceSearchListening(false);
+    voiceRecognition.current = recognition;
+    recognition.start();
+  }
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(
+        SHOP_DRAFT_KEY,
+        JSON.stringify({
+          mode,
+          search,
+          category,
+          cart,
+          detailPack,
+          detailQuantity,
+          checkout,
+          step,
+          fulfillment,
+          address,
+          contact,
+          branchId,
+          payment,
+          discount,
+          discountId,
+        })
+      );
+    } catch {
+      /* The shop remains usable when browser storage is unavailable. */
+    }
+  }, [
+    address,
+    branchId,
+    cart,
+    category,
+    checkout,
+    contact,
+    detailPack,
+    detailQuantity,
+    discount,
+    discountId,
+    fulfillment,
+    mode,
+    payment,
+    search,
+    step,
+  ]);
+  const products = useMemo(() => {
+    if (!catalog) return [];
+    return catalog.map(catalogProduct);
+  }, [catalog]);
+  const categories = useMemo(
+    () => ['All', ...new Set(products.map((product) => product.category).filter(Boolean))],
+    [products]
+  );
+  useEffect(() => {
+    if (category !== 'All' && !categories.includes(category)) setCategory('All');
+  }, [categories, category]);
   const shown = useMemo(
     () =>
-      PRODUCTS.filter((product) => {
+      products.filter((product) => {
         const query = search.trim().toLowerCase();
         return (
           (category === 'All' || product.category === category) &&
@@ -261,7 +483,7 @@ export default function Shop() {
               .includes(query))
         );
       }),
-    [category, search]
+    [category, products, search]
   );
   const cartItems = Object.values(cart).filter((item) => item.quantity > 0);
   const itemCount = cartItems.reduce((sum, item) => sum + item.quantity, 0);
@@ -275,79 +497,158 @@ export default function Shop() {
   function setQuantity(product, quantity, pack = cart[product.id]?.pack || 'strip') {
     const safeQuantity = Math.max(0, Math.min(product.limit, quantity));
     setCart((current) => ({ ...current, [product.id]: { product, pack, quantity: safeQuantity } }));
+    if (safeQuantity > (cart[product.id]?.quantity || 0)) {
+      setLastAddedProduct(product);
+      setCartMessage(`${product.brand} added to cart`);
+      clearTimeout(cartMessageTimer.current);
+      cartMessageTimer.current = window.setTimeout(() => setCartMessage(''), 2200);
+    }
   }
   function openDetails(product) {
     setDetail(product);
     setDetailPack(cart[product.id]?.pack || 'strip');
     setDetailQuantity(Math.max(1, cart[product.id]?.quantity || 1));
   }
+  function switchMode(nextMode) {
+    if (nextMode === mode || modeTransition) return;
+    setModeTransition(`leaving-${nextMode}`);
+    modeTimer.current = window.setTimeout(() => {
+      setMode(nextMode);
+      setModeTransition(`entering-${nextMode}`);
+      modeTimer.current = window.setTimeout(() => setModeTransition(''), 260);
+    }, 180);
+  }
+  async function requestRestockAlert(product) {
+    try {
+      const drugId = String(product.id || '').replace(/^catalog-/, '');
+      await api(`/api/patient/shop/otc/${drugId}/restock-alert`, { method: 'POST' });
+      setRestockAlerts((current) => new Set([...current, product.id]));
+    } catch {
+      setError('We could not save your restock reminder. Please try again.');
+    }
+  }
   function startCheckout() {
     setError('');
-    setStep(1);
-    setCheckout(true);
+    navigate('/patient/cart');
   }
   function continueCheckout() {
-    if (fulfillment === 'delivery' && !address.trim())
-      return setError('Enter the delivery address.');
+    const deliveryRegion = region;
+    const deliveryProvince = province;
+    const deliveryCity = city;
+    const deliveryBarangay = barangay;
+    if (!recipientName.trim()) return setError('Enter the full name for this order.');
+    if (fulfillment === 'delivery' && (!deliveryRegion.trim() || !deliveryProvince.trim() || !deliveryCity.trim() || !deliveryBarangay.trim() || !postalCode.trim() || !streetName.trim()))
+      return setError('Complete the recipient and delivery address fields.');
     if (!contact.trim()) return setError('Enter a contact number for order updates.');
     if (fulfillment === 'pickup' && !branchId) return setError('Choose a pickup branch.');
     setError('');
     setStep(2);
   }
-  function placeOrder() {
+  async function placeOrder() {
     if (discount && !discountId.trim())
       return setError('Enter the Senior Citizen or PWD ID number.');
+    if (cartItems.length !== 1) {
+      return setError('Please place one medicine at a time so stock can be confirmed safely.');
+    }
     setPlacing(true);
     setError('');
-    const id = `PM-${Date.now().toString().slice(-8)}`;
-    const order = {
-      id,
-      created_at: new Date().toISOString(),
-      status: 'order_placed',
-      fulfillment,
-      address: fulfillment === 'delivery' ? address.trim() : '',
-      contact: contact.trim(),
-      branch_id: branchId,
-      branch: branches.find((item) => item.id === branchId)?.name || 'Selected branch',
-      payment,
-      discount: discount ? 'Senior Citizen / PWD 20%' : '',
-      discount_id: discountId.trim(),
-      subtotal,
-      delivery_fee: deliveryFee,
-      discount_amount: discountAmount,
-      total,
-      items: cartItems.map(({ product, pack, quantity }) => ({
-        id: product.id,
-        name: `${product.brand} (${product.generic})`,
-        pack: pack === 'box' ? 'Full box' : product.pack,
-        quantity,
-        unit_price: product[pack],
-      })),
-    };
     try {
-      const previous = JSON.parse(localStorage.getItem('pm_otc_orders') || '[]');
-      localStorage.setItem('pm_otc_orders', JSON.stringify([order, ...previous]));
-      localStorage.setItem('pm_last_otc_order', id);
+      const deliveryAddress = fulfillment === 'delivery'
+        ? [`House/Unit ${houseNumber.trim()}${building.trim() ? `, ${building.trim()}` : ''}`, streetName.trim(), barangay, city, province, region, postalCode.trim()].join(', ')
+        : null;
+      const orders = await Promise.all(cartItems.map(({ product, quantity }) => {
+        if (!product.drugId) throw new Error('This medicine is not available from the live pharmacy catalog.');
+        return api('/api/patient/orders', {
+          method: 'POST',
+          body: {
+            drug_id: product.drugId,
+            quantity,
+            branch_id: branchId,
+            fulfillment,
+            address: deliveryAddress,
+            payment_method: fulfillment === 'delivery' ? 'COD' : 'CASH_ON_PICKUP',
+          },
+        });
+      }));
+      sessionStorage.removeItem(SHOP_DRAFT_KEY);
       setCart({});
       setCheckout(false);
-      navigate(`/patient/orders?placed=${encodeURIComponent(id)}`);
-    } catch {
-      setError('The order could not be saved on this device. Please try again.');
+      navigate(`/patient/orders?placed=${encodeURIComponent(orders[0]?.data?.id || '')}`);
+    } catch (requestError) {
+      setError(requestError.message || 'The order could not be placed. Please try again.');
       setPlacing(false);
     }
   }
 
+  if (location.pathname === '/patient/cart') {
+    if (searchParams.get('type') === 'rx') return <PrescriptionShop checkoutPage />;
+    return (
+      <main className="pm-shop-page pm-cart-page">
+        <header className="pm-cart-page__header">
+          <button className="pm-cart-page__back" aria-label="Back to Pharmacy Shop" onClick={() => navigate('/patient/shop', { replace: true })} type="button"><Icon name="back" /></button>
+          <div><small>Your cart</small><h1>Your Cart</h1></div>
+        </header>
+        <div className="pm-cart-type-tabs" role="tablist">
+          <button className="active" role="tab" aria-selected="true" type="button">OTC Medicines</button>
+          <button role="tab" aria-selected="false" onClick={() => navigate('/patient/cart?type=rx')} type="button">Prescription Medicines</button>
+        </div>
+        {cartItems.length ? (
+          <section className="pm-cart-page__content">
+            <div className="pm-cart-review__items">
+              {cartItems.map(({ product, pack, quantity }) => (
+                <article key={product.id}>
+                  <span className="pm-cart-review__visual"><Icon name="medicine" size={27} /></span>
+                  <div>
+                    <strong>{product.brand}</strong>
+                    <small>{pack === 'box' ? 'Full box' : product.pack}</small>
+                    <b>{money(product[pack] * quantity)}</b>
+                  </div>
+                  <div className="pm-cart-review__quantity">
+                    <button aria-label={`Remove one ${product.brand}`} onClick={() => setQuantity(product, quantity - 1, pack)} type="button"><Icon name="minus" size={16} /></button>
+                    <strong>{quantity}</strong>
+                    <button aria-label={`Add one ${product.brand}`} disabled={quantity >= product.limit} onClick={() => setQuantity(product, quantity + 1, pack)} type="button"><Icon name="plus" size={16} /></button>
+                  </div>
+                </article>
+              ))}
+            </div>
+            <div className="pm-cart-review__totals">
+              <div><span>Subtotal</span><strong>{money(subtotal)}</strong></div>
+              <div><span>Delivery fee</span><strong>Calculated at checkout</strong></div>
+              <div className="total"><span>Total</span><strong>{money(subtotal)}</strong></div>
+            </div>
+            <button className="pm-checkout-primary" onClick={() => navigate('/patient/orders/checkout')} type="button">Proceed to Checkout</button>
+          </section>
+        ) : (
+          <section className="pm-cart-page__empty">
+            <span><Icon name="cart" size={25} /></span>
+            <strong>Your cart is empty</strong>
+            <p>Add medicines from the Pharmacy Shop to see them here.</p>
+            <button onClick={() => navigate('/patient/shop')} type="button">Browse medicines</button>
+          </section>
+        )}
+      </main>
+    );
+  }
+
   if (mode === 'rx')
     return (
-      <main className="pm-shop-page">
+      <main className={`pm-shop-page ${modeTransition}`}>
         <header className="pm-shop-header">
           <div>
             <h1>Pharmacy Shop</h1>
-            <p>OTC and pharmacist-gated prescription orders.</p>
+            <p>Upload a prescription for pharmacist approval.</p>
           </div>
+          <button
+            aria-label={`Open cart with ${itemCount} items`}
+            onClick={() => navigate('/patient/cart?type=rx')}
+            type="button"
+          >
+            <Icon name="cart" />
+            {itemCount > 0 && <b>{itemCount}</b>}
+          </button>
         </header>
         <div className="pm-shop-mode-tabs" role="tablist">
-          <button onClick={() => setMode('otc')} role="tab" aria-selected="false" type="button">
+          <button onClick={() => switchMode('otc')} role="tab" aria-selected="false" type="button">
             <strong>OTC &amp; Vitamins</strong>
             <small>No prescription needed</small>
           </button>
@@ -369,7 +670,7 @@ export default function Shop() {
     );
 
   return (
-    <main className="pm-shop-page">
+    <main className={`pm-shop-page ${modeTransition}`}>
       <header className="pm-shop-header">
         <div>
           <h1>Pharmacy Shop</h1>
@@ -378,7 +679,6 @@ export default function Shop() {
         <button
           aria-label={`Open cart with ${itemCount} items`}
           onClick={startCheckout}
-          disabled={!itemCount}
           type="button"
         >
           <Icon name="cart" />
@@ -390,7 +690,7 @@ export default function Shop() {
           <strong>OTC &amp; Vitamins</strong>
           <small>No prescription needed</small>
         </button>
-        <button onClick={() => setMode('rx')} role="tab" aria-selected="false" type="button">
+        <button onClick={() => switchMode('rx')} role="tab" aria-selected="false" type="button">
           <strong>Prescription (Rx) Meds</strong>
           <small>Requires upload and approval</small>
         </button>
@@ -403,23 +703,37 @@ export default function Shop() {
         <Icon name="delivery" />
         Track Orders
       </button>
-      <label className="pm-shop-search">
+      <div className="pm-shop-search">
         <Icon name="search" />
         <input
+          aria-label="Search brand or generic medicine"
           list="otc-medicine-list"
           value={search}
           onChange={(event) => setSearch(event.target.value)}
           placeholder="Search brand or generic medicine"
         />
+        <button
+          aria-label={voiceSearchListening ? 'Listening for a medicine name' : 'Search by voice'}
+          className={`pm-shop-voice-search${voiceSearchListening ? ' is-listening' : ''}`}
+          onClick={startVoiceSearch}
+          title="Search by voice"
+          type="button"
+        >
+          <Icon name="mic" size={21} />
+          <span className="visually-hidden">
+            {voiceSearchListening ? 'Listening for medicine name' : 'Search by voice'}
+          </span>
+        </button>
         <datalist id="otc-medicine-list">
-          {PRODUCTS.map((product) => (
+          {products.map((product) => (
             <option value={`${product.brand} / ${product.generic}`} key={product.id} />
           ))}
         </datalist>
-        <span className="visually-hidden">Search OTC medicines</span>
-      </label>
+      </div>
+      {voiceSearchMessage && <p className="pm-shop-voice-search-message" role="status">{voiceSearchMessage}</p>}
+      {cartMessage && <p className="pm-shop-cart-message" role="status">{cartMessage}</p>}
       <div className="pm-shop-filters" aria-label="Medicine categories">
-        {CATEGORIES.map((item) => (
+        {categories.map((item) => (
           <button
             className={category === item ? 'active' : ''}
             onClick={() => setCategory(item)}
@@ -454,13 +768,15 @@ export default function Shop() {
                   <small>{product.pack}</small>
                 </button>
                 <div className="pm-product-copy">
-                  <em>OTC · Max {product.limit}</em>
+                  <em className={product.inStock ? '' : 'pm-product-stock--out'}>
+                    {product.inStock ? `OTC · Max ${product.limit}` : 'Out of stock'}
+                  </em>
                   <h3>{product.brand}</h3>
                   <p>
                     {product.generic} {product.strength}
                   </p>
                   <strong>
-                    {money(product.strip)} <small>/ pack</small>
+                    {product.strip == null ? 'Price not set' : <>{money(product.strip)} <small>/ pack</small></>}
                   </strong>
                 </div>
                 {quantity ? (
@@ -485,10 +801,14 @@ export default function Shop() {
                 ) : (
                   <button
                     className="pm-product-add"
-                    onClick={() => setQuantity(product, 1)}
+                    onClick={() => (product.inStock ? setQuantity(product, 1) : requestRestockAlert(product))}
+                    disabled={(product.inStock && product.strip == null) || (!product.inStock && restockAlerts.has(product.id))}
                     type="button"
                   >
-                    <Icon name="plus" size={18} /> Add
+                    {product.inStock ? <Icon name="plus" size={18} /> : <Icon name="bell" size={18} />}{' '}
+                    {!product.inStock
+                      ? restockAlerts.has(product.id) ? 'Reminder set' : 'Notify me'
+                      : product.strip == null ? 'Price unavailable' : 'Add'}
                   </button>
                 )}
               </article>
@@ -502,20 +822,29 @@ export default function Shop() {
           <p>Try another brand, generic name, or category.</p>
         </div>
       )}
-      {itemCount > 0 && (
-        <footer className="pm-shop-cart-bar">
-          <span>
-            <small>
-              {itemCount} {itemCount === 1 ? 'item' : 'items'}
-            </small>
-            <strong>{money(subtotal)}</strong>
+      {itemCount > 0 && createPortal(
+        <footer
+          className="pm-shop-cart-bar"
+          onClick={startCheckout}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' || event.key === ' ') startCheckout();
+          }}
+          role="button"
+          tabIndex={0}
+        >
+          <span className="pm-shop-cart-bar__item">
+            <span className="pm-shop-cart-bar__icon"><Icon name="cart" size={20} /></span>
+            <span>
+              <small>{itemCount} {itemCount === 1 ? 'item' : 'items'} in your cart</small>
+              <strong>{lastAddedProduct?.brand || 'Your medicine cart'}</strong>
+            </span>
           </span>
           <button onClick={startCheckout} type="button">
-            Review Cart <Icon name="cart" />
+            Checkout <strong>{money(total)}</strong>
           </button>
         </footer>
-      )}
-      {detail && (
+      , document.body)}
+      {detail && createPortal(
         <div className="pm-drawer-backdrop" role="presentation">
           <section
             className="pm-product-drawer"
@@ -550,7 +879,7 @@ export default function Shop() {
                 <dd>{detail.limit} packs per order</dd>
               </div>
             </dl>
-            <fieldset>
+            {detail.strip != null ? <fieldset>
               <legend>Choose packaging</legend>
               <div className="pm-pack-toggle">
                 <button
@@ -568,8 +897,10 @@ export default function Shop() {
                   Full box <strong>{money(detail.box)}</strong>
                 </button>
               </div>
-            </fieldset>
-            <div className="pm-drawer-quantity">
+            </fieldset> : (
+              <p className="pm-product-price-note">Price will appear here once it has been set.</p>
+            )}
+            {detail.strip != null && <div className="pm-drawer-quantity">
               <span>
                 <strong>Quantity</strong>
                 <small>Maximum {detail.limit} packs</small>
@@ -593,7 +924,7 @@ export default function Shop() {
                   <Icon name="plus" />
                 </button>
               </div>
-            </div>
+            </div>}
             <aside className="pm-guidance-box">
               <Icon name="info" />
               <div>
@@ -612,37 +943,45 @@ export default function Shop() {
             <button
               className="pm-drawer-add"
               onClick={() => {
+                if (!detail.inStock) {
+                  requestRestockAlert(detail);
+                  return;
+                }
                 setQuantity(detail, detailQuantity, detailPack);
                 setDetail(null);
               }}
+              disabled={(detail.inStock && detail.strip == null) || (!detail.inStock && restockAlerts.has(detail.id))}
               type="button"
             >
-              Add to Cart · {money(detail[detailPack] * detailQuantity)}
+              {!detail.inStock
+                ? restockAlerts.has(detail.id) ? 'Restock reminder set' : 'Notify me when in stock'
+                : detail.strip == null
+                ? 'Price not set'
+                : `Add to Cart · ${money(detail[detailPack] * detailQuantity)}`}
             </button>
           </section>
         </div>
-      )}
-      {checkout && (
+      , document.body)}
+      {checkout && createPortal(
         <div className="pm-checkout-backdrop" role="presentation">
-          <section
-            className="pm-checkout-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="checkout-title"
-          >
+          <section className="pm-checkout-modal" aria-labelledby="checkout-title">
             <header>
               <div>
-                <small>Step {step} of 2</small>
                 <h2 id="checkout-title">
-                  {step === 1 ? 'Delivery Destination' : 'Payment & Summary'}
+                  Your Cart
                 </h2>
               </div>
-              <button onClick={() => setCheckout(false)} aria-label="Close checkout" type="button">
-                <Icon name="close" />
+              <button className="pm-checkout-back" onClick={() => navigate('/patient/cart', { replace: true })} type="button">
+                <Icon name="back" size={18} />
               </button>
             </header>
+            <div className="pm-cart-type-tabs" role="tablist">
+              <button className="active" role="tab" aria-selected="true" type="button">OTC Medicines</button>
+              <button role="tab" aria-selected="false" onClick={() => navigate('/patient/cart?type=rx')} type="button">Prescription Medicines</button>
+            </div>
             <div className="pm-checkout-progress">
-              <span className="active" />
+              <span className={step >= 0 ? 'active' : ''} />
+              <span className={step >= 1 ? 'active' : ''} />
               <span className={step === 2 ? 'active' : ''} />
             </div>
             {error && (
@@ -650,7 +989,35 @@ export default function Shop() {
                 {error}
               </div>
             )}
-            {step === 1 ? (
+            {step === 0 ? (
+              <div className="pm-cart-review">
+                <div className="pm-cart-review__items">
+                  {cartItems.map(({ product, pack, quantity }) => (
+                    <article key={product.id}>
+                      <span className="pm-cart-review__visual"><Icon name="medicine" size={27} /></span>
+                      <div>
+                        <strong>{product.brand}</strong>
+                        <small>{pack === 'box' ? 'Full box' : product.pack}</small>
+                        <b>{money(product[pack] * quantity)}</b>
+                      </div>
+                      <div className="pm-cart-review__quantity">
+                        <button aria-label={`Remove one ${product.brand}`} onClick={() => setQuantity(product, quantity - 1, pack)} type="button"><Icon name="minus" size={16} /></button>
+                        <strong>{quantity}</strong>
+                        <button aria-label={`Add one ${product.brand}`} disabled={quantity >= product.limit} onClick={() => setQuantity(product, quantity + 1, pack)} type="button"><Icon name="plus" size={16} /></button>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+                <div className="pm-cart-review__totals">
+                  <div><span>Subtotal</span><strong>{money(subtotal)}</strong></div>
+                  <div><span>Delivery fee</span><strong>Calculated at checkout</strong></div>
+                  <div className="total"><span>Total</span><strong>{money(subtotal)}</strong></div>
+                </div>
+                <button className="pm-checkout-primary" onClick={() => setStep(1)} type="button">
+                  Proceed to Checkout
+                </button>
+              </div>
+            ) : step === 1 ? (
               <div className="pm-checkout-step">
                 <fieldset>
                   <legend>How would you like to receive it?</legend>
@@ -679,20 +1046,31 @@ export default function Shop() {
                     </button>
                   </div>
                 </fieldset>
+                <label>
+                  <span>Full name</span>
+                  <input value={recipientName} onChange={(event) => setRecipientName(event.target.value)} placeholder="Full name" />
+                </label>
+                <label>
+                  <span>Contact number</span>
+                  <input
+                    inputMode="tel"
+                    value={contact}
+                    onChange={(event) => setContact(event.target.value)}
+                    placeholder="09XX XXX XXXX"
+                  />
+                  <small>You may use your caregiver’s number.</small>
+                </label>
                 {fulfillment === 'delivery' ? (
-                  <label>
-                    <span>
-                      Delivery address{' '}
-                      <button onClick={() => setAddress(profile.address || '')} type="button">
-                        Use saved
-                      </button>
-                    </span>
-                    <textarea
-                      value={address}
-                      onChange={(event) => setAddress(event.target.value)}
-                      placeholder="House number, street, barangay, city"
-                    />
-                  </label>
+                  <>
+                    <label><span>Region</span><select value={region} onChange={(event) => { setRegion(event.target.value); setProvince(''); setCity(''); setBarangay(''); }}><option value="">Select region</option>{Object.keys(ADDRESS_OPTIONS).map((item) => <option key={item}>{item}</option>)}</select></label>
+                    <label><span>Province</span><select disabled={!region} value={province} onChange={(event) => { setProvince(event.target.value); setCity(''); setBarangay(''); }}><option value="">Select province</option>{region && Object.keys(ADDRESS_OPTIONS[region]).map((item) => <option key={item}>{item}</option>)}</select></label>
+                    <label><span>City / Municipality</span><select disabled={!province} value={city} onChange={(event) => { setCity(event.target.value); setBarangay(''); }}><option value="">Select city or municipality</option>{province && Object.keys(ADDRESS_OPTIONS[region][province]).map((item) => <option key={item}>{item}</option>)}</select></label>
+                    <label><span>Barangay</span><select disabled={!city} value={barangay} onChange={(event) => setBarangay(event.target.value)}><option value="">Select barangay</option>{city && ADDRESS_OPTIONS[region][province][city].map((item) => <option key={item}>{item}</option>)}</select></label>
+                    <label><span>Postal code</span><input inputMode="numeric" value={postalCode} onChange={(event) => setPostalCode(event.target.value)} placeholder="e.g. 1101" /></label>
+                    <label><span>Street name</span><input value={streetName} onChange={(event) => setStreetName(event.target.value)} placeholder="Street or subdivision" /></label>
+                    <label><span>Building / unit <small>Optional</small></span><input value={building} onChange={(event) => setBuilding(event.target.value)} placeholder="Building, floor, or unit" /></label>
+                    <label><span>Delivery instructions <small>Optional</small></span><input value={houseNumber} onChange={(event) => setHouseNumber(event.target.value)} placeholder="Gate color, floor, or delivery note" /></label>
+                  </>
                 ) : (
                   <label>
                     <span>Pickup branch</span>
@@ -706,64 +1084,23 @@ export default function Shop() {
                     </select>
                   </label>
                 )}
-                <label>
-                  <span>Contact number</span>
-                  <input
-                    inputMode="tel"
-                    value={contact}
-                    onChange={(event) => setContact(event.target.value)}
-                    placeholder="09XX XXX XXXX"
-                  />
-                  <small>You may use your caregiver’s number.</small>
-                </label>
                 <button className="pm-checkout-primary" onClick={continueCheckout} type="button">
-                  Continue to Payment
+                  Continue to Payment &amp; Summary
                 </button>
               </div>
             ) : (
               <div className="pm-checkout-step">
-                <fieldset>
-                  <legend>Payment method</legend>
-                  <div className="pm-payment-options">
-                    {[
-                      ['cod', 'Cash on Delivery'],
-                      ['gcash', 'GCash on Delivery'],
-                      ['maya', 'Maya on Delivery'],
-                    ].map(([value, label]) => (
-                      <button
-                        className={payment === value ? 'active' : ''}
-                        onClick={() => setPayment(value)}
-                        type="button"
-                        key={value}
-                      >
-                        <Icon name="wallet" />
-                        <span>{label}</span>
-                        {payment === value && <Icon name="check" size={18} />}
-                      </button>
-                    ))}
+                <div className="pm-cash-payment-notice" role="note">
+                  <Icon name="wallet" />
+                  <div>
+                    <strong>Cash payment only</strong>
+                    <span>
+                      {fulfillment === 'delivery'
+                        ? 'Pay cash when your order is delivered.'
+                        : 'Pay cash when you collect your order at the branch.'}
+                    </span>
                   </div>
-                </fieldset>
-                <label className="pm-discount-check">
-                  <input
-                    type="checkbox"
-                    checked={discount}
-                    onChange={(event) => setDiscount(event.target.checked)}
-                  />
-                  <span>
-                    <strong>Apply Senior Citizen / PWD 20% discount</strong>
-                    <small>Valid ID is required upon delivery or pickup.</small>
-                  </span>
-                </label>
-                {discount && (
-                  <label>
-                    <span>Senior Citizen / PWD ID number</span>
-                    <input
-                      value={discountId}
-                      onChange={(event) => setDiscountId(event.target.value)}
-                      placeholder="Enter ID number"
-                    />
-                  </label>
-                )}
+                </div>
                 <div className="pm-price-summary">
                   <div>
                     <span>Subtotal</span>
@@ -773,12 +1110,6 @@ export default function Shop() {
                     <span>Delivery fee</span>
                     <strong>{deliveryFee ? money(deliveryFee) : 'Free'}</strong>
                   </div>
-                  {discount && (
-                    <div className="discount">
-                      <span>20% discount</span>
-                      <strong>−{money(discountAmount)}</strong>
-                    </div>
-                  )}
                   <div className="total">
                     <span>Total</span>
                     <strong>{money(total)}</strong>
@@ -796,7 +1127,7 @@ export default function Shop() {
             )}
           </section>
         </div>
-      )}
+      , document.body)}
     </main>
   );
 }

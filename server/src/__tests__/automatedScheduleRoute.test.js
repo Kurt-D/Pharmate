@@ -130,8 +130,8 @@ test('suggested schedule reuses an existing medicine and persists dosage and sta
           dosage_instruction: 'Take 1 tablet',
           quantity_on_hand: 30,
           quantity_unit: 'tablets',
-          start_date: testDate(),
-          end_date: testDate(6),
+          start_date: testDate(1),
+          end_date: testDate(7),
           entry_method: 'MANUAL',
           label_food_instruction: 'NONE',
           patient_confirmed: true,
@@ -160,7 +160,7 @@ test('suggested schedule reuses an existing medicine and persists dosage and sta
     quantity_on_hand: '30.00',
     quantity_unit: 'tablets',
     patient_confirmed: 1,
-    start_date: testDate(),
+    start_date: testDate(1),
   });
   const [[scheduled]] = await pool.execute(
     `SELECT COUNT(*) AS count, MIN(clinical_rule_version) AS clinical_rule_version,
@@ -173,11 +173,8 @@ test('suggested schedule reuses an existing medicine and persists dosage and sta
   expect(Number(scheduled.count)).toBe(28);
   expect(Number(scheduled.clinical_rule_version)).toBeGreaterThan(0);
   expect(scheduled.evidence_source_url).toBe('https://example.test/official-label');
-  expect(scheduled.start_date).toBe(testDate());
-  expect(scheduled.end_date).toBe(testDate(6));
-  const visibleDoses = await request(app).get('/api/patient/doses/today').set(auth(token));
-  expect(visibleDoses.status).toBe(200);
-  expect(visibleDoses.body.filter((dose) => dose.medication_id === medicationId)).toHaveLength(4);
+  expect(scheduled.start_date).toBe(testDate(1));
+  expect(scheduled.end_date).toBe(testDate(7));
 });
 
 test('suggested schedule cannot be saved before Step 3 confirmation', async () => {
@@ -190,6 +187,211 @@ test('suggested schedule cannot be saved before Step 3 confirmation', async () =
     .send({ medications: [] });
   expect(response.status).toBe(400);
   expect(response.body.error).toMatch(/review and confirm/i);
+});
+
+test('saving a schedule today skips elapsed times and starts with its next upcoming dose', async () => {
+  const email = `automated.future-only.${Date.now()}@test.pharmate`;
+  const patientId = await createPatientTestUser({ email, password: PASSWORD });
+  const token = await createAccessToken(patientId);
+  const [[drug]] = await pool.execute(
+    "SELECT id,generic_name FROM drug_reference WHERE LOWER(generic_name)='paracetamol' LIMIT 1"
+  );
+  await pool.execute(
+    `UPDATE drug_reference
+     SET common_strength='500 mg', dosage_form='Tablet', frequency_default='QD',
+         supported_frequency_codes=JSON_ARRAY('QD'), administration_route='ORAL',
+         release_type='IMMEDIATE_RELEASE', min_interval_hours=NULL, max_daily_doses=1,
+         default_units_per_dose=1, food_rule='NONE', catalog_status='VERIFIED',
+         clinical_rule_status='VERIFIED', availability=1
+     WHERE id=?`,
+    [drug.id]
+  );
+  await completeSafetyReview(token, [drug.id]);
+
+  const saved = await request(app)
+    .post('/api/medications/save-reminders')
+    .set(auth(token))
+    .send({
+      review_confirmed: true,
+      schedule_mode: 'SUGGESTED',
+      medications: [
+        {
+          drug_id: drug.id,
+          medicine_name: drug.generic_name,
+          custom_strength: '500 mg',
+          dosage_form: 'Tablet',
+          dosage_instruction: 'Take 1 tablet',
+          quantity_on_hand: 10,
+          quantity_unit: 'tablets',
+          // 00:00 today is always elapsed by the time a normal test runs.
+          // Tomorrow's same reminder is the first one persisted.
+          schedule_times: ['00:00'],
+          start_date: testDate(),
+          end_date: testDate(1),
+          label_frequency: 'QD',
+          label_food_instruction: 'NONE',
+          entry_method: 'MANUAL',
+          patient_confirmed: true,
+        },
+      ],
+    });
+
+  expect(saved.status).toBe(201);
+  expect(saved.body.count).toBe(1);
+  const [[schedule]] = await pool.execute(
+    `SELECT DATE_FORMAT(MIN(scheduled_time), '%Y-%m-%d') AS first_date,
+            COUNT(*) AS count
+     FROM medication_schedules WHERE patient_id=?`,
+    [patientId]
+  );
+  expect(Number(schedule.count)).toBe(1);
+  expect(schedule.first_date).toBe(testDate(1));
+});
+
+test('reminder-only setup generates an Rx medicine schedule from the entered label details', async () => {
+  const email = `automated.reminder-only.${Date.now()}@test.pharmate`;
+  const patientId = await createPatientTestUser({ email, password: PASSWORD });
+  const token = await createAccessToken(patientId);
+  const [[drug]] = await pool.execute(
+    "SELECT id,generic_name FROM drug_reference WHERE LOWER(generic_name)='amoxicillin' LIMIT 1"
+  );
+  await pool.execute(
+    `UPDATE drug_reference
+     SET common_strength='500 mg', dosage_form='Capsule', administration_route='ORAL',
+         release_type='IMMEDIATE_RELEASE', supported_frequency_codes=JSON_ARRAY('Q8H'),
+         frequency_default='Q8H', food_rule='NONE', min_interval_hours=8, max_daily_doses=3,
+         default_units_per_dose=1, clinical_rule_status='VERIFIED', catalog_status='VERIFIED',
+         availability=1
+     WHERE id=?`,
+    [drug.id]
+  );
+  await completeSafetyReview(token, [drug.id]);
+
+  const generated = await request(app)
+    .post('/api/medications/generate-schedule')
+    .set(auth(token))
+    .send({
+      schedule_mode: 'SUGGESTED',
+      schedule_only: true,
+      medications: [
+        {
+          drug_id: drug.id,
+          medicine_name: drug.generic_name,
+          custom_strength: '500 mg',
+          dosage_form: 'Capsule',
+          dosage_instruction: '1 capsule',
+          quantity_on_hand: 21,
+          quantity_unit: 'capsules',
+          start_date: testDate(),
+          label_frequency: 'Q8H',
+          first_dose_time: '08:00',
+          label_food_instruction: 'NONE',
+          entry_method: 'MANUAL',
+          patient_confirmed: true,
+        },
+      ],
+    });
+
+  expect(generated.status).toBe(200);
+  expect(generated.body.schedule_basis).toBe('PATIENT_LABEL');
+  expect(generated.body.schedule.map((slot) => slot.time)).toEqual(['00:00', '08:00', '16:00']);
+});
+
+test('patient-entered frequency generates a suggestion even when the catalog rule is unverified', async () => {
+  const email = `automated.patient-suggestion.${Date.now()}@test.pharmate`;
+  const patientId = await createPatientTestUser({ email, password: PASSWORD });
+  const token = await createAccessToken(patientId);
+  const [[drug]] = await pool.execute(
+    "SELECT id,generic_name FROM drug_reference WHERE LOWER(generic_name)='paracetamol' LIMIT 1"
+  );
+  await pool.execute(
+    `UPDATE drug_reference
+     SET common_strength='500 mg', dosage_form='Tablet', administration_route='ORAL',
+         clinical_rule_status='UNVERIFIED', catalog_status='VERIFIED', availability=1,
+         frequency_default='up to four times daily as needed', max_daily_doses=8,
+         min_interval_hours=4, default_units_per_dose=1
+     WHERE id=?`,
+    [drug.id]
+  );
+  await completeSafetyReview(token, [drug.id]);
+
+  const generated = await request(app)
+    .post('/api/medications/generate-schedule')
+    .set(auth(token))
+    .send({
+      schedule_mode: 'SUGGESTED',
+      medications: [
+        {
+          drug_id: drug.id,
+          medicine_name: drug.generic_name,
+          custom_strength: '500 mg',
+          dosage_form: 'Tablet',
+          dosage_instruction: '1 tablet',
+          quantity_on_hand: 20,
+          quantity_unit: 'tablets',
+          start_date: testDate(),
+          label_frequency: 'BID',
+          label_food_instruction: 'NONE',
+          entry_method: 'MANUAL',
+          patient_confirmed: true,
+        },
+      ],
+    });
+
+  expect(generated.status).toBe(200);
+  expect(generated.body.schedule_basis).toBe('PATIENT_LABEL');
+  expect(generated.body.schedule.map((slot) => slot.time)).toEqual(['07:30', '19:00']);
+});
+
+test('automatic scheduling fails closed without a safety profile', async () => {
+  const email = `automated.no-safety-gate.${Date.now()}@test.pharmate`;
+  const patientId = await createPatientTestUser({ email, password: PASSWORD });
+  const token = await createAccessToken(patientId);
+  const [[drug]] = await pool.execute(
+    "SELECT id,generic_name FROM drug_reference WHERE LOWER(generic_name)='paracetamol' LIMIT 1"
+  );
+  await pool.execute(
+    `UPDATE drug_reference
+     SET common_strength='500 mg', dosage_form='Tablet', administration_route='ORAL',
+         clinical_rule_status='UNVERIFIED', catalog_status='VERIFIED', availability=1,
+         frequency_default='up to four times daily as needed', max_daily_doses=4,
+         min_interval_hours=4, default_units_per_dose=1
+     WHERE id=?`,
+    [drug.id]
+  );
+  await pool.execute('DELETE FROM medication_safety_rules WHERE drug_id=?', [drug.id]);
+
+  const generated = await request(app)
+    .post('/api/medications/generate-schedule')
+    .set(auth(token))
+    .send({
+      schedule_mode: 'SUGGESTED',
+      medications: [
+        {
+          drug_id: drug.id,
+          medicine_name: drug.generic_name,
+          custom_strength: '500 mg',
+          dosage_form: 'Tablet',
+          dosage_instruction: '1 tablet',
+          quantity_on_hand: 20,
+          quantity_unit: 'tablets',
+          start_date: testDate(),
+          label_food_instruction: 'NONE',
+          entry_method: 'MANUAL',
+          patient_confirmed: true,
+        },
+      ],
+    });
+
+  expect(generated.status).toBe(422);
+  expect(generated.body.can_save).toBe(false);
+  expect(generated.body.schedule).toHaveLength(1);
+  expect(generated.body.prn_trackers).toEqual([]);
+  expect(generated.body.warnings).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ code: 'SAFETY_PROFILE_REQUIRED', severity: 'blocking' }),
+    ])
+  );
 });
 
 test('suggested scheduling rejects duplicate active ingredients before persistence', async () => {
@@ -223,7 +425,7 @@ test('suggested scheduling rejects duplicate active ingredients before persisten
 
   await pool.execute(
     `UPDATE drug_reference
-     SET clinical_rule_status='UNVERIFIED', evidence_source_url=NULL
+     SET clinical_rule_status='UNVERIFIED', evidence_source_url=NULL,min_interval_hours=0
      WHERE id=?`,
     [drug.id]
   );
@@ -415,7 +617,7 @@ test('a sourced OTC reference rule requires review while manual label scheduling
   expect(manualIntake.body.medication_ids).toHaveLength(1);
 });
 
-test('PRN medicine is saved as a non-recurring tracker', async () => {
+test('PRN medicine receives an editable daily reminder', async () => {
   const email = `automated.prn.${Date.now()}@test.pharmate`;
   const patientId = await createPatientTestUser({
     email,
@@ -460,22 +662,20 @@ test('PRN medicine is saved as a non-recurring tracker', async () => {
     .set(auth(token))
     .send({ schedule_mode: 'SUGGESTED', medications: [medicine] });
   expect(generated.status).toBe(200);
-  expect(generated.body.schedule).toEqual([]);
-  expect(generated.body.prn_trackers).toEqual([
-    expect.objectContaining({ recurring_reminders: false, directions: medicine.label_direction }),
-  ]);
+  expect(generated.body.schedule).toHaveLength(1);
+  expect(generated.body.prn_trackers).toEqual([]);
 
   const saved = await request(app)
     .post('/api/medications/save-reminders')
     .set(auth(token))
     .send({ schedule_mode: 'SUGGESTED', review_confirmed: true, medications: [medicine] });
   expect(saved.status).toBe(201);
-  expect(saved.body.count).toBe(0);
+  expect(saved.body.count).toBeGreaterThan(300);
   const [[stored]] = await pool.execute(
     "SELECT is_prn,frequency_code FROM medications WHERE patient_id=? AND drug_id=? AND status='active'",
     [patientId, drug.id]
   );
-  expect(stored).toEqual(expect.objectContaining({ is_prn: 1, frequency_code: 'PRN' }));
+  expect(stored).toEqual(expect.objectContaining({ is_prn: 0, frequency_code: 'QD' }));
 });
 
 test('prescription schedules ignore catalog defaults and use approved patient directions exactly', async () => {

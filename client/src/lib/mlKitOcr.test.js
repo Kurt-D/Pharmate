@@ -36,6 +36,14 @@ test('recognizes common formulations and concentration strengths', () => {
   assert.equal(result.formulation, 'Cream');
 });
 
+test('reads common OCR spacing and unit mistakes in medicine strengths', () => {
+  assert.equal(extractMedicineFields('Paracetamol 500mg tablet').strength, '500 mg');
+  assert.equal(extractMedicineFields('Amoxicillin 250 m g / 5 m l').strength, '250 mg / 5 mL');
+  assert.equal(extractMedicineFields('Vitamin D 1 000 IU capsule').strength, '1000 IU');
+  assert.equal(extractMedicineFields('Folic acid 400 m9 tablet').strength, '400 mg');
+  assert.equal(extractMedicineFields('Salbutamol 2 mg per 5 mL syrup').strength, '2 mg / 5 mL');
+});
+
 test('quality gate rejects blurry, dark, and small images', () => {
   assert.equal(
     classifyImageQuality({ width: 320, height: 800, brightness: 120, contrast: 40, sharpness: 100 })

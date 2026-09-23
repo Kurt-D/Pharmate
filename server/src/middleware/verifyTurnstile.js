@@ -9,7 +9,11 @@ const TURNSTILE_ALWAYS_PASS_TEST_SECRET = '1x0000000000000000000000000000000AA';
 const TURNSTILE_TEST_HOSTNAME = 'dummy-key-pass';
 const CAPTCHA_COOKIE = 'pm_captcha_challenge';
 const CAPTCHA_TTL_SECONDS = 5 * 60;
-const FAILURE = { error: 'Security check failed. Please verify you are human.' };
+const FAILURE = {
+  code: 'HUMAN_VERIFICATION_REQUIRED',
+  challengeRequired: true,
+  error: "We couldn't complete the security check. Please try again.",
+};
 let bypassWarningShown = false;
 
 function developmentBypassEnabled() {
@@ -163,7 +167,8 @@ async function verifyTurnstile(req, res, next) {
         : hosts.size === 0 || hosts.has(returnedHost);
     const valid =
       data?.success === true &&
-      (!action || !data.action || data.action === action) &&
+      Boolean(action) &&
+      data.action === action &&
       hostnameIsValid;
     return valid ? next() : res.status(400).json(FAILURE);
   } catch {

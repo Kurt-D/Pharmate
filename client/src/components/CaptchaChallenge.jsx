@@ -91,6 +91,7 @@ const CaptchaChallenge = forwardRef(function CaptchaChallenge({ action, onChange
           <input
             autoComplete="off"
             maxLength={8}
+            placeholder="Type the characters above"
             required
             spellCheck="false"
             value={answer}

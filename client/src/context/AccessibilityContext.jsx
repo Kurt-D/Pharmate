@@ -14,6 +14,7 @@ export const DEFAULT_ACCESSIBILITY = {
   enhancedFocus: true,
   ttsEnabled: true,
   speechRate: 'slow',
+  speechVoice: 'female-1',
   speechLanguage: 'en',
   largeTouch: true,
   confirmActions: true,

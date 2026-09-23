@@ -26,7 +26,7 @@
 }
 
 .cg-header h1 {
-  color: #2474e5;
+  color: #578EF5;
   font-size: 1.55rem;
   font-weight: 800;
   line-height: 1.2;
@@ -66,7 +66,7 @@
   background: #eaf3ff;
   border: 1px solid #c9def9;
   border-radius: 50%;
-  color: #2474e5;
+  color: #578EF5;
   display: flex;
   height: 88px;
   justify-content: center;
@@ -77,7 +77,7 @@
 
 .cg-empty-art > span {
   align-items: center;
-  background: #2474e5;
+  background: #578EF5;
   border: 3px solid #fff;
   border-radius: 50%;
   bottom: -3px;
@@ -91,7 +91,7 @@
 }
 
 .cg-empty-eyebrow {
-  color: #2a67b8;
+  color: #578EF5;
   font-size: 0.75rem;
   font-weight: 750;
   letter-spacing: 0.035em;
@@ -139,7 +139,7 @@
   align-items: center;
   background: #e7f1ff;
   border-radius: 50%;
-  color: #2474e5;
+  color: #578EF5;
   display: flex;
   font-size: 0.88rem;
   font-weight: 800;
@@ -168,7 +168,7 @@
 
 .cg-empty > button {
   align-items: center;
-  background: #2474e5;
+  background: #578EF5;
   border: 0;
   border-radius: 0.75rem;
   color: #fff;
@@ -183,7 +183,7 @@
 }
 
 .cg-empty > button:hover {
-  background: #2a67b8;
+  background: #578EF5;
 }
 
 .cg-empty-security {
@@ -241,7 +241,7 @@
 }
 
 .cg-nav button.active {
-  color: #2474e5;
+  color: #578EF5;
   font-weight: 800;
 }
 
@@ -302,7 +302,7 @@
   background: #eaf3ff;
   border: 1px solid #c9def9;
   border-radius: 0.85rem;
-  color: #2474e5;
+  color: #578EF5;
   display: flex;
   height: 52px;
   justify-content: center;
@@ -349,7 +349,7 @@
   background: #f7faff;
   border: 1px solid #dbe7f6;
   border-radius: 0.7rem;
-  color: #2474e5;
+  color: #578EF5;
   display: flex;
   height: 42px;
   justify-content: center;
@@ -382,7 +382,7 @@
   align-items: center;
   background: #eaf3ff;
   border-radius: 50%;
-  color: #2474e5;
+  color: #578EF5;
   display: flex;
   height: 34px;
   justify-content: center;
@@ -396,7 +396,7 @@
 
 .cg-monitor-summary i.clear,
 .cg-monitor-summary i.activity {
-  background: #eaf7e8;
+  background: #edf9e9;
   color: #248645;
 }
 
@@ -466,7 +466,7 @@
 
 .cg-monitor-clear {
   align-items: center;
-  background: #f0faee;
+  background: #f5f9ff;
   border: 1px solid #bfe2b5;
   border-radius: 0.9rem;
   color: #248645;
@@ -528,13 +528,13 @@
 .cg-monitor-medicines .cg-med-row > i {
   align-items: center;
   background: #eaf3ff;
-  color: #2474e5;
+  color: #578EF5;
   display: flex;
   justify-content: center;
 }
 
 .cg-monitor-medicines .cg-med-row > i.otc {
-  background: #eaf7e8;
+  background: #edf9e9;
   color: #248645;
 }
 
@@ -556,7 +556,7 @@
 }
 
 .cg-monitor-medicines .cg-med-row em.monitoring {
-  background: #eaf7e8;
+  background: #edf9e9;
   color: #1b6f35;
 }
 
@@ -588,7 +588,7 @@
   align-items: center;
   background: #eaf3ff;
   border-radius: 0.75rem;
-  color: #2474e5;
+  color: #578EF5;
   display: flex;
   height: 42px;
   justify-content: center;
@@ -632,7 +632,7 @@
 
 .cg-reminder-card > button {
   align-items: center;
-  background: #2474e5;
+  background: #578EF5;
   border: 0;
   border-radius: 0.75rem;
   color: #fff;
@@ -645,7 +645,7 @@
 }
 
 .cg-reminder-card > button:hover:not(:disabled) {
-  background: #2a67b8;
+  background: #578EF5;
 }
 
 .cg-reminder-card > button:disabled {
@@ -670,7 +670,7 @@
   background: #fff;
   border: 1px solid #d7e2f0;
   border-radius: 0.9rem;
-  color: #2474e5;
+  color: #578EF5;
   display: grid;
   gap: 0.65rem;
   grid-template-columns: 42px minmax(0, 1fr) 20px;

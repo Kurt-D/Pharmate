@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, Check, Eye, EyeOff, KeyRound, Mail, ShieldCheck } from 'lucide-react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import pharmateLogo from '../assets/pharmate-logo.png';
+import { Check, Eye, EyeOff, KeyRound, Mail, ShieldCheck } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import splashLogo from '../assets/pharmate-splash-logo.png';
 import CaptchaChallenge from '../components/CaptchaChallenge.jsx';
 import { apiUrl } from '../config.js';
 import '../styles/auth.css';
@@ -92,12 +92,10 @@ function PasswordField({ label, value, onChange, visible, onToggle, autoFocus = 
 
 export default function ForgotPassword() {
   const navigate = useNavigate();
-  const [params] = useSearchParams();
-  const linkToken = params.get('token') || '';
-  const [step, setStep] = useState(linkToken ? 3 : 1);
+  const [step, setStep] = useState(1);
   const [email, setEmail] = useState('');
   const [pin, setPin] = useState('');
-  const [resetToken, setResetToken] = useState(linkToken);
+  const [resetToken, setResetToken] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showNewPassword, setShowNewPassword] = useState(false);
@@ -212,29 +210,16 @@ export default function ForgotPassword() {
     <main className="auth-page">
       <div className="auth-orb auth-orb--one" aria-hidden="true" />
       <div className="auth-orb auth-orb--two" aria-hidden="true" />
-      <section className="auth-shell auth-recovery" aria-labelledby="recovery-title">
-        <div className="auth-logo">
-          <img src={pharmateLogo} alt="PharMate" />
-        </div>
-        <Link className="auth-back" to="/login">
-          <ArrowLeft size={18} /> Back to login
-        </Link>
-        <header className="auth-heading">
-          <span className="auth-kicker">Secure account recovery</span>
-          <h1 id="recovery-title">
-            {step === 1
-              ? 'Forgot your password?'
-              : step === 2
-                ? 'Enter your 6-digit PIN'
-                : 'Create a new password'}
-          </h1>
-          <p>
-            {step === 1
-              ? 'Enter the email connected to your PharMate account.'
-              : step === 2
-                ? `Enter the one-time code sent to ${email}. It expires in 10 minutes.`
-                : 'Use a strong, unique password that you have not used before.'}
-          </p>
+      <section className="auth-shell auth-recovery auth-shell--recovery-app" aria-labelledby="recovery-title">
+        <header className="auth-app-hero">
+          <button className="auth-app-hero__back" type="button" onClick={() => navigate('/login?view=signin')} aria-label="Back to sign in">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5m7-7-7 7 7 7" /></svg>
+          </button>
+          <div className="auth-app-hero__brand">
+            <img src={splashLogo} alt="" />
+            <h1 id="recovery-title">Reset password</h1>
+            <p>{step === 1 ? 'Recover your account' : step === 2 ? 'Verify your security PIN' : 'Choose a new password'}</p>
+          </div>
         </header>
 
         <ol className="auth-steps" aria-label="Account recovery progress">
@@ -275,7 +260,7 @@ export default function ForgotPassword() {
                 autoComplete="email"
                 type="email"
                 required
-                placeholder="Enter your email address"
+              placeholder="e.g. juan.delacruz@email.com"
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
               />

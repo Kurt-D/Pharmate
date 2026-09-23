@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { CheckCircle2 } from 'lucide-react';
 import { api } from '../../api.js';
 
 const EMPTY_FORM = {
@@ -21,6 +22,7 @@ export default function DrugCuration() {
   const [busy, setBusy] = useState(false);
   const [flash, setFlash] = useState('');
   const [error, setError] = useState('');
+  const [workspace, setWorkspace] = useState('queue');
 
   async function load() {
     try {
@@ -103,18 +105,20 @@ export default function DrugCuration() {
   }, [catalog, catalogClass, catalogSearch]);
 
   return (
-    <>
-      <h2 className="h4 fw-bold mb-1">Drug Curation</h2>
-      <p className="text-muted">
-        Review medicines patients entered that are not yet in the pharmacy catalog. Adding a catalog
-        entry does not verify its clinical scheduling rule. Approving adds the drug —
-        pharmacist-signed — and makes the patient&apos;s medication schedulable.
-      </p>
-
+    <section className="px-drug-review">
       {flash && <div className="alert alert-success py-2">{flash}</div>}
       {error && <div className="alert alert-warning py-2">{error}</div>}
 
-      <div className="row g-3">
+      <nav className="px-drug-review__tabs" aria-label="Clinical drug review panels" role="tablist">
+        <button aria-selected={workspace === 'queue'} className={workspace === 'queue' ? 'is-active' : ''} onClick={() => setWorkspace('queue')} role="tab" type="button">
+          Pending review <b>{queue?.length || 0}</b>
+        </button>
+        <button aria-selected={workspace === 'catalog'} className={workspace === 'catalog' ? 'is-active' : ''} onClick={() => setWorkspace('catalog')} role="tab" type="button">
+          Medicine catalog
+        </button>
+      </nav>
+
+      {workspace === 'queue' && <div className="row g-3 px-drug-review__body">
         {/* Queue list */}
         <div className="col-lg-5">
           <div className="pw-card p-3">
@@ -126,7 +130,7 @@ export default function DrugCuration() {
             </div>
             {queue === null && <div className="text-muted small">Loading…</div>}
             {queue && queue.length === 0 && (
-              <div className="text-muted small py-3 text-center">Queue is empty. 🎉</div>
+              <div className="text-muted small py-3 text-center"><CheckCircle2 aria-hidden="true" size={16} /> Queue is empty.</div>
             )}
             {queue &&
               queue.map((item) => (
@@ -259,9 +263,9 @@ export default function DrugCuration() {
             )}
           </div>
         </div>
-      </div>
+      </div>}
 
-      <section className="pw-card pw-drug-catalog mt-3">
+      {workspace === 'catalog' && <section className="pw-card pw-drug-catalog px-drug-review__body">
         <div className="pw-drug-catalog__header">
           <div>
             <div className="d-flex align-items-center gap-2">
@@ -348,9 +352,8 @@ export default function DrugCuration() {
             </div>
           </>
         )}
-      </section>
-      <ClinicalRuleVerification />
-    </>
+      </section>}
+    </section>
   );
 }
 
@@ -371,6 +374,13 @@ const RULE_FIELDS = [
   ['evidence_source_url', 'Evidence URL (HTTPS)', 'url'],
   ['source_revision_date', 'Source revision date', 'date'],
   ['evidence_reviewed_at', 'Review date', 'date'],
+];
+const RULE_STATUS_TABS = [
+  ['IN_REVIEW', 'In review'],
+  ['UNVERIFIED', 'Unverified'],
+  ['REJECTED', 'Rejected'],
+  ['VERIFIED', 'Verified'],
+  ['RETIRED', 'Retired'],
 ];
 
 function dateValue(value) {
@@ -490,15 +500,8 @@ export function ClinicalRuleVerification() {
   }
 
   return (
-    <section className="pw-card pw-medicine-rules mt-3 p-3">
-      <div className="d-flex flex-wrap justify-content-between gap-2 align-items-start mb-3">
-        <div>
-          <h3 className="h5 mb-1">Medicine Rules &amp; Safety</h3>
-          <p className="text-muted mb-0">
-            One-time evidence review for formulary scheduling rules. This does not approve an
-            individual patient schedule.
-          </p>
-        </div>
+    <section className="pw-card pw-medicine-rules pmr-rules mt-3 p-3">
+      <div className="pmr-rules__header d-flex flex-wrap justify-content-between gap-2 align-items-start mb-3">
         {report && (
           <div className="d-flex flex-wrap gap-2">
             <span className="badge bg-secondary">{report.total} total</span>
@@ -528,9 +531,22 @@ export function ClinicalRuleVerification() {
           license record. Missing or blocked checks: {credential.credential_issues.join(', ')}.
         </div>
       )}
-      <div className="row g-3">
-        <div className="col-lg-5">
-          <div className="d-flex gap-2 mb-2">
+      <nav className="pmr-rules__tabs" aria-label="Medicine rule status">
+        {RULE_STATUS_TABS.map(([value, label]) => (
+          <button
+            aria-selected={status === value}
+            className={status === value ? 'is-active' : ''}
+            key={value}
+            onClick={() => setStatus(value)}
+            type="button"
+          >
+            {label}
+          </button>
+        ))}
+      </nav>
+      <div className="row g-3 pmr-rules__workspace">
+        <div className="col-lg-5 pmr-rules__catalog">
+          <div className="pmr-rules__filters">
             <input
               className="form-control"
               onChange={(event) => setQuery(event.target.value)}
@@ -538,20 +554,9 @@ export function ClinicalRuleVerification() {
               aria-label="Search medicine rules"
               value={query}
             />
-            <select
-              className="form-select"
-              aria-label="Filter by rule review status"
-              onChange={(event) => setStatus(event.target.value)}
-              value={status}
-            >
-              <option value="IN_REVIEW">In review</option>
-              <option value="UNVERIFIED">Unverified</option>
-              <option value="REJECTED">Rejected</option>
-              <option value="VERIFIED">Verified</option>
-              <option value="RETIRED">Retired</option>
-            </select>
+            <button onClick={() => loadRules().catch((error) => setMessage(error.message))} type="button">Refresh</button>
           </div>
-          <div className="list-group" style={{ maxHeight: 560, overflowY: 'auto' }}>
+          <div className="list-group pmr-rules__list">
             {rules?.map((rule) => (
               <button
                 className={`list-group-item list-group-item-action ${selectedRule?.id === rule.id ? 'active' : ''}`}
@@ -576,7 +581,7 @@ export function ClinicalRuleVerification() {
             )}
           </div>
         </div>
-        <div className="col-lg-7">
+        <div className="col-lg-7 pmr-rules__editor">
           {!ruleForm ? (
             <div className="text-muted text-center p-5">
               Select a medicine to review its evidence and scheduling rule.

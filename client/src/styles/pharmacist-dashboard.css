@@ -1,8 +1,8 @@
 .phd-shell {
-  --phd-blue: #1d4ed8;
+  --phd-blue: #578EF5;
   --phd-blue-dark: #173ea8;
-  --phd-teal: #0d9488;
-  --phd-green: #059669;
+  --phd-teal: #578EF5;
+  --phd-green: #578EF5;
   --phd-amber: #d97706;
   --phd-red: #dc2626;
   --phd-slate: #1e293b;
@@ -36,7 +36,7 @@
 }
 
 .phd-sidebar {
-  background: linear-gradient(180deg, #102a49 0%, #0b2039 100%);
+  background: #102a49;
   color: #fff;
   display: flex;
   flex-direction: column;
@@ -58,7 +58,7 @@
 
 .phd-brand > span {
   align-items: center;
-  background: linear-gradient(145deg, #2f67e9, #0d9488);
+  background: #578EF5;
   border: 1px solid rgba(255, 255, 255, 0.26);
   border-radius: 0.75rem;
   box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
@@ -129,7 +129,7 @@
 }
 
 .phd-sidebar nav button.active {
-  background: #1d4ed8;
+  background: #578EF5;
   box-shadow: 0 8px 18px rgba(10, 30, 55, 0.32);
   color: #fff;
 }
@@ -651,7 +651,7 @@
 
 .phd-safety-chip {
   align-items: center;
-  background: #eaf8f6;
+  background: #f5f9ff;
   border: 1px solid #c7e8e3;
   border-radius: 999px;
   color: #08766d;
@@ -746,7 +746,7 @@
 }
 
 .phd-document-preview__mark {
-  color: #1d4ed8;
+  color: #578EF5;
   font-family: Georgia, serif;
   font-size: 1.3rem;
   font-weight: 800;
@@ -1190,7 +1190,7 @@
   width: 2.5rem;
 }
 .phd-report-metrics article:nth-child(2) > span {
-  background: #eaf8f6;
+  background: #f5f9ff;
   color: var(--phd-teal);
 }
 .phd-report-metrics article:nth-child(3) > span {
@@ -1231,7 +1231,7 @@
   align-items: center;
   background: #e9f2ff;
   border-radius: 999px;
-  color: #2a67b8;
+  color: #578EF5;
   display: inline-flex;
   font-size: 0.72rem;
   height: 2rem;
@@ -1285,13 +1285,7 @@
 }
 .phd-bar-chart > div > span {
   align-items: end;
-  background: repeating-linear-gradient(
-    to top,
-    #f1f4f8 0,
-    #f1f4f8 1px,
-    transparent 1px,
-    transparent 46px
-  );
+  background: #f1f4f8;
   border-bottom: 1px solid #ccd6e2;
   display: flex;
   height: 260px;
@@ -1300,7 +1294,7 @@
   width: 100%;
 }
 .phd-bar-chart i {
-  background: linear-gradient(180deg, #2b64e1, #1d4ed8);
+  background: #2b64e1;
   border-radius: 0.45rem 0.45rem 0 0;
   display: block;
   max-width: 46px;
@@ -1620,9 +1614,7 @@
 /* Priority triage command center */
 .phd-priority-pulse {
   align-items: center;
-  background:
-    radial-gradient(circle at 82% 10%, rgba(45, 212, 191, 0.2), transparent 30%),
-    linear-gradient(118deg, #102b50 0%, #164ea8 58%, #0d7f79 100%);
+  background: #102b50;
   border: 1px solid rgba(255, 255, 255, 0.15);
   border-radius: 1rem;
   box-shadow: 0 16px 38px rgba(20, 58, 116, 0.2);
@@ -1756,7 +1748,7 @@
   color: var(--phd-amber);
 }
 .phd-priority-summary .combined {
-  background: #eaf8f6;
+  background: #f5f9ff;
   color: var(--phd-teal);
 }
 .phd-priority-summary article div {
@@ -2029,7 +2021,7 @@
 }
 .phd-workstation-preview {
   align-items: center;
-  background: linear-gradient(120deg, #eef4ff, #eaf8f6);
+  background: #eef4ff;
   border: 1px solid #ccdae9;
   border-radius: 0.7rem;
   display: flex;
@@ -2310,7 +2302,7 @@
   color: #fff;
 }
 .phd-brand strong {
-  color: #1d4ed8;
+  color: #578EF5;
 }
 .phd-brand small {
   color: #64748b;
@@ -2323,15 +2315,15 @@
 }
 .phd-sidebar nav button:hover {
   background: #f2f6fb;
-  color: #1d4ed8;
+  color: #578EF5;
 }
 .phd-sidebar nav button.active {
   background: #edf4ff;
-  box-shadow: inset 3px 0 #1d4ed8;
-  color: #1d4ed8;
+  box-shadow: inset 3px 0 #578EF5;
+  color: #578EF5;
 }
 .phd-sidebar nav button b {
-  background: #1d4ed8;
+  background: #578EF5;
   color: #fff;
 }
 .phd-sidebar__footer {
@@ -2495,6 +2487,29 @@
 .phd-inquiry-context > .phd-button {
   width: 100%;
 }
+.phd-empty-state {
+  align-items: center;
+  color: #718096;
+  display: flex;
+  justify-content: center;
+  min-height: 180px;
+  padding: 1rem;
+  text-align: center;
+}
+.phd-inquiry-review {
+  align-self: center;
+  display: grid;
+  gap: 1rem;
+  margin: auto;
+  max-width: 650px;
+  padding: 2rem;
+  width: 100%;
+}
+.phd-inquiry-review h2 { color: var(--phd-slate); font-size: 1.35rem; margin: 0; }
+.phd-inquiry-review p { color: #344860; margin: 0; }
+.phd-inquiry-review aside { background: #ddf8fc; border: 1px solid #8bd8e7; border-radius: .6rem; color: #0b6174; padding: .85rem 1rem; }
+.phd-inquiry-review .phd-button { justify-content: center; width: 100%; }
+.phd-live-summary { color: #718096; font-size: .78rem; margin: 0; text-align: right; }
 
 /* Patient master-detail workspace */
 .phd-patient-search {
@@ -2508,7 +2523,7 @@
 .phd-patient-workspace {
   display: grid;
   gap: 0.9rem;
-  grid-template-columns: minmax(230px, 0.72fr) minmax(390px, 1.45fr) minmax(260px, 0.88fr);
+  grid-template-columns: minmax(250px, 0.72fr) minmax(440px, 1.65fr);
 }
 .phd-patient-list,
 .phd-patient-profile,
@@ -2541,7 +2556,7 @@
   align-items: center;
   background: #eef4ff;
   border-radius: 999px;
-  color: #1d4ed8;
+  color: #578EF5;
   display: inline-flex;
   font-size: 0.63rem;
   height: 1.65rem;
@@ -2571,13 +2586,13 @@
 }
 .phd-patient-list > div > button.active {
   background: #eef5ff;
-  box-shadow: inset 3px 0 #1d4ed8;
+  box-shadow: inset 3px 0 #578EF5;
 }
 .phd-patient-avatar {
   align-items: center;
   background: #e7efff;
   border-radius: 50%;
-  color: #1d4ed8;
+  color: #578EF5;
   display: inline-flex;
   font-size: 0.59rem;
   font-weight: 850;
@@ -2625,7 +2640,7 @@
 }
 .phd-patient-information h3 svg,
 .phd-patient-followups h3 svg {
-  color: #1d4ed8;
+  color: #578EF5;
 }
 .phd-patient-information dl {
   display: grid;
@@ -2704,7 +2719,7 @@
   align-items: center;
   background: #eef4ff;
   border-radius: 999px;
-  color: #1d4ed8;
+  color: #578EF5;
   display: inline-flex;
   font-size: 0.58rem;
   height: 1.5rem;
@@ -2735,15 +2750,15 @@
   font-size: 0.53rem;
 }
 .phd-patient-followups time {
-  color: #1d4ed8;
+  color: #578EF5;
   font-size: 0.58rem;
   font-weight: 750;
 }
 .phd-patient-followups button,
 .phd-patient-alert button {
   align-items: center;
-  background: #1d4ed8;
-  border: 1px solid #1d4ed8;
+  background: #578EF5;
+  border: 1px solid #578EF5;
   border-radius: 0.45rem;
   color: #fff;
   cursor: pointer;
@@ -2871,13 +2886,13 @@
 }
 .phd-verification-queue__list > button.active {
   background: #eef5ff;
-  box-shadow: inset 3px 0 #1d4ed8;
+  box-shadow: inset 3px 0 #578EF5;
 }
 .phd-patient-dot {
   align-items: center;
   background: #e7efff;
   border-radius: 50%;
-  color: #1d4ed8;
+  color: #578EF5;
   display: inline-flex;
   height: 2.35rem;
   justify-content: center;
@@ -3426,7 +3441,7 @@
 .phd-preview-heading-actions > button:hover {
   background: #eef5ff;
   border-color: #96b3e7;
-  color: #1d4ed8;
+  color: #578EF5;
 }
 .phd-rejection-reason > span {
   align-items: center;
@@ -3732,15 +3747,13 @@
 
 /* Reference-inspired visual polish, using PharMate content and colors */
 .phd-shell {
-  background:
-    radial-gradient(circle at 8% 12%, rgba(14, 165, 233, 0.16), transparent 25%),
-    radial-gradient(circle at 92% 86%, rgba(13, 148, 136, 0.13), transparent 28%), #dfeeff;
+  background: #dfeeff;
   gap: 1rem;
   padding: 1rem;
 }
 
 .phd-sidebar {
-  background: linear-gradient(165deg, #2f73e8 0%, #1d5fd7 58%, #1989a1 128%);
+  background: #2f73e8;
   border: 0;
   border-radius: 1.2rem;
   box-shadow: 0 20px 45px rgba(29, 78, 216, 0.22);
@@ -3781,7 +3794,7 @@
 }
 .phd-sidebar nav button b {
   background: #dbeafe;
-  color: #1d4ed8;
+  color: #578EF5;
 }
 .phd-sidebar__footer {
   background: rgba(255, 255, 255, 0.12);
@@ -3862,14 +3875,12 @@
   transform: translateY(-2px);
 }
 .phd-card__header {
-  background: linear-gradient(180deg, rgba(250, 252, 255, 0.98), rgba(247, 250, 255, 0.82));
+  background: #ffffff;
   border-radius: 1.05rem 1.05rem 0 0;
 }
 
 .phd-overview-hero {
-  background:
-    radial-gradient(circle at 78% 20%, rgba(255, 255, 255, 0.22), transparent 25%),
-    linear-gradient(120deg, #2468df 0%, #2d7ee9 58%, #0d9488 135%);
+  background: #578EF5;
   border: 1px solid rgba(255, 255, 255, 0.38);
   border-radius: 1.2rem;
   box-shadow: 0 18px 38px rgba(29, 78, 216, 0.2);
@@ -4117,12 +4128,10 @@
 }
 
 .phd-shell.is-dark-mode {
-  background:
-    radial-gradient(circle at 9% 12%, rgba(37, 99, 235, 0.16), transparent 27%),
-    radial-gradient(circle at 92% 86%, rgba(13, 148, 136, 0.13), transparent 28%), #0d1117;
+  background: #0d1117;
 }
 .phd-shell.is-dark-mode .phd-sidebar {
-  background: linear-gradient(165deg, #1b2638, #151c27);
+  background: #1b2638;
   border: 1px solid #344051;
 }
 .phd-shell.is-dark-mode .phd-main {
@@ -4134,7 +4143,7 @@
   border-color: #343d49;
 }
 .phd-shell.is-dark-mode .phd-card__header {
-  background: linear-gradient(180deg, #20262e, #1a1f26);
+  background: #20262e;
 }
 
 @media (max-width: 1120px) {
@@ -4227,33 +4236,33 @@
   border-color: #aecbf0;
 }
 
-/* PharMate branding: lively sky blue with a restrained leaf-green accent. */
+/* PharMate branding: a single clean blue accent system. */
 .phd-sidebar,
 .phd-shell.is-dark-mode .phd-sidebar {
-  background: #4c8ce4;
+  background: #578EF5;
   border-color: transparent;
   box-shadow: 0 20px 45px rgba(76, 140, 228, 0.25);
 }
 .phd-sidebar .phd-brand,
 .phd-shell.is-dark-mode .phd-sidebar .phd-brand {
-  background: #fff;
-  border: 1px solid #91d06c;
-  border-bottom: 4px solid #91d06c;
-  box-shadow: 0 7px 18px rgba(30, 46, 74, 0.12);
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.28);
+  box-shadow: none;
 }
 .phd-sidebar .phd-brand > span {
-  background: #f3faee;
+  background: rgba(255, 255, 255, 0.16);
 }
 .phd-sidebar .phd-brand strong,
 .phd-shell.is-dark-mode .phd-sidebar .phd-brand strong {
-  color: #2a67b8;
+  color: #fff;
 }
 .phd-sidebar .phd-brand small,
 .phd-shell.is-dark-mode .phd-sidebar .phd-brand small {
-  color: #1b4d08;
+  color: #dceaff;
 }
 .phd-nav-label {
-  color: #f3faee;
+  color: #eaf3ff;
 }
 .phd-sidebar nav button,
 .phd-shell.is-dark-mode .phd-sidebar nav button {
@@ -4268,9 +4277,22 @@
 .phd-shell.is-dark-mode .phd-sidebar nav button.active {
   background: #fff;
   box-shadow:
-    inset 4px 0 #91d06c,
-    0 8px 18px rgba(30, 46, 74, 0.14);
-  color: #2a67b8;
+    0 8px 18px rgba(8, 53, 135, 0.18);
+  color: #578EF5;
+  border-radius: 999px 0 0 999px;
+  margin-right: -1rem;
+  padding-left: 1rem;
+  position: relative;
+  animation: pm-sidebar-item-in 220ms ease-out;
+}
+.phd-sidebar nav button { border-radius: 999px; transition: background 160ms ease, color 160ms ease, transform 160ms ease; }
+.phd-sidebar nav button:hover { transform: translateX(3px); }
+@keyframes pm-sidebar-item-in {
+  from { opacity: .65; transform: translateX(-8px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+@media (max-width: 700px) {
+  .phd-sidebar nav button.active { border-radius: 999px; margin-right: 0; }
 }
 .phd-medicine-rules {
   min-width: 0;
@@ -4313,6 +4335,37 @@
   border-radius: 8px;
   white-space: normal;
 }
+.phd-medicine-rules .pmr-rules {
+  background: #fff;
+}
+.phd-medicine-rules .pmr-rules__header {
+  padding: 0.35rem 0.2rem 1rem;
+  border-bottom: 1px solid #e0e9f5;
+}
+.phd-medicine-rules .pmr-rules__header h3 { color: #17375d; font-size: 1.2rem; font-weight: 800; }
+.phd-medicine-rules .pmr-rules__header .badge { border-radius: 999px; font-size: 0.7rem; }
+.phd-medicine-rules .pmr-rules__catalog > .list-group {
+  overflow: auto !important;
+  border: 1px solid #dce6f4;
+  border-radius: 0.85rem;
+  background: #fff;
+}
+.phd-medicine-rules .pmr-rules__catalog .list-group-item { border-right: 0; border-left: 0; }
+.phd-medicine-rules .pmr-rules__catalog .list-group-item:first-child { border-top: 0; }
+.phd-medicine-rules .pmr-rules__editor {
+  min-width: 0;
+  padding: 1.15rem;
+  border: 1px solid #dce6f4;
+  border-radius: 0.9rem;
+  background: #fff;
+  box-shadow: 0 8px 22px rgba(37, 78, 135, 0.05);
+}
+.phd-medicine-rules .pmr-rules__editor > .row { row-gap: 0.95rem !important; }
+.phd-medicine-rules .pmr-rules__editor .border.rounded {
+  border-color: #dce6f4 !important;
+  border-radius: 0.8rem !important;
+  background: #f8fbff !important;
+}
 .phd-medicine-rules :is(button, input, select, textarea):focus-visible {
   outline: 3px solid #2166ef;
   outline-offset: 3px;
@@ -4324,4 +4377,623 @@
   .phd-medicine-rules .col-lg-5 > .d-flex {
     flex-direction: column;
   }
+}
+
+/* Live consultation workspace: the former context column was removed, so let
+   the conversation use that space instead of leaving an empty panel. */
+.phd-unified-inquiries {
+  grid-template-columns: minmax(300px, 0.72fr) minmax(0, 1.8fr);
+  min-height: 660px;
+  background: #f9fbff;
+}
+.phd-unified-inquiries__list {
+  background: #fff;
+}
+.phd-unified-inquiries__chat {
+  background: #fff;
+  min-height: 660px;
+}
+.phd-unified-inquiries__list .phd-thread-list__header {
+  background: #f7fbff;
+  border-bottom: 1px solid #dce8f8;
+  padding: 1.1rem 1rem 0.95rem;
+}
+.phd-unified-inquiries__list .phd-thread-list__items button {
+  min-height: 88px;
+  padding: 0.9rem 1rem;
+}
+.phd-unified-inquiries__list .phd-thread-list__items button.active {
+  background: #e7f0ff;
+  box-shadow: inset 4px 0 #578EF5;
+}
+.phd-chat-panel > header {
+  background: #fff;
+  min-height: 82px;
+  padding: 1rem 1.25rem;
+}
+.phd-chat-panel header h2 {
+  font-size: 1.05rem;
+}
+.phd-chat-panel header p {
+  font-size: 0.75rem;
+  max-width: 58ch;
+}
+.phd-messages {
+  background: #f7faff;
+  gap: 1rem;
+  padding: 1.45rem clamp(1.25rem, 4vw, 3.25rem);
+}
+.phd-message {
+  max-width: min(76%, 720px);
+}
+.phd-message > div {
+  box-shadow: 0 3px 10px rgba(31, 67, 122, 0.06);
+  font-size: 0.78rem;
+  padding: 0.8rem 0.95rem;
+}
+.phd-message time {
+  font-size: 0.62rem;
+}
+.phd-composer {
+  background: #fff;
+  padding: 1rem clamp(1.25rem, 3vw, 2.25rem) 1.15rem;
+}
+.phd-composer textarea {
+  background: #f9fbff;
+  border-color: #c8d8ee;
+  font-size: 0.8rem;
+  min-height: 5rem;
+  padding: 0.85rem 0.95rem;
+}
+.phd-composer > div {
+  margin-top: 0.7rem;
+}
+.phd-composer small {
+  font-size: 0.65rem;
+}
+.phd-composer .phd-button {
+  min-width: 156px;
+}
+.phd-inquiry-review {
+  background: #fff;
+  border: 1px solid #d8e5f6;
+  border-radius: 1rem;
+  box-shadow: 0 12px 32px rgba(30, 66, 120, 0.08);
+  max-width: 710px;
+  padding: 2.25rem;
+}
+.phd-inquiry-review h2 {
+  font-size: 1.55rem;
+}
+.phd-inquiry-review aside {
+  border-radius: 0.75rem;
+  line-height: 1.55;
+}
+
+/* Priority conversations receive a distinct, calm PharMate care treatment. */
+.phd-chat-panel__title-row {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+}
+.phd-chat-panel__priority {
+  align-items: center;
+  background: #0b7ff5;
+  border: 1px solid rgba(255, 255, 255, 0.75);
+  border-radius: 999px;
+  box-shadow: 0 5px 14px rgba(18, 133, 205, 0.2);
+  color: #fff;
+  display: inline-flex;
+  font-size: 0.62rem;
+  font-weight: 850;
+  letter-spacing: 0.02em;
+  padding: 0.28rem 0.58rem;
+  text-transform: uppercase;
+}
+.phd-chat-panel.is-priority {
+  background: #f6fbff;
+  border-color: #a9d8e6;
+  box-shadow: 0 18px 42px rgba(17, 104, 153, 0.12);
+}
+.phd-chat-panel.is-priority > header {
+  background: #eaf4ff;
+  border-bottom-color: #cbe5ec;
+}
+.phd-chat-panel.is-priority .phd-chat-avatar {
+  background: #d7eeff;
+  box-shadow: 0 0 0 5px rgba(44, 155, 232, 0.1);
+  color: #0876d8;
+}
+.phd-chat-panel.is-priority .phd-messages {
+  background: #f7fcff;
+}
+.phd-chat-panel.is-priority .phd-message--patient > div {
+  background: #fff;
+  border: 1px solid #cde3ed;
+  box-shadow: 0 7px 18px rgba(27, 100, 136, 0.09);
+}
+.phd-chat-panel.is-priority .phd-message--pharmacist > div {
+  background: #126fe5;
+  box-shadow: 0 8px 18px rgba(15, 108, 207, 0.23);
+}
+.phd-chat-panel.is-priority .phd-composer {
+  background: #fff;
+  border-top-color: #cbe5ec;
+}
+.phd-chat-panel.is-priority .phd-composer textarea {
+  background: #fff;
+  border-color: #aad7e2;
+  box-shadow: 0 5px 15px rgba(40, 130, 158, 0.06);
+}
+.phd-chat-panel.is-priority .phd-composer .phd-button--primary {
+  background: #0b7ff5;
+  box-shadow: 0 7px 16px rgba(15, 137, 182, 0.2);
+}
+
+@media (max-width: 980px) {
+  .phd-unified-inquiries {
+    grid-template-columns: 1fr;
+  }
+  .phd-unified-inquiries__list {
+    border-bottom: 1px solid #e4eaf1;
+    border-right: 0;
+    max-height: 340px;
+  }
+  .phd-unified-inquiries__chat {
+    min-height: 560px;
+  }
+}
+
+/* Prescription validation — deliberate empty and review states, without the
+   large, unstructured blank cards produced by the generic Bootstrap layout. */
+.pv-validation {
+  color: #1d2b44;
+  display: grid;
+  gap: 1.25rem;
+  min-width: 0;
+}
+.pv-validation__heading {
+  max-width: 950px;
+}
+.pv-validation__eyebrow {
+  color: #578EF5;
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.pv-validation__heading h2 {
+  color: #162b4b;
+  font-size: clamp(1.4rem, 2.1vw, 2rem);
+  letter-spacing: -0.035em;
+  line-height: 1.12;
+  margin: 0.35rem 0 0.45rem;
+}
+.pv-validation__heading p {
+  color: #5d718e;
+  font-size: 0.9rem;
+  line-height: 1.55;
+  margin: 0;
+}
+.pv-validation__workspace {
+  align-items: stretch;
+  display: grid;
+  gap: 1.15rem;
+  grid-template-columns: minmax(280px, 0.72fr) minmax(0, 1.45fr);
+  min-height: 470px;
+}
+.pv-validation .pw-card {
+  background: #fff;
+  border: 1px solid #d7e3f3;
+  border-radius: 1rem;
+  box-shadow: 0 12px 30px rgba(31, 70, 128, 0.07);
+  padding: 1.15rem;
+}
+.pv-validation__queue {
+  display: flex;
+  flex-direction: column;
+}
+.pv-validation__queue-header {
+  align-items: center;
+  border-bottom: 1px solid #e5edf8;
+  display: flex;
+  font-size: 0.95rem;
+  justify-content: space-between;
+  padding-bottom: 0.9rem;
+}
+.pv-validation__queue-header .badge {
+  align-items: center;
+  background: #e9f1ff !important;
+  border-radius: 999px;
+  display: inline-flex;
+  height: 1.75rem;
+  justify-content: center;
+  min-width: 1.75rem;
+}
+.pv-validation__queue button {
+  border: 1px solid #dce7f5 !important;
+  border-radius: 0.75rem;
+  margin-top: 0.7rem;
+  padding: 0.8rem !important;
+  transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+.pv-validation__queue button:hover {
+  border-color: #82aaf0 !important;
+  box-shadow: 0 6px 14px rgba(37, 99, 219, 0.09);
+  transform: translateY(-1px);
+}
+.pv-validation__empty {
+  align-items: center;
+  color: #637692;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  justify-content: center;
+  line-height: 1.55;
+  padding: 2rem;
+  text-align: center;
+}
+.pv-validation__empty b {
+  align-items: center;
+  background: #eaf7ef;
+  border-radius: 50%;
+  color: #1b8a58;
+  display: inline-flex;
+  font-size: 1.4rem;
+  height: 3rem;
+  justify-content: center;
+  margin-bottom: 0.8rem;
+  width: 3rem;
+}
+.pv-validation__empty strong {
+  color: #203755;
+  font-size: 1rem;
+  margin-bottom: 0.25rem;
+}
+.pv-validation__empty span {
+  font-size: 0.78rem;
+  max-width: 35rem;
+}
+.pv-validation__review {
+  display: flex;
+  flex-direction: column;
+  min-height: 470px;
+}
+.pv-validation__empty--review {
+  background: #fff;
+  border-radius: 0.8rem;
+}
+.pv-validation__empty--review b {
+  background: #e9f1ff;
+  color: #578EF5;
+  font-size: 1.75rem;
+}
+.pv-validation__review > .mb-2:first-child {
+  background: #f6f9fe;
+  border: 1px solid #e0e9f5;
+  border-radius: 0.75rem;
+  padding: 0.85rem 1rem;
+}
+.pv-validation__review .border.rounded {
+  border-color: #dce6f3 !important;
+  border-radius: 0.8rem !important;
+}
+.pv-validation__image-shell {
+  position: relative;
+  display: grid;
+  min-height: 300px;
+  place-items: center;
+  margin-bottom: 1rem;
+  overflow: hidden;
+  border: 1px solid #dce6f3;
+  border-radius: 0.8rem;
+  background: #f7faff;
+}
+.pv-validation__image-shell img {
+  display: block;
+  max-width: 100%;
+  max-height: 420px;
+  object-fit: contain;
+}
+.pv-validation__expand {
+  position: absolute;
+  right: 0.8rem;
+  bottom: 0.8rem;
+  border: 1px solid #b8ceed;
+  border-radius: 0.55rem;
+  background: #fff;
+  color: #205bb4;
+  font-size: 0.72rem;
+  font-weight: 800;
+  padding: 0.5rem 0.7rem;
+  box-shadow: 0 4px 12px rgba(24, 66, 126, 0.12);
+}
+.pv-validation__viewer {
+  position: fixed;
+  z-index: 2000;
+  inset: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  background: #101c31;
+}
+.pv-validation__viewer-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.85rem clamp(1rem, 3vw, 2rem);
+  background: #fff;
+  color: #193457;
+}
+.pv-validation__viewer-toolbar > div { display: flex; align-items: center; gap: 0.55rem; }
+.pv-validation__viewer-toolbar button {
+  min-width: 34px;
+  min-height: 34px;
+  border: 1px solid #c6d7ee;
+  border-radius: 0.5rem;
+  background: #fff;
+  color: #245aaa;
+  font-weight: 800;
+}
+.pv-validation__viewer-toolbar button:disabled { opacity: 0.45; }
+.pv-validation__viewer-toolbar span { min-width: 42px; color: #58708f; font-size: 0.75rem; text-align: center; }
+.pv-validation__viewer-toolbar .pv-validation__viewer-exit {
+  padding: 0 0.65rem;
+  color: #fff;
+  border-color: #578EF5;
+  background: #578EF5;
+}
+.pv-validation__viewer-stage {
+  display: grid;
+  place-items: center;
+  overflow: auto;
+  padding: 2rem;
+}
+.pv-validation__viewer-stage img {
+  max-width: 90vw;
+  max-height: 82vh;
+  object-fit: contain;
+  transform-origin: center;
+  transition: transform 160ms ease;
+}
+.pv-validation__review textarea {
+  border-color: #cbd9eb;
+  border-radius: 0.7rem;
+  min-height: 4.7rem;
+}
+.pv-validation__review .btn {
+  border-radius: 0.65rem;
+  font-weight: 700;
+}
+.pv-validation__queue {
+  background: linear-gradient(180deg, #f7faff 0%, #fff 36%);
+}
+.pv-validation__queue-header strong {
+  color: #172b4d;
+  font-size: 1rem;
+}
+.pv-validation__queue button .d-flex {
+  align-items: flex-start;
+  gap: 0.7rem;
+}
+.pv-validation__queue button .d-flex strong {
+  color: #172b4d;
+  line-height: 1.35;
+  min-width: 0;
+}
+.pv-validation__queue button .pw-code {
+  color: #578EF5;
+  flex: 0 0 auto;
+  font-weight: 800;
+  white-space: nowrap;
+}
+.pv-validation__queue button .small {
+  color: #60708a;
+  font-size: 0.76rem;
+}
+.pv-validation__empty--review {
+  background: linear-gradient(135deg, #f7faff 0%, #fff 58%, #f4f8ff 100%);
+  border: 1px dashed #c8daf4;
+  border-radius: 1rem;
+  margin: 0.1rem;
+  min-height: 22rem;
+}
+.pv-validation__empty--review b {
+  box-shadow: 0 8px 18px rgba(87, 142, 245, 0.16);
+  height: 3.4rem;
+  width: 3.4rem;
+}
+.pv-validation__empty--review strong {
+  color: #172b4d;
+  font-size: 1.08rem;
+}
+.pv-validation__empty--review span {
+  color: #60708a;
+  max-width: 29rem;
+}
+.pw-shell:has(.pv-validation) .pw-header h1 {
+  font-size: clamp(1.45rem, 1.8vw, 1.75rem);
+  font-weight: 700;
+  letter-spacing: -0.025em;
+}
+.pw-shell:has(.pv-validation) .pw-sub {
+  font-size: 0.74rem;
+}
+.pv-validation__queue-header strong {
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+.pv-validation__queue button .d-flex strong {
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+.pv-validation__queue button .pw-code {
+  font-size: 0.84rem;
+  font-weight: 700;
+}
+.pv-validation__empty--review strong {
+  font-size: 0.96rem;
+  font-weight: 700;
+}
+.pv-validation__empty--review span {
+  font-size: 0.74rem;
+}
+.pv-validation__history { display: grid; gap: 0.9rem; }
+.pv-validation__history .pv-validation__queue-header > div { display: grid; gap: 0.18rem; }
+.pv-validation__history .pv-validation__queue-header > div > span { color: #70829a; font-size: 0.75rem; }
+.pv-validation__history-empty { color: #70829a; font-size: 0.82rem; margin: 0; padding: 0.5rem 0; }
+.pv-validation__history-list { display: grid; gap: 0.65rem; }
+.pv-validation__history-item {
+  align-items: start; border: 1px solid #e0e9f5; border-radius: 0.75rem;
+  background: #fff; display: flex; gap: 1rem; justify-content: space-between; padding: 0.8rem 0.9rem;
+  text-align: left; width: 100%;
+}
+.pv-validation__history-item:hover { border-color: #82aaf0; box-shadow: 0 5px 14px rgba(37,99,219,.08); }
+.pv-validation__history-item > div:first-child { display: grid; gap: 0.2rem; min-width: 0; }
+.pv-validation__history-list strong { color: #203755; font-size: 0.88rem; }
+.pv-validation__history-list span,
+.pv-validation__history-list small,
+.pv-validation__history-list time { color: #6c809a; font-size: 0.74rem; }
+.pv-validation__history-item > div:last-child {
+  align-items: end; display: grid; flex: 0 0 auto; gap: 0.35rem; text-align: right;
+}
+.pv-validation__history-status {
+  border-radius: 999px; font-size: 0.7rem; font-style: normal; font-weight: 800;
+  padding: 0.28rem 0.55rem; text-transform: capitalize;
+}
+.pv-validation__history-status.is-approved { background: #e8f7ed; color: #167643; }
+.pv-validation__history-status.is-rejected { background: #fff0f0; color: #b42332; }
+.pv-validation__history-status.is-needs_clearer { background: #fff7df; color: #956b08; }
+.pv-validation__history-modal { align-items: center; background: rgba(15, 30, 54, .55); display: flex; inset: 0; justify-content: center; padding: 1rem; position: fixed; z-index: 1100; }
+.pv-validation__history-modal > section { background: #fff; border-radius: 1rem; box-shadow: 0 20px 50px rgba(15,30,54,.26); display: grid; gap: 1rem; max-width: 540px; padding: 1.25rem; width: 100%; }
+.pv-validation__history-modal header { align-items: start; display: flex; justify-content: space-between; }
+.pv-validation__history-modal header small { color: #578EF5; font-weight: 800; text-transform: uppercase; }
+.pv-validation__history-modal h2 { font-size: 1.25rem; margin: .2rem 0; }.pv-validation__history-modal p { color: #6c809a; margin: 0; }
+.pv-validation__history-modal header button { background: #f1f5fa; border: 0; border-radius: 50%; font-size: 1.4rem; height: 2rem; width: 2rem; }
+.pv-validation__history-modal dl { display: grid; gap: .6rem; margin: 0; }.pv-validation__history-modal dl div { border-bottom: 1px solid #e6edf6; padding-bottom: .55rem; }.pv-validation__history-modal dt { color: #71829a; font-size: .72rem; }.pv-validation__history-modal dd { color: #203755; margin: .15rem 0 0; }
+.pv-validation__history-modal label { color: #314a6d; display: grid; font-size: .78rem; font-weight: 700; gap: .35rem; }.pv-validation__history-modal select,.pv-validation__history-modal textarea { border: 1px solid #cbd9eb; border-radius: .6rem; padding: .55rem .65rem; }.pv-validation__history-modal footer { display: flex; gap: .6rem; justify-content: end; }
+.pv-validation__history-modal input { border: 1px solid #cbd9eb; border-radius: .6rem; padding: .55rem .65rem; width: 100%; }
+.pv-validation__history-photo { background: #f7faff; border: 1px solid #dce8f6; border-radius: .7rem; display: grid; gap: .65rem; padding: .75rem; }
+.pv-validation__history-photo > div { display: grid; gap: .12rem; }
+.pv-validation__history-photo strong { color: #203755; font-size: .78rem; }
+.pv-validation__history-photo small,
+.pv-validation__history-photo > span { color: #6c809a; font-size: .7rem; line-height: 1.35; }
+.pv-validation__history-photo button { background: #fff; border: 1px solid #c9dcf5; border-radius: .55rem; color: #1d5fc8; display: grid; font-size: .72rem; font-weight: 750; gap: .45rem; overflow: hidden; padding: .45rem; text-align: left; }
+.pv-validation__history-photo button:hover { border-color: #5e95e7; }
+.pv-validation__history-photo img { border-radius: .35rem; display: block; height: 132px; object-fit: contain; width: 100%; }
+.pv-validation__review .btn-success {
+  background: #168557;
+  border-color: #168557;
+}
+.phd-patient-tracking-prompt {
+  align-items: center;
+  background: #f7fbff;
+  border: 1px solid #cfe0f7;
+  border-radius: 0.9rem;
+  display: grid;
+  gap: 0.8rem;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  padding: 0.85rem 1rem;
+}
+.phd-patient-tracking-prompt > span {
+  align-items: center;
+  background: #e9f3ff;
+  border-radius: 0.7rem;
+  color: #2563c9;
+  display: flex;
+  height: 2.6rem;
+  justify-content: center;
+  width: 2.6rem;
+}
+.phd-patient-tracking-prompt small { color: #2563c9; font-size: 0.64rem; font-weight: 850; letter-spacing: 0.08em; text-transform: uppercase; }
+.phd-patient-tracking-prompt h2 { color: #17365e; font-size: 0.92rem; margin: 0.15rem 0; }
+.phd-patient-tracking-prompt p { color: #637692; font-size: 0.72rem; line-height: 1.45; margin: 0; }
+.phd-patient-tracking-prompt.is-attention { background: #fff8f8; border-color: #ffd1d1; }
+.phd-patient-tracking-prompt.is-attention > span { background: #fff0f0; color: #dc2626; }
+.phd-patient-tracking-prompt.is-attention small { color: #c12424; }
+@media (max-width: 700px) {
+  .phd-patient-tracking-prompt { align-items: start; grid-template-columns: auto 1fr; }
+  .phd-patient-tracking-prompt .phd-button { grid-column: 1 / -1; width: 100%; }
+}
+
+.pv-validation__prescription-form {
+  display: grid;
+  gap: 0.85rem;
+  margin-bottom: 1rem;
+  padding: 1rem;
+  border: 1px solid #cfe0f7;
+  border-radius: 0.9rem;
+  background: #f9fbff;
+}
+.pv-validation__prescription-form h3 {
+  margin: 0.2rem 0;
+  color: #17365e;
+  font-size: 1rem;
+}
+.pv-validation__prescription-form p {
+  margin: 0;
+  color: #637692;
+  font-size: 0.76rem;
+}
+.pv-validation__prescription-form label {
+  display: grid;
+  gap: 0.35rem;
+  color: #294766;
+  font-size: 0.73rem;
+  font-weight: 750;
+}
+.pv-validation__prescription-form input,
+.pv-validation__prescription-form select {
+  min-height: 39px;
+  width: 100%;
+  border: 1px solid #bed0e8;
+  border-radius: 0.55rem;
+  background: #fff;
+  color: #1e3453;
+  font: inherit;
+  font-weight: 500;
+  padding: 0.5rem 0.65rem;
+}
+.pv-validation__form-row {
+  display: grid;
+  grid-template-columns: 1fr 0.7fr 1fr;
+  gap: 0.7rem;
+}
+.pv-validation__form-row--wide {
+  grid-template-columns: minmax(0, 1fr) 120px;
+}
+@media (max-width: 980px) {
+  .pv-validation__workspace {
+    grid-template-columns: 1fr;
+  }
+  .pv-validation__queue {
+    min-height: 220px;
+  }
+  .pv-validation__review {
+    min-height: 380px;
+  }
+}
+@media (max-width: 560px) {
+  .pv-validation__workspace {
+    gap: 0.8rem;
+  }
+  .pv-validation .pw-card {
+    padding: 0.85rem;
+  }
+  .pv-validation__heading p {
+    font-size: 0.82rem;
+  }
+  .pv-validation__review .d-flex.gap-2 {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .pv-validation__review .btn {
+    width: 100%;
+  }
+  .pv-validation__form-row,
+  .pv-validation__form-row--wide {
+    grid-template-columns: 1fr;
+  }
+  .pv-validation__viewer-toolbar { align-items: flex-start; flex-direction: column; }
 }

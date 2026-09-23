@@ -24,6 +24,7 @@ export default function Signup() {
     try {
       const reg = await fetch(apiUrl('/api/auth/register'), {
         method: 'POST',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           email: email.trim(),
@@ -41,6 +42,7 @@ export default function Signup() {
       // have safe defaults and are refined when the patient creates a schedule.
       const res = await fetch(apiUrl('/api/auth/login'), {
         method: 'POST',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: email.trim(), password }),
       });
@@ -50,7 +52,7 @@ export default function Signup() {
         navigate('/login', { replace: true });
         return;
       }
-      login(data.user, data.accessToken, data.refreshToken);
+      login(data.user, data.accessToken, data.csrfToken);
       navigate('/patient/home', { replace: true });
     } catch {
       setError('Cannot reach the server. Please try again.');

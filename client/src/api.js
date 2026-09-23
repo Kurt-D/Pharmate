@@ -10,25 +10,25 @@ let refreshInFlight = null;
 function clearStoredSession() {
   for (const storage of [sessionStorage, localStorage]) {
     storage.removeItem('pm_token');
-    storage.removeItem('pm_refresh');
+    storage.removeItem('pm_csrf');
     storage.removeItem('pm_user');
   }
 }
 
 async function refreshAccessToken() {
   if (refreshInFlight) return refreshInFlight;
-  const refreshToken = sessionStorage.getItem('pm_refresh') || localStorage.getItem('pm_refresh');
-  if (!refreshToken) return null;
+  const csrfToken = sessionStorage.getItem('pm_csrf');
+  if (!csrfToken) return null;
   refreshInFlight = fetch(apiUrl('/api/auth/refresh'), {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ refreshToken }),
+    credentials: 'include',
+    headers: { 'X-CSRF-Token': csrfToken },
   })
     .then(async (response) => {
       if (!response.ok) return null;
       const data = await response.json();
       sessionStorage.setItem('pm_token', data.accessToken);
-      sessionStorage.setItem('pm_refresh', data.refreshToken);
+      sessionStorage.setItem('pm_csrf', data.csrfToken);
       return data.accessToken;
     })
     .catch(() => null)
@@ -42,13 +42,13 @@ async function fetchWithAuthRefresh(path, options = {}, auth = true) {
   const headers = new Headers(options.headers || {});
   const token = sessionStorage.getItem('pm_token') || localStorage.getItem('pm_token');
   if (auth && token) headers.set('Authorization', `Bearer ${token}`);
-  let response = await fetch(apiUrl(path), { ...options, headers });
+  let response = await fetch(apiUrl(path), { ...options, headers, credentials: 'include' });
   if (!auth || response.status !== 401 || path === '/api/auth/refresh') return response;
 
   const renewedToken = await refreshAccessToken();
   if (renewedToken) {
     headers.set('Authorization', `Bearer ${renewedToken}`);
-    response = await fetch(apiUrl(path), { ...options, headers });
+    response = await fetch(apiUrl(path), { ...options, headers, credentials: 'include' });
     return response;
   }
 

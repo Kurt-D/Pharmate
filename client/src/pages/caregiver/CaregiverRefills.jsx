@@ -78,14 +78,18 @@ function DoseSection({ status, doses, onReminder }) {
                       : 'Upcoming'}
               </span>
             </div>
-            {(status === 'due' || status === 'overdue') && (
+            {(status === 'upcoming' || status === 'due' || status === 'overdue') && (
               <button
                 className="mt-3 flex min-h-[46px] w-full items-center justify-center gap-2 rounded-xl border border-blue-200 bg-white px-3 text-sm font-bold text-blue-700 active:scale-[.99]"
                 onClick={() => onReminder(dose)}
                 type="button"
               >
                 <Send className="h-4 w-4" />
-                {status === 'overdue' ? 'Send missed-dose reminder' : 'Send reminder'}
+                {status === 'overdue'
+                  ? 'Send missed-dose check-in'
+                  : status === 'upcoming'
+                    ? 'Send upcoming-dose reminder'
+                    : 'Send reminder'}
               </button>
             )}
           </article>

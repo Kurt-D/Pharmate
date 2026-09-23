@@ -1,39 +1,66 @@
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext.jsx';
+import {
+  ClipboardCheck,
+  LayoutDashboard,
+  MessageCircleMore,
+  PackageCheck,
+  Pill,
+  Settings,
+  History,
+  ShieldCheck,
+  UserRound,
+  UsersRound,
+} from 'lucide-react';
 import '../../styles/pharmacist.css';
 import '../../styles/pharmacist-redesign.css';
 import '../../styles/pharmacist-workspace.css';
-import pharmateLogo from '../../assets/pharmate-logo-transparent.png';
+import '../../styles/pharmacist-modern.css';
+import pharmateLogo from '../../assets/pharmate-logo.png';
 import PortalNotificationButton from '../../components/PortalNotificationButton.jsx';
 
-const MENU = [
-  { to: '/pharmacist/dashboard', label: 'Dashboard' },
-  { to: '/pharmacist/patients', label: 'Patients' },
-  { to: '/pharmacist/inquiries', label: 'Inquiries' },
-  { to: '/pharmacist/appointments', label: 'Appointments' },
-  { to: '/pharmacist/validation', label: 'Prescription Verification' },
-  { to: '/pharmacist/medicine-rules', label: 'Medicine Rules & Safety' },
-  { to: '/pharmacist/alerts', label: 'Alerts' },
+const NAVIGATION_SECTIONS = [
+  {
+    label: 'Clinical workspace',
+    items: [
+      { to: '/pharmacist/dashboard', label: 'Overview', icon: LayoutDashboard },
+      { to: '/pharmacist/inquiries', label: 'Medication Inquiries', icon: MessageCircleMore },
+      { to: '/pharmacist/validation', label: 'Prescription Validation', icon: ClipboardCheck },
+      { to: '/pharmacist/patient-care', label: 'Patient Care', icon: UsersRound },
+    ],
+  },
+  {
+    label: 'Formulary & service',
+    items: [
+      { to: '/pharmacist/curation', label: 'Clinical Drug Review', icon: Pill },
+      { to: '/pharmacist/medicine-rules', label: 'Medicine Rules & Safety', icon: ShieldCheck },
+      { to: '/pharmacist/orders', label: 'Orders', icon: PackageCheck },
+      { to: '/pharmacist/history', label: 'History', icon: History },
+    ],
+  },
+  {
+    label: 'Preferences',
+    items: [
+      { to: '/pharmacist/settings', label: 'Settings', icon: Settings },
+    ],
+  },
 ];
 const TITLES = {
   dashboard: ['Dashboard', 'Manage medicine operations efficiently'],
-  patients: ['Patients', 'Manage linked patient records'],
+  'patient-care': ['Patient Care', 'Manage patients, follow-ups, alerts, and counseling appointments'],
+  patients: ['Patient Care', 'Manage patients, follow-ups, alerts, and counseling appointments'],
   inquiries: ['Counseling', 'Manage and communicate with patients'],
-  appointments: [
-    'Appointments & Counseling',
-    'Schedule follow-ups and review post-dispensing summaries',
-  ],
+  appointments: ['Patient Care', 'Manage patients, follow-ups, alerts, and counseling appointments'],
   validation: [
     'Prescription Verification',
     'Review and verify prescriptions before dispensing medications.',
   ],
-  alerts: ['Alerts', 'Manage medication and inquiry alerts'],
+  alerts: ['Patient Care', 'Manage patients, follow-ups, alerts, and counseling appointments'],
   orders: ['Orders', 'Manage refill and delivery requests'],
-  curation: ['Drug Database', 'Review and curate medicine records'],
-  'medicine-rules': [
-    'Medicine Rules & Safety',
-    'Review medicine evidence, safety checks, and rule versions',
-  ],
+  curation: ['Clinical Drug Review', 'Review medicines awaiting catalog approval and manage the shared medicine catalog'],
+  'medicine-rules': ['Medicine Rules & Safety', 'Review clinical evidence, scheduling rules, and patient-safety coverage'],
+  settings: ['Settings', 'Manage your pharmacist workspace preferences'],
+  history: ['History', 'Review your completed professional activity'],
 };
 
 export default function PharmacistLayout() {
@@ -48,38 +75,30 @@ export default function PharmacistLayout() {
     navigate('/login', { replace: true });
   }
 
-  if (page === 'dashboard') return <Outlet />;
-
   return (
     <div className="pw-shell pw-workspace">
       <nav className="pw-sidebar" aria-label="Pharmacist navigation">
         <div className="pw-brand">
-          <img src={pharmateLogo} alt="PharMate" />
-          <small>Pharmacist portal</small>
+          <span className="pw-brand-mark"><img src={pharmateLogo} alt="PharMate" /></span>
+          <span><strong>PharMate</strong><small>Pharmacist Portal</small></span>
         </div>
-        <div className="pw-menu-label">MENU</div>
-        {MENU.map((m) => (
-          <NavLink
-            key={m.to}
-            to={m.to}
-            className={({ isActive }) => 'pw-navlink' + (isActive ? ' active' : '')}
-          >
-            {m.label}
-          </NavLink>
-        ))}
-        <div className="pw-menu-label pw-operations-label">OPERATIONS</div>
-        <NavLink
-          to="/pharmacist/orders"
-          className={({ isActive }) => 'pw-navlink' + (isActive ? ' active' : '')}
-        >
-          Orders
-        </NavLink>
-        <NavLink
-          to="/pharmacist/curation"
-          className={({ isActive }) => 'pw-navlink' + (isActive ? ' active' : '')}
-        >
-          Drug Database
-        </NavLink>
+        <div className="pw-navigation" aria-label="Pharmacist navigation">
+          {NAVIGATION_SECTIONS.map((section) => (
+            <section className="pw-nav-section" key={section.label}>
+              <div className="pw-menu-label">{section.label}</div>
+              {section.items.map((item) => (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  className={({ isActive }) => 'pw-navlink' + (isActive ? ' active' : '')}
+                >
+                  <item.icon aria-hidden="true" size={18} strokeWidth={2} />
+                  <span>{item.label}</span>
+                </NavLink>
+              ))}
+            </section>
+          ))}
+        </div>
         <button className="pw-logout" onClick={handleLogout}>
           Log out
         </button>
@@ -94,10 +113,10 @@ export default function PharmacistLayout() {
           <div className="text-end">
             <PortalNotificationButton />
             <div className="pw-user-badge">
-              <i aria-hidden="true">Rx</i>
+              <span className="pw-user-avatar" aria-hidden="true"><UserRound size={19} strokeWidth={2} /></span>
               <span>
-                <strong>{user?.full_name || user?.email || 'Pharmacist'}</strong>
-                <small>Pharmacist</small>
+                <strong>{user?.full_name || 'Pharmacist account'}</strong>
+                <small title={user?.email || 'Pharmacist'}>{user?.email || 'Pharmacist'}</small>
               </span>
             </div>
           </div>

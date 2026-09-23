@@ -1,20 +1,31 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { CheckCircle2, ClipboardPenLine, HeartPulse, RefreshCw, Save, Search, ShieldCheck } from 'lucide-react';
 import { api } from '../../api.js';
 
 export default function InquiriesRedesign() {
   const [queue, setQueue] = useState([]);
   const [active, setActive] = useState(null);
   const [messages, setMessages] = useState([]);
+  const [patients, setPatients] = useState([]);
   const [draft, setDraft] = useState('');
+  const [note, setNote] = useState('');
+  const [noteSaving, setNoteSaving] = useState(false);
+  const [noteMessage, setNoteMessage] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [queueFilter, setQueueFilter] = useState('all');
+  const [search, setSearch] = useState('');
   const poll = useRef(null);
   const activeId = active?.id;
   const activeStatus = active?.validation_status;
   const loadQueue = useCallback(async () => {
     try {
-      const response = await api('/api/pharmacist/inquiries');
-      setQueue(response.data);
+      const [inquiries, patientList] = await Promise.all([
+        api('/api/pharmacist/inquiries'),
+        api('/api/pharmacist/patients'),
+      ]);
+      setQueue(inquiries.data);
+      setPatients(patientList.data || []);
     } catch (e) {
       setError(e.message);
     }
@@ -37,6 +48,31 @@ export default function InquiriesRedesign() {
     return () => clearInterval(poll.current);
   }, [activeId, activeStatus, loadMessages]);
 
+  useEffect(() => {
+    if (!activeId || activeStatus !== 'accepted') {
+      setNote('');
+      setNoteMessage('');
+      return;
+    }
+    api(`/api/pharmacist/inquiries/${activeId}/note`)
+      .then((response) => setNote(response.data?.note || ''))
+      .catch(() => setNote(''));
+  }, [activeId, activeStatus]);
+
+  async function saveNote() {
+    if (!activeId || noteSaving) return;
+    setNoteSaving(true);
+    setNoteMessage('');
+    try {
+      await api(`/api/pharmacist/inquiries/${activeId}/note`, { method: 'PUT', body: { note } });
+      setNoteMessage('Private note saved');
+    } catch (requestError) {
+      setError(requestError.message);
+    } finally {
+      setNoteSaving(false);
+    }
+  }
+
   async function accept() {
     setBusy(true);
     setError('');
@@ -51,6 +87,16 @@ export default function InquiriesRedesign() {
     } finally {
       setBusy(false);
     }
+  }
+  async function markUrgent() {
+    const reason = window.prompt('Brief clinical-safety reason for urgent handling:');
+    if (!reason) return;
+    try {
+      const response = await api(`/api/pharmacist/inquiries/${active.id}/mark-urgent`, { method: 'POST', body: { reason } });
+      const updated = { ...active, ...response.data };
+      setActive(updated);
+      setQueue((items) => items.map((item) => (item.id === updated.id ? { ...item, ...response.data } : item)));
+    } catch (requestError) { setError(requestError.message); }
   }
   async function reply() {
     if (!draft.trim()) return;
@@ -67,34 +113,64 @@ export default function InquiriesRedesign() {
     }
   }
   async function close() {
-    await api(`/api/pharmacist/inquiries/${active.id}/close`, { method: 'POST' });
+    const response = await api(`/api/pharmacist/inquiries/${active.id}/close`, { method: 'POST' });
     clearInterval(poll.current);
-    setActive((item) => ({ ...item, status: 'closed', closed_at: new Date().toISOString() }));
+    setActive((item) => ({
+      ...item,
+      status: response.closed ? 'closed' : 'open',
+      closed_at: response.closed ? new Date().toISOString() : item.closed_at,
+      pharmacist_completed_at: true,
+    }));
     await loadQueue();
   }
 
+  const queueTabs = [
+    ['all', 'All', queue.length],
+    ['waiting', 'Awaiting review', queue.filter((item) => item.status !== 'closed' && item.validation_status !== 'accepted').length],
+    ['active', 'Active', queue.filter((item) => item.status !== 'closed' && item.validation_status === 'accepted').length],
+    ['completed', 'Completed', queue.filter((item) => item.status === 'closed').length],
+  ];
+  const visibleQueue = queue.filter((item) => {
+    if (queueFilter === 'waiting') return item.status !== 'closed' && item.validation_status !== 'accepted';
+    if (queueFilter === 'active') return item.status !== 'closed' && item.validation_status === 'accepted';
+    if (queueFilter === 'completed') return item.status === 'closed';
+    return true;
+  });
+  const filteredQueue = visibleQueue.filter((item) => `${item.patient_code || ''} ${item.subject || ''}`.toLowerCase().includes(search.trim().toLowerCase()));
+  const patient = patients.find((item) => item.patient_code === active?.patient_code);
+
   return (
-    <>
-      <h2 className="h4 fw-bold mb-1">Patient Chat Validation</h2>
-      <p className="text-muted">
-        Accept a request to open its conversation. Subjects and messages are stored on PharMate’s
-        server, including after completion. The patient code is a pseudonym; message content may
-        identify the patient. <a href="/privacy#inquiries">Inquiry privacy policy</a>
-      </p>
+    <section className="px-inquiries">
+      <nav className="px-inquiry-tabs" aria-label="Inquiry filters">
+        {queueTabs.map(([key, label, count]) => (
+          <button
+            key={key}
+            type="button"
+            className={queueFilter === key ? 'is-active' : ''}
+            onClick={() => setQueueFilter(key)}
+          >
+            {label}<span>{count}</span>
+          </button>
+        ))}
+        <button className="px-inquiry-tabs__refresh" onClick={loadQueue} type="button">
+          <RefreshCw aria-hidden="true" size={15} /> Refresh
+        </button>
+      </nav>
       {error && <div className="alert alert-warning py-2">{error}</div>}
-      <div className="row g-3">
-        <div className="col-lg-5">
-          <div className="pw-card p-3">
+      <div className="row g-3 px-inquiries-grid">
+        <div className="col-lg-3">
+          <div className="pw-card p-3 px-inquiry-queue">
             <div className="d-flex justify-content-between mb-2">
-              <strong>Requests &amp; history</strong>
-              <span className="badge bg-primary-subtle text-primary">{queue.length}</span>
+              <strong>Connect</strong>
+              <span className="badge bg-primary-subtle text-primary">{filteredQueue.length}</span>
             </div>
-            {queue.length === 0 && (
+            <label className="px-inquiry-search"><Search size={16} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search patients or chats" /></label>
+            {filteredQueue.length === 0 && (
               <div className="text-muted small py-4 text-center">
-                No requests or consultation history.
+                No inquiries in this view.
               </div>
             )}
-            {queue.map((item) => (
+            {filteredQueue.map((item) => (
               <button
                 type="button"
                 key={item.id}
@@ -116,15 +192,15 @@ export default function InquiriesRedesign() {
                   {item.status === 'closed'
                     ? 'Completed · View history'
                     : item.validation_status === 'accepted'
-                      ? '✓ Accepted by you'
+                      ? <><CheckCircle2 aria-hidden="true" size={13} /> Accepted by you</>
                       : 'Awaiting validation'}
                 </div>
               </button>
             ))}
           </div>
         </div>
-        <div className="col-lg-7">
-          <div className="pw-card p-3">
+        <div className="col-lg-6">
+          <div className="pw-card p-3 px-inquiry-chat">
             {!active ? (
               <div className="text-muted small py-5 text-center">Select a patient request.</div>
             ) : active.validation_status !== 'accepted' ? (
@@ -139,13 +215,18 @@ export default function InquiriesRedesign() {
                 <p>
                   <strong>Question:</strong> {active.subject || 'No subject provided'}
                 </p>
-                <div className="alert alert-info small">
+                {active.priority_tier !== 'urgent' && (
+                  <button type="button" className="btn btn-outline-danger w-100 mb-2" onClick={markUrgent}>
+                    Mark urgent safety case
+                  </button>
+                )}
+                <div className="px-inquiry-privacy">
                   Accepting assigns this private conversation to you. Other pharmacists will no
                   longer be able to open or reply to it.
                 </div>
                 <button
                   type="button"
-                  className="btn btn-success w-100"
+                  className="btn btn-primary w-100"
                   disabled={busy}
                   onClick={accept}
                 >
@@ -162,18 +243,20 @@ export default function InquiriesRedesign() {
                     >
                       {active.status === 'closed'
                         ? 'Completed consultation · Read-only'
-                        : '✓ Request validated'}
+                        : <><CheckCircle2 aria-hidden="true" size={13} /> Request validated</>}
                     </div>
                   </div>
-                  {active.status !== 'closed' && (
+                  {active.status !== 'closed' && !active.pharmacist_completed_at && (
                     <button type="button" className="btn btn-sm btn-outline-danger" onClick={close}>
-                      Complete &amp; save
+                      Complete conversation
                     </button>
                   )}
                 </div>
                 <div className="alert alert-light border small">
                   {active.status === 'closed'
                     ? 'This consultation is saved as read-only history. The patient must reconnect to start a new session.'
+                    : active.pharmacist_completed_at
+                      ? 'You completed this conversation. It will move to history once the patient confirms completion.'
                     : 'This secure conversation is assigned to you.'}
                 </div>
                 <div className="pw-inquiry-messages">
@@ -194,7 +277,7 @@ export default function InquiriesRedesign() {
                     </div>
                   ))}
                 </div>
-                {active.status !== 'closed' && (
+                {active.status !== 'closed' && !active.pharmacist_completed_at && !active.patient_completed_at && (
                   <div className="d-flex gap-2 mt-3">
                     <input
                       className="form-control"
@@ -212,7 +295,23 @@ export default function InquiriesRedesign() {
             )}
           </div>
         </div>
+        <div className="col-lg-3">
+          <aside className="pw-card p-3 px-inquiry-details" aria-label="Patient details">
+            {!active ? <div className="px-inquiry-details__empty">Select a conversation to view patient details.</div> : <>
+              <div className="px-inquiry-details__profile"><span>{active.patient_code?.slice(-2) || 'PT'}</span><strong>{active.patient_code}</strong><small>Patient medication inquiry</small>{active.priority === 'high' && <em><ShieldCheck size={13} /> Priority</em>}</div>
+              <section className="px-inquiry-patient-summary">
+                <header><HeartPulse size={17} /><div><small>Patient overview</small><strong>Care details</strong></div></header>
+                <dl><div><dt>Active medicines</dt><dd>{patient?.active_meds ?? '—'}</dd></div><div><dt>Adherence</dt><dd>{patient?.adherence_pct == null ? 'No data' : `${patient.adherence_pct}%`}</dd></div><div><dt>Inquiry status</dt><dd>{active.status === 'closed' ? 'Completed' : 'Open'}</dd></div></dl>
+              </section>
+              {active.validation_status === 'accepted' && <section className="px-inquiry-note">
+                <header><ClipboardPenLine size={17} /><div><strong>Note</strong><small>Only visible to you.</small></div></header>
+                <textarea value={note} onChange={(event) => { setNote(event.target.value); setNoteMessage(''); }} maxLength={4000} placeholder="Add counseling notes…" />
+                <footer><small>{noteMessage || `${note.length}/4000`}</small><button disabled={noteSaving} onClick={saveNote} type="button"><Save size={15} /> {noteSaving ? 'Saving…' : 'Save'}</button></footer>
+              </section>}
+            </>}
+          </aside>
+        </div>
       </div>
-    </>
+    </section>
   );
 }

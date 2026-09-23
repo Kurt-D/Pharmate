@@ -1,22 +1,41 @@
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useState } from 'react';
 import { useAuth } from '../../context/AuthContext.jsx';
-import { useAccessibility } from '../../context/AccessibilityContext.jsx';
-import pharmateLogo from '../../assets/pharmate-logo-transparent.png';
+import pharmateLogo from '../../assets/pharmate-logo.png';
 import '../../styles/admin.css';
 import PortalNotificationButton from '../../components/PortalNotificationButton.jsx';
 import { useRealtime } from '../../hooks/useRealtime.js';
 
 // Admin web console (Figs 50–54). Aggregates + pseudonymous management — no
 // patient names or conditions anywhere (TC-05).
-const MENU = [
-  { to: '/admin/dashboard', label: 'Dashboard', icon: 'dashboard' },
-  { to: '/admin/users', label: 'User Management', icon: 'users' },
-  { to: '/admin/medicines', label: 'Medications', icon: 'medicine' },
-  { to: '/admin/orders', label: 'Orders', icon: 'orders' },
-  { to: '/admin/alerts', label: 'System Alerts', icon: 'alert' },
-  { to: '/admin/settings', label: 'Accessibility', icon: 'settings' },
+const NAVIGATION_SECTIONS = [
+  {
+    label: 'Overview',
+    items: [
+      { to: '/admin/dashboard', label: 'Dashboard', icon: 'dashboard' },
+    ],
+  },
+  {
+    label: 'Operations',
+    items: [
+      { to: '/admin/users', label: 'User Management', icon: 'users' },
+      { to: '/admin/medicines', label: 'Medications', icon: 'medicine' },
+      { to: '/admin/orders', label: 'Orders', icon: 'orders' },
+      { to: '/admin/reports', label: 'Reports & Alerts', icon: 'reports' },
+      { to: '/admin/history', label: 'History', icon: 'reports' },
+    ],
+  },
+  {
+    label: 'Governance & quality',
+    items: [
+      { to: '/admin/rules', label: 'Clinical Governance', icon: 'shield' },
+      { to: '/admin/ocr-validation', label: 'Scanner Quality', icon: 'ocr' },
+      { to: '/admin/security-activity', label: 'Security Activity', icon: 'shield' },
+    ],
+  },
 ];
+
+const MENU = NAVIGATION_SECTIONS.flatMap((section) => section.items);
 
 function AdminIcon({ name, size = 19 }) {
   const paths = {
@@ -34,6 +53,8 @@ function AdminIcon({ name, size = 19 }) {
         <path d="M8 10h8M9 3h6" />
       </>
     ),
+    reports: <path d="M6 3h9l3 3v15H6V3Zm3 5h6m-6 4h6m-6 4h4" />,
+    priority: <path d="m12 3 2.6 5.3 5.9.9-4.25 4.15 1 5.85L12 16.45 6.75 19.2l1-5.85L3.5 9.2l5.9-.9L12 3Z" />,
     alert: <path d="M12 3 2.7 20h18.6L12 3Zm0 6v5m0 3h.01" />,
     shield: (
       <path d="M12 3 4.5 6v5.5c0 4.7 3.2 8 7.5 9.5 4.3-1.5 7.5-4.8 7.5-9.5V6L12 3Zm-3 9 2 2 4-5" />
@@ -83,7 +104,6 @@ export default function AdminLayout() {
   const navigate = useNavigate();
   const location = useLocation();
   const { user, logout } = useAuth();
-  const { preferences, updatePreference } = useAccessibility();
   const [realtimeRevision, setRealtimeRevision] = useState(0);
   useRealtime((event) => {
     if (
@@ -104,7 +124,13 @@ export default function AdminLayout() {
     'User Management': 'Manage role-based accounts without exposing patient names',
     Medications: 'Manage the verified medicine formulary and availability',
     Orders: 'Track refill and delivery requests',
+    'Reports & Alerts': 'Review privacy-safe operational reports and system alerts',
+    History: 'Review system-wide administrative and operational activity',
+    'Scanner Quality': 'Review privacy-safe medicine scanner quality measurements',
+    'Clinical Governance': 'Monitor rule readiness and pharmacist credential oversight',
+    'Priority Service Monitoring': 'Monitor priority inquiry demand and eligibility',
     'System Alerts': 'Monitor adherence, inventory, orders, prescriptions, and accounts',
+    'Security Activity': 'Review privacy-safe staff access and security events',
     Accessibility: 'Adjust text, contrast, motion, and visual comfort across the admin portal',
   };
 
@@ -114,7 +140,7 @@ export default function AdminLayout() {
   }
 
   return (
-    <div className={`admin-shell${preferences.darkMode ? ' is-dark-mode' : ''}`}>
+    <div className="admin-shell">
       <nav className="admin-sidebar">
         <div className="admin-brand">
           <span className="admin-brand-mark">
@@ -125,25 +151,23 @@ export default function AdminLayout() {
             <small>Admin Portal</small>
           </span>
         </div>
-        <div className="admin-menu-label">Administrative workspace</div>
-        {MENU.map((m) => (
-          <NavLink
-            key={m.to}
-            to={m.to}
-            className={({ isActive }) => 'admin-navlink' + (isActive ? ' active' : '')}
-          >
-            <AdminIcon name={m.icon} /> <span>{m.label}</span>
-          </NavLink>
-        ))}
-        <div className="admin-preferences">Preferences</div>
-        <button
-          className="admin-minor"
-          onClick={() => updatePreference('darkMode', !preferences.darkMode)}
-          type="button"
-        >
-          <AdminIcon name={preferences.darkMode ? 'sun' : 'moon'} />{' '}
-          <span>{preferences.darkMode ? 'Light mode' : 'Dark mode'}</span>
-        </button>
+        <div className="admin-navigation" aria-label="Administrative workspace">
+          {NAVIGATION_SECTIONS.map((section) => (
+            <section className="admin-nav-section" key={section.label}>
+              <div className="admin-menu-label">{section.label}</div>
+              {section.items.map((m) => (
+                <NavLink
+                  key={m.to}
+                  to={m.to}
+                  className={({ isActive }) => 'admin-navlink' + (isActive ? ' active' : '')}
+                >
+                  <AdminIcon name={m.icon} /> <span>{m.label}</span>
+                </NavLink>
+              ))}
+            </section>
+          ))}
+        </div>
+        <div className="admin-preferences">Support</div>
         <button className="admin-minor" onClick={() => navigate('/admin/settings')} type="button">
           <AdminIcon name="help" /> <span>Help</span>
         </button>

@@ -90,7 +90,7 @@
 }
 
 .pm-elderly-tour__card:focus {
-  outline: 4px solid #4c8ce4;
+  outline: 4px solid #1769f5;
   outline-offset: 3px;
 }
 
@@ -127,7 +127,7 @@
 
 .pm-elderly-tour__top-actions button:first-child {
   background: #eaf2ff;
-  border: 2px solid #2a67b8;
+  border: 2px solid #1769f5;
   color: #123c78;
 }
 
@@ -319,7 +319,7 @@
 
 .pm-tour-preview--rewards span:last-child {
   background: #eaf2ff;
-  border-color: #4c8ce4;
+  border-color: #1769f5;
 }
 
 .pm-tour-preview--save {
@@ -507,7 +507,7 @@
 }
 
 .pm-tutorial-center__list > button:focus-visible {
-  outline: 4px solid #4c8ce4;
+  outline: 4px solid #1769f5;
   outline-offset: 2px;
 }
 
@@ -621,7 +621,7 @@
 .pm-help-center__replay {
   align-items: center;
   background: #eaf2ff;
-  border: 2px solid #4c8ce4;
+  border: 2px solid #1769f5;
   border-radius: 1rem;
   color: #0f172a;
   display: grid;
@@ -637,7 +637,7 @@
 
 .pm-help-center__replay > span:first-child {
   align-items: center;
-  background: #4c8ce4;
+  background: #1769f5;
   border-radius: 0.85rem;
   color: #fff;
   display: flex;
@@ -668,7 +668,7 @@
 }
 
 .pm-help-center__search:focus-within {
-  border-color: #2a67b8;
+  border-color: #1769f5;
   box-shadow: 0 0 0 3px rgba(76, 140, 228, 0.22);
 }
 
@@ -707,8 +707,8 @@
 }
 
 .pm-help-center__chips button.active {
-  background: #4c8ce4;
-  border-color: #2a67b8;
+  background: #1769f5;
+  border-color: #1769f5;
   color: #fff;
 }
 
@@ -726,7 +726,7 @@
   overflow: hidden;
 }
 
-.pm-help-center__list article.is-expanded { border-color: #4c8ce4; }
+.pm-help-center__list article.is-expanded { border-color: #1769f5; }
 .pm-help-center__question {
   align-items: center;
   background: #fff;
@@ -745,7 +745,7 @@
 .pm-help-center__question small,
 .pm-help-center__question strong,
 .pm-help-center__question em { display: block; }
-.pm-help-center__question small { color: #2a67b8; font-size: 0.75rem; font-weight: 800; }
+.pm-help-center__question small { color: #1769f5; font-size: 0.75rem; font-weight: 800; }
 .pm-help-center__question strong { font-size: 1rem; line-height: 1.4; margin-top: 0.15rem; }
 .pm-help-center__question em { color: #475569; font-size: 0.84rem; font-style: normal; line-height: 1.45; margin-top: 0.2rem; }
 .pm-help-center__question > svg { color: #1558c9; }
@@ -780,8 +780,8 @@
 
 .pm-help-center__answer > button {
   align-items: center;
-  background: #4c8ce4;
-  border: 2px solid #2a67b8;
+  background: #1769f5;
+  border: 2px solid #1769f5;
   border-radius: 0.8rem;
   color: #fff;
   display: flex;
@@ -799,7 +799,7 @@
   padding: 2rem 1rem;
   text-align: center;
 }
-.pm-help-center__empty svg { color: #4c8ce4; height: 2rem; width: 2rem; }
+.pm-help-center__empty svg { color: #1769f5; height: 2rem; width: 2rem; }
 .pm-help-center__empty strong { color: #0f172a; display: block; margin-top: 0.5rem; }
 .pm-help-center__empty p { font-size: 0.9rem; line-height: 1.5; }
 
