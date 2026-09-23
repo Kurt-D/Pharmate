@@ -1,6 +1,6 @@
 {
   "name": "pharmate-server",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "PharMate backend — Node.js + Express + MySQL 8",
   "type": "module",
   "main": "src/index.js",
